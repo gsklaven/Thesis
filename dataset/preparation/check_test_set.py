@@ -38,12 +38,15 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, "/home/sklavenitis/thesis/inference")
+from query_rag import PROMPT_VERSION  # noqa: E402
+
 DEFAULT_TEST_SET_DIR = "/home/sklavenitis/thesis/test_set"
 EXPECTED_LABELS_FILE = "/home/sklavenitis/thesis/expected_labels.json"
 
 INFERENCE_DIR = "/home/sklavenitis/thesis/inference"
 LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator.py")
-LLM_RESULTS_DIR = "/home/sklavenitis/thesis/results"
+LLM_RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
 
 
 def main():
@@ -118,7 +121,8 @@ def main():
     correct = 0
     scored = 0
     false_positives = []
-    false_negatives = []
+    false_negatives = []          # Πραγματικά αξιολογήθηκε, το LLM είπε BENIGN
+    static_analysis_misses = []   # NO_CHAINS_FOUND σε γνωστό malicious - το CodeQL δεν βρήκε τίποτα να αξιολογήσει
     inconclusive = []
 
     for pkg_name in packages:
@@ -127,12 +131,25 @@ def main():
         n_chains = r.get("total_chains_analyzed", "-") if r else "-"
         expected = expected_labels.get(pkg_name, "")
 
-        # ΝΕΟ: EVALUATION_FAILED (π.χ. εξαντλημένο API quota) δεν είναι ούτε
-        # "σωστό" ούτε "λάθος" - δεν ξέρουμε τίποτα ακόμα. ΔΕΝ το μετράμε ως
-        # false negative/positive, το καταγράφουμε ξεχωριστά για re-run.
-        if verdict == "EVALUATION_FAILED":
+        if verdict in ("EVALUATION_FAILED", "ΔΕΝ ΤΡΕΞΕ"):
             inconclusive.append(pkg_name)
-            print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'? API':8s}")
+            print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'? ασαφές':10s}")
+            continue
+
+        # ΝΕΟ: NO_CHAINS_FOUND (το CodeQL δεν βρήκε ΚΑΜΙΑ ευαίσθητη
+        # συμπεριφορά) ΔΕΝ είναι το ίδιο με "το LLM είπε BENIGN" - είναι
+        # limitation του static-analysis σταδίου. Για benign labels είναι
+        # στην πραγματικότητα το ΣΩΣΤΟ αποτέλεσμα (καμία ψευδής συναγερμός).
+        # Για malicious labels είναι πραγματικό κενό, αλλά ΞΕΧΩΡΙΣΤΟ από
+        # ένα LLM reasoning miss - καταγράφεται σε δική του λίστα.
+        if verdict == "NO_CHAINS_FOUND":
+            scored += 1
+            if expected == "benign":
+                correct += 1
+                print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'✓':8s}")
+            elif expected == "malicious":
+                static_analysis_misses.append(pkg_name)
+                print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'✗ static':10s}")
             continue
 
         flagged = verdict in ("MALICIOUS", "SUSPICIOUS")
@@ -156,24 +173,36 @@ def main():
 
     if scored:
         print("-" * 90)
-        print(f"\n[*] Σκορ: {correct}/{scored} σωστά ({correct/scored*100:.0f}%)")
+        print(f"\n[*] Σκορ END-TO-END (μαζί με static-analysis misses): {correct}/{scored} ({correct/scored*100:.0f}%)")
+        llm_stage_scored = scored - len(static_analysis_misses)
+        if llm_stage_scored:
+            print(f"[*] Σκορ ΜΟΝΟ LLM-stage (εξαιρεί static-analysis misses): "
+                  f"{correct}/{llm_stage_scored} ({correct/llm_stage_scored*100:.0f}%)")
         if false_positives:
             print(f"[!] False Positives ({len(false_positives)}): {false_positives}")
         if false_negatives:
-            print(f"[!] False Negatives ({len(false_negatives)}): {false_negatives}")
+            print(f"[!] False Negatives - LLM αξιολόγησε αλλά είπε BENIGN ({len(false_negatives)}): {false_negatives}")
+        if static_analysis_misses:
+            print(f"[!] Static-analysis misses - CodeQL δεν βρήκε τίποτα να αξιολογήσει "
+                  f"({len(static_analysis_misses)}): {static_analysis_misses[:10]}"
+                  f"{'...' if len(static_analysis_misses) > 10 else ''}")
     if inconclusive:
-        print(f"\n[?] Ασαφή (API απέτυχε, ΔΕΝ μετρήθηκαν) - {len(inconclusive)}: "
+        print(f"\n[?] Ασαφή (API failure ή ποτέ δεν έγραψε report - ΔΕΝ μετρήθηκαν) - {len(inconclusive)}: "
               f"{inconclusive[:10]}{'...' if len(inconclusive) > 10 else ''}")
         print(f"    Ξανατρέξε το ίδιο script - αυτά θα ξαναπροσπαθήσουν αυτόματα.")
 
-    summary_out = "/home/sklavenitis/thesis/test_set_summary.json"
+    summary_out = f"/home/sklavenitis/thesis/test_set_summary_{PROMPT_VERSION}.json"
+    llm_stage_scored = scored - len(static_analysis_misses)
     with open(summary_out, "w", encoding="utf-8") as f:
         json.dump({
             "results": {pkg: reports.get(pkg, {}).get("final_verdict", "ΔΕΝ ΤΡΕΞΕ") for pkg in packages},
             "false_positives": false_positives,
             "false_negatives": false_negatives,
+            "static_analysis_misses": static_analysis_misses,
+            "inconclusive": inconclusive,
             "correct": correct,
-            "scored": scored,
+            "scored_end_to_end": scored,
+            "scored_llm_stage_only": llm_stage_scored,
         }, f, indent=2, ensure_ascii=False)
     print(f"\n[✓] Περίληψη -> {summary_out}")
     print(f"[✓] Πλήρη LLM reports -> {LLM_RESULTS_DIR}/report_<πακέτο>.json")

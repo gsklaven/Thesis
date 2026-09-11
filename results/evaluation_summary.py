@@ -24,7 +24,11 @@ import glob
 import json
 import os
 
-RESULTS_DIR = "/home/sklavenitis/thesis/results"
+import sys
+sys.path.insert(0, "/home/sklavenitis/thesis/inference")
+from query_rag import PROMPT_VERSION  # noqa: E402
+
+RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
 EXPECTED_LABELS_FILE = "/home/sklavenitis/thesis/expected_labels.json"
 SUMMARY_OUT = "/home/sklavenitis/thesis/evaluation_summary.json"
 
@@ -107,6 +111,18 @@ def main():
     print(f"\n=== Κατανομή τελικών verdicts (ανά πακέτο, {len(reports)} σύνολο) ===")
     for v, n in sorted(verdict_counts.items(), key=lambda x: -x[1]):
         print(f"  {v:20s} {n}")
+
+    # ΝΕΟ: breakdown ανά prompt_version - απαραίτητο μόλις αρχίσεις να
+    # συγκρίνεις v1 (baseline) έναντι v2 (μετά από αλλαγή prompt). Reports
+    # από ΠΡΙΝ την προσθήκη αυτού του tracking θα δείχνουν "unversioned".
+    version_counts = {}
+    for r in reports.values():
+        pv = r.get("prompt_version", "unversioned")
+        version_counts[pv] = version_counts.get(pv, 0) + 1
+    if len(version_counts) > 1:
+        print(f"\n=== Κατανομή prompt_version (ανά πακέτο) ===")
+        for pv, n in sorted(version_counts.items(), key=lambda x: -x[1]):
+            print(f"  {pv:20s} {n}")
 
     print(f"\n=== Ποιο μοντέλο απάντησε (ανά chain, {total_chains} σύνολο) ===")
     for m, n in sorted(model_counts.items(), key=lambda x: -x[1]):

@@ -1,0 +1,1144 @@
+{
+  "package_name": "ascii2text",
+  "analysis_timestamp": "2026-09-11T12:18:12",
+  "final_verdict": "MALICIOUS",
+  "total_chains_analyzed": 11,
+  "malicious_chains": 11,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.5/ascii2text-2.5/ascii2text/__init__.py:12",
+      "top_malware_similarity": 0.9689,
+      "malware_matches": [
+        {
+          "package": "pymafka",
+          "similarity": 0.9689,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pymafka",
+          "similarity": 0.9689,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "geckodriver-autoinstaller",
+          "similarity": 0.9688,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5606
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5536
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.546
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: geckodriver-autoinstaller | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.55] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package downloads remote payload content using urllib request.urlopen, decodes the payload, writes it to a file on disk, and interacts with system environment/executables. This behavior is unrelated to converting ASCII to text.",
+          "is_false_positive": false,
+          "false_positive_reason": "Fetching remote binaries/payloads and writing/executing them on the host system during package installation or import is a clear indicator of malicious software supply chain compromise (dropper)."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pymafka",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Matches pymafka, a well-known malicious Python package that downloaded and executed remote payloads during installation."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "T1140",
+            "policy_name": "Deobfuscate/Decode Files or Information",
+            "violation_reason": "The script decodes remote payload data retrieved over the network before writing it to disk."
+          },
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "The package reads system environment variables via getenv prior to payload retrieval and execution."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Downloads external payloads from remote servers using request.urlopen."
+          },
+          {
+            "technique_id": "T1140",
+            "technique_name": "Deobfuscate/Decode Files or Information",
+            "relevance": "Decodes streamed binary network response data prior to writing to the filesystem."
+          },
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes local process/system operations using environment metadata and file creation."
+          }
+        ],
+        "summary": "The package 'ascii2text' exhibits clear malicious dropper behavior by silently fetching remote binary payloads using urllib.request.urlopen, decoding the received contents, and writing them to disk upon execution. This pattern shows high structural similarity (97%) to known supply chain malware 'pymafka'. Immediate quarantine and removal are recommended.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "file_ops",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.5/ascii2text-2.5/ascii2text/__init__.py:14",
+      "top_malware_similarity": 0.97,
+      "malware_matches": [
+        {
+          "package": "pyfilget",
+          "similarity": 0.97,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pyfilget",
+          "similarity": 0.97,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pymafka",
+          "similarity": 0.9634,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5859
+        },
+        {
+          "source": "OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset)",
+          "id": "OWASP-SCP-22",
+          "name": "Sanitize Untrusted Data Before OS Command Execution",
+          "description": "All output passed to operating system commands must be sanitized against untrusted data, preventing OS command injection - directly analogous to CWE-78 and the process_exec category this pipeline dete",
+          "similarity": 0.5833
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5678
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: pyfilget | Tags: unclassified | Category: file_ops\n- [0.97] Package: pyfilget | Tags: unclassified | Category: file_ops\n- [0.96] Package: pymafka | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.59] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n- [0.58] OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset) [OWASP-SCP-22]: Sanitize Untrusted Data Before OS Command Execution — All output passed to operating system commands must be sanitized against untrusted data, preventing \n- [0.57] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package performs network requests using `urllib.request.urlopen`, reads environment variables (`getenv`), and manipulates files (`open`, `f.write`). This behavior is inconsistent with a simple ASCII conversion utility.",
+          "is_false_positive": false,
+          "false_positive_reason": "The code retrieves system environment variables and performs outbound HTTP requests alongside file write operations, which strongly indicates dropper or exfiltration behavior rather than legitimate conversion functionality."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pyfilget",
+          "similarity_score": 0.97,
+          "similarity_explanation": "The code exhibits identical structural patterns to `pyfilget` and `pymafka`, which leverage HTTP requests and file manipulation to perform payload drop or data exfiltration."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "MITRE ATT&CK [T1027.004]",
+            "policy_name": "Compile After Delivery",
+            "violation_reason": "The package downloads external content at runtime and writes/executes it on the underlying host system."
+          },
+          {
+            "policy_id": "OWASP-SCP-22",
+            "policy_name": "Sanitize Untrusted Data Before OS Command Execution",
+            "violation_reason": "Unvalidated environment data and remote network responses are passed into direct file operations and string formatting sinks."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1071.001",
+            "technique_name": "Application Layer Protocol: Web Protocols",
+            "relevance": "Uses HTTP requests via `request.urlopen` to communicate with remote infrastructure."
+          },
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "Reads sensitive environment variables from the local machine using `getenv`."
+          },
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Executes malicious file creation and network operations directly within Python installation scripts or runtime imports."
+          }
+        ],
+        "summary": "The package `ascii2text` presents itself as a basic utility, but contains anomalous file operations, environment variable access, and outbound network calls (`request.urlopen`). It closely mirrors patterns from known malicious software supply chain threats such as `pyfilget`, indicating malicious dropper and data exfiltration capability.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 2,
+      "category": "process_exec",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for system()",
+      "location": "2.5/ascii2text-2.5/ascii2text/__init__.py:16",
+      "top_malware_similarity": 0.9729,
+      "malware_matches": [
+        {
+          "package": "collored",
+          "similarity": 0.9729,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "collored",
+          "similarity": 0.9696,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "collored",
+          "similarity": 0.9696,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055.002",
+          "name": "Portable Executable Injection",
+          "description": "Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in",
+          "similarity": 0.5627
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5533
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5432
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for system(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for ImportMember; ControlFlowNode for StringLiteral; ControlFlowNode for BinaryExpr; ControlFlowNode for getenv(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for system(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for ImportMember; ControlFlowNode for StringLiteral; ControlFlowNode for BinaryExpr; ControlFlowNode for getenv(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: collored | Tags: unclassified | Category: process_exec\n- [0.97] Package: collored | Tags: unclassified | Category: process_exec\n- [0.97] Package: collored | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] MITRE ATT&CK [T1055.002]: Portable Executable Injection — Adversaries may inject portable executables (PE) into processes in order to evade process-based defe\n- [0.55] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.54] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package fetches external content via request.urlopen, writes it to a file, and executes system commands using system(). This dropper-like behavior downloads and executes secondary payloads.",
+          "is_false_positive": false,
+          "false_positive_reason": "Executing dynamic system commands and fetching external binary payloads is anomalous and malicious for a package named ascii2text, which should strictly handle text conversions."
+        },
+        "malware_similarity": {
+          "most_similar_package": "collored",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Exhibits near-identical process execution patterns and remote payload execution logic seen in supply chain malware such as collored."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "MITRE ATT&CK T1027.004",
+            "policy_name": "Compile After Delivery",
+            "violation_reason": "Downloads remote executable binaries or scripts at runtime to bypass static package analysis."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes system-level commands via Python's system() API call."
+          },
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Downloads external payloads over HTTP using urllib.request.urlopen."
+          }
+        ],
+        "summary": "The package 'ascii2text' is a malicious supply chain payload dropper posing as a text utility. Upon execution, it retrieves external binary resources via urllib.request.urlopen, writes them to disk, and executes them via os.system(). It heavily resembles known malicious packages like 'collored' (0.97 similarity) and violates core supply chain security controls.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 3,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.5/ascii2text-2.5/ascii2text/__init__.py:28",
+      "top_malware_similarity": 0.9684,
+      "malware_matches": [
+        {
+          "package": "pymafka",
+          "similarity": 0.9684,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pymafka",
+          "similarity": 0.9684,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "kirux189894",
+          "similarity": 0.9679,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "2d3a3167fabfe64b6f3022124c2c45cc"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5574
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5559
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5493
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: kirux189894 | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.56] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package performs outbound network requests using `request.urlopen`, accesses system environment variables via `getenv`, and writes/reads files locally. This network and file activity is entirely unaligned with a package named `ascii2text`, which should perform text/string manipulation.",
+          "is_false_positive": false,
+          "false_positive_reason": "Outbound HTTP requests and environment variable retrieval are completely unexpected for a text conversion library, strongly indicating a malicious dropper or exfiltration behavior."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pymafka",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Exhibits highly similar code structure and execution patterns to pymafka, which leveraged automated setup/import hooks to make HTTP requests and exfiltrate host environment details."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "The script queries environment variables via `getenv` and inspects system details before initiating network requests."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1071.001",
+            "technique_name": "Application Layer Protocol: Web Protocols",
+            "relevance": "Uses `request.urlopen` to establish outbound HTTP connections to external network endpoints."
+          },
+          {
+            "technique_id": "T1082",
+            "technique_name": "System Information Discovery",
+            "relevance": "Reads environment variables using `getenv` to harvest host profiling information."
+          },
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Executes malicious Python code upon package installation or import."
+          }
+        ],
+        "summary": "The package 'ascii2text' contains malicious functionality disguised as an ASCII text conversion utility. Analysis shows it accesses system environment variables via `getenv`, writes binary/text payloads to the local file system, and initiates unauthorized outbound HTTP connections via `request.urlopen`. These behaviors closely align with known supply chain malware samples like 'pymafka'. Immediate removal and containment action (ACT) is recommended.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 4,
+      "category": "file_ops",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.5/ascii2text-2.5/ascii2text/__init__.py:30",
+      "top_malware_similarity": 0.9722,
+      "malware_matches": [
+        {
+          "package": "startup-entrypoints",
+          "similarity": 0.9722,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "startup-entrypoints",
+          "similarity": 0.9722,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "thesis-uniud-package",
+          "similarity": 0.9722,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.607
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5759
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Leverage Executable Code in Non-Executable Files",
+          "description": "An attack of this type exploits a system's trust in configuration and resource files. When the executable loads the resource (such as an image file or configuration file) the attacker has modified the",
+          "similarity": 0.5659
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: startup-entrypoints | Tags: unclassified | Category: file_ops\n- [0.97] Package: startup-entrypoints | Tags: unclassified | Category: file_ops\n- [0.97] Package: thesis-uniud-package | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.61] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.58] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.57] CAPEC Attack Patterns [CAPEC-]: Leverage Executable Code in Non-Executable Files — An attack of this type exploits a system's trust in configuration and resource files. When the execu\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package performs network requests via `request.urlopen`, inspects environment variables (`getenv`), and writes downloaded or decoded binary/text payloads to disk (`f.write`, `isfile`).",
+          "is_false_positive": false,
+          "false_positive_reason": "A utility intended for simple ASCII-to-text conversion has no legitimate reason to initiate network connections via `urlopen`, read environment variables, or perform file creation operations."
+        },
+        "malware_similarity": {
+          "most_similar_package": "startup-entrypoints",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Matches structural patterns of dropper malware that retrieve external payloads via HTTP and write them to disk for immediate execution or persistence."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-07",
+            "policy_name": "File Deletion & Cleanup (Defense Evasion) / Dropper Activity",
+            "violation_reason": "Executes anomalous network calls and file write operations without explicit user interaction or legitimate utility purpose."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Uses `request.urlopen` to download external files or payloads onto the victim machine."
+          },
+          {
+            "technique_id": "T1071.001",
+            "technique_name": "Application Layer Protocol: Web Protocols",
+            "relevance": "Utilizes standard HTTP libraries (`urlopen`) for C2 communication or payload retrieval."
+          }
+        ],
+        "summary": "The package `ascii2text` exhibits malicious dropper behavior by reaching out to external networks via `request.urlopen`, fetching environment variables, and writing content to local disk under the guise of an ASCII conversion utility. This functional discrepancy, paired with a 0.97 structural match to known malware samples, confirms malicious intent aimed at downloading and staging external payloads.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 5,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.4/ascii2text-2.4/ascii2text/__init__.py:12",
+      "top_malware_similarity": 0.9689,
+      "malware_matches": [
+        {
+          "package": "pymafka",
+          "similarity": 0.9689,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pymafka",
+          "similarity": 0.9689,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "geckodriver-autoinstaller",
+          "similarity": 0.9688,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5606
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5536
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.546
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: geckodriver-autoinstaller | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.55] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package fetches remote data over network using `urllib.request.urlopen`, decodes the payload, writes it to disk, and interacts with environment variables and executable paths. This downloader behavior is completely anomalous for an ascii-to-text utility.",
+          "is_false_positive": false,
+          "false_positive_reason": "A package named 'ascii2text' should strictly perform text transformations in-memory. Initiating outbound network connections to download, decode, and write executable files to disk is a clear indicator of a malicious payload dropper."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pymafka",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Extremely high similarity to pymafka, a known PyPI typosquatting malware that downloaded and executed remote binaries during installation or import time."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "MITRE ATT&CK [T1140]",
+            "policy_name": "Deobfuscate/Decode Files or Information",
+            "violation_reason": "The script retrieves encoded/remote content and uses decode routines prior to writing and executing the dropped file."
+          },
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "Reads environment variables (getenv) during execution alongside network interactions."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Uses request.urlopen to download external payloads to the local file system."
+          },
+          {
+            "technique_id": "T1140",
+            "technique_name": "Deobfuscate/Decode Files or Information",
+            "relevance": "Decodes retrieved payloads before writing them to file sinks."
+          },
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes dropped payloads or controls execution via python executable paths."
+          }
+        ],
+        "summary": "The package 'ascii2text' is a malicious dropper designed to fetch external payloads over network protocols, decode them, and write them to disk for execution. This behavior closely matches known PyPI supply chain malware such as 'pymafka' and violates baseline safety expectations for a utility package, posing a severe risk of compromise upon installation.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 6,
+      "category": "file_ops",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.4/ascii2text-2.4/ascii2text/__init__.py:14",
+      "top_malware_similarity": 0.97,
+      "malware_matches": [
+        {
+          "package": "pyfilget",
+          "similarity": 0.97,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pyfilget",
+          "similarity": 0.97,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pymafka",
+          "similarity": 0.9634,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5859
+        },
+        {
+          "source": "OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset)",
+          "id": "OWASP-SCP-22",
+          "name": "Sanitize Untrusted Data Before OS Command Execution",
+          "description": "All output passed to operating system commands must be sanitized against untrusted data, preventing OS command injection - directly analogous to CWE-78 and the process_exec category this pipeline dete",
+          "similarity": 0.5833
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5678
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: pyfilget | Tags: unclassified | Category: file_ops\n- [0.97] Package: pyfilget | Tags: unclassified | Category: file_ops\n- [0.96] Package: pymafka | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.59] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n- [0.58] OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset) [OWASP-SCP-22]: Sanitize Untrusted Data Before OS Command Execution — All output passed to operating system commands must be sanitized against untrusted data, preventing \n- [0.57] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package reads environment variables using getenv(), makes outbound HTTP network requests using request.urlopen, and performs local file read/write operations.",
+          "is_false_positive": false,
+          "false_positive_reason": "A utility library intended for ASCII-to-text conversion has no legitimate operational reason to collect environment variables or execute network connections via request.urlopen."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pyfilget",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Matches the pyfilget malicious sample family with 0.97 confidence, demonstrating identical data flow patterns, file operations, and execution flow structures."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "MITRE ATT&CK T1027.004",
+            "policy_name": "Compile After Delivery",
+            "violation_reason": "Payload data is retrieved or decoded dynamically at runtime and written to local disk for execution."
+          },
+          {
+            "policy_id": "OWASP-SCP-22",
+            "policy_name": "Sanitize Untrusted Data Before OS Command Execution",
+            "violation_reason": "Constructs dynamically evaluated string paths and file writes incorporating retrieved network/environment variables."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1071.001",
+            "technique_name": "Application Layer Protocol: Web Protocols",
+            "relevance": "Uses urllib request.urlopen to communicate with external resources during execution."
+          },
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "Retrieves environmental configuration data via getenv() calls."
+          }
+        ],
+        "summary": "The package 'ascii2text' is a malicious supply chain attack disguised as a basic formatting utility. Static analysis reveals that the package accesses environment variables, makes outbound network requests via request.urlopen, and performs file read/write operations. The behavior shares high structural similarity (97%) with known malicious packages such as 'pyfilget', indicating payload fetching and exfiltration activity.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 7,
+      "category": "process_exec",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for system()",
+      "location": "2.4/ascii2text-2.4/ascii2text/__init__.py:16",
+      "top_malware_similarity": 0.9729,
+      "malware_matches": [
+        {
+          "package": "collored",
+          "similarity": 0.9729,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "collored",
+          "similarity": 0.9696,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "collored",
+          "similarity": 0.9696,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055.002",
+          "name": "Portable Executable Injection",
+          "description": "Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in",
+          "similarity": 0.5627
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5533
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5432
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for system(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for ImportMember; ControlFlowNode for StringLiteral; ControlFlowNode for BinaryExpr; ControlFlowNode for getenv(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for system(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for getenv() source into a ControlFlowNode for Fstring sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Fstring sink. Execution is gated by a condition (UnaryExpr) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for ImportMember; ControlFlowNode for StringLiteral; ControlFlowNode for BinaryExpr; ControlFlowNode for getenv(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: collored | Tags: unclassified | Category: process_exec\n- [0.97] Package: collored | Tags: unclassified | Category: process_exec\n- [0.97] Package: collored | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] MITRE ATT&CK [T1055.002]: Portable Executable Injection — Adversaries may inject portable executables (PE) into processes in order to evade process-based defe\n- [0.55] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.54] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package fetches external data/payloads using urllib.request.urlopen, performs file writing/reading, retrieves environment variables, and executes constructed system commands via system() call.",
+          "is_false_positive": false,
+          "false_positive_reason": "The combination of downloading data from remote URLs via urlopen and executing dynamically constructed shell commands using system() during execution/import is a classic malicious dropper pattern."
+        },
+        "malware_similarity": {
+          "most_similar_package": "collored",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Extremely high structural and behavioral similarity to known malicious package 'collored', which similarly fetches remote content and executes shell processes dynamically."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "MITRE ATT&CK T1027.004",
+            "policy_name": "Compile After Delivery",
+            "violation_reason": "Downloads remote artifacts/code at execution time and invokes process execution mechanisms to run secondary payloads."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Executes malicious Python logic to perform network requests and system calls."
+          },
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Uses request.urlopen to retrieve external content onto the local system."
+          }
+        ],
+        "summary": "The ascii2text package exhibits clear malicious dropper behaviors by pulling external files via network requests (urlopen) and executing dynamically formatted command strings using system(). This matches structural signatures of known supply chain malware samples like 'collored', posing a severe security risk.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 8,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.4/ascii2text-2.4/ascii2text/__init__.py:28",
+      "top_malware_similarity": 0.9684,
+      "malware_matches": [
+        {
+          "package": "pymafka",
+          "similarity": 0.9684,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pymafka",
+          "similarity": 0.9684,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "kirux189894",
+          "similarity": 0.9679,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "2d3a3167fabfe64b6f3022124c2c45cc"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5574
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5559
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5493
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: pymafka | Tags: unclassified | Category: network\n- [0.97] Package: kirux189894 | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.56] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package fetches external network resources using urllib.request.urlopen, checks local file presence with isfile(), reads environment variables via getenv(), and writes binary/text data to disk. For a package named ascii2text, this behavior is entirely anomalous.",
+          "is_false_positive": false,
+          "false_positive_reason": "An ASCII text conversion library requires pure string manipulation and has no legitimate reason to execute network requests, inspect system environment variables, or drop local executable/binary files."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pymafka",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Exhibits high structural similarity to pymafka, a known typosquatted malicious PyPI package that used setup hooks to download and drop secondary malicious binaries via HTTP requests."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "The script retrieves environment configuration data via getenv prior to contacting external network resources."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Uses request.urlopen to download secondary payloads or external resources to the local system."
+          },
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Executes network requests and binary file drop logic within Python package scripts."
+          }
+        ],
+        "summary": "The package 'ascii2text' is a malicious package designed to act as a payload dropper. Under the guise of a utility for text conversion, it accesses system environment variables, makes unauthorized HTTP connections using request.urlopen, and writes retrieved data onto the local file system. This closely mimics the behavior of known malware like 'pymafka' (0.97 similarity match).",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 9,
+      "category": "file_ops",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "2.4/ascii2text-2.4/ascii2text/__init__.py:30",
+      "top_malware_similarity": 0.9722,
+      "malware_matches": [
+        {
+          "package": "startup-entrypoints",
+          "similarity": 0.9722,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "startup-entrypoints",
+          "similarity": 0.9722,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "thesis-uniud-package",
+          "similarity": 0.9722,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.607
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5759
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Leverage Executable Code in Non-Executable Files",
+          "description": "An attack of this type exploits a system's trust in configuration and resource files. When the executable loads the resource (such as an image file or configuration file) the attacker has modified the",
+          "similarity": 0.5659
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a condition (isfile()) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.read, executable.replace, exit, f.close, f.write, getenv, isfile, open, request.urlopen.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: startup-entrypoints | Tags: unclassified | Category: file_ops\n- [0.97] Package: startup-entrypoints | Tags: unclassified | Category: file_ops\n- [0.97] Package: thesis-uniud-package | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.61] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.58] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.57] CAPEC Attack Patterns [CAPEC-]: Leverage Executable Code in Non-Executable Files — An attack of this type exploits a system's trust in configuration and resource files. When the execu\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package 'ascii2text' uses standard python libraries like request.urlopen to communicate over the network and write downloaded content to local files (f.write, open) based on checks like isfile(). This network downloading and local payload drop behavior is unexpected for a utility package named ascii2text.",
+          "is_false_positive": false,
+          "false_positive_reason": "A utility package intended for ASCII to text conversion should not make external HTTP requests or write executable payloads to disk during import or setup."
+        },
+        "malware_similarity": {
+          "most_similar_package": "startup-entrypoints",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Matches known malware samples performing file operations and secondary payload delivery patterns in setup/import hooks."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-07",
+            "policy_name": "File Deletion & Cleanup (Defense Evasion)",
+            "violation_reason": "The package performs unexplained system file operations and dynamic fetching that violate supply chain integrity policies."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Uses request.urlopen to download external content/payloads directly to the local system."
+          },
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Executes Python file operation functions dynamically during execution."
+          }
+        ],
+        "summary": "The package 'ascii2text' exhibits malicious supply chain behavior by using urllib's urlopen to retrieve remote payloads and writing them to the local filesystem under the guise of an ASCII utility. Because this file creation and network activity is entirely anomalous for a text conversion utility, the package is classified as MALICIOUS requiring immediate remediation.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 10,
+      "category": "network",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "fetch(e ... Params)",
+      "location": "vendor/urllib3/contrib/emscripten/emscripten_fetch_worker.js:70",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "defca",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "zwhrce",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "zoom-pyutils",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5181
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-05",
+          "name": "Suspicious External Connections",
+          "description": "The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services like Pastebin/ngrok used as C2 infrastructure.",
+          "similarity": 0.4957
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Malicious Software Download",
+          "description": "An attacker uses deceptive methods to cause a user or an automated process to download and install dangerous code that originates from an attacker controlled source. There are several variations to th",
+          "similarity": 0.4859
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: fetch(e ... Params). Flow boundary: Unknown. Execution is gated by a condition (event.data.close) which must evaluate to false. Execution is gated by a condition (event.data.getMore) which must evaluate to false. Contributing data-flow nodes: event; event.data; event.data.url; event.d ... hParams.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ascii2text\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: fetch(e ... Params). Flow boundary: Unknown. Execution is gated by a condition (event.data.close) which must evaluate to false. Execution is gated by a condition (event.data.getMore) which must evaluate to false. Contributing data-flow nodes: event; event.data; event.data.url; event.d ... hParams.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: defca | Tags: unclassified | Category: network\n- [1.00] Package: zwhrce | Tags: unclassified | Category: network\n- [1.00] Package: zoom-pyutils | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.52] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-05]: Suspicious External Connections — The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services\n- [0.49] CAPEC Attack Patterns [CAPEC-]: Malicious Software Download — An attacker uses deceptive methods to cause a user or an automated process to download and install d\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.92,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package includes code that listens to event data and triggers dynamic external network requests via fetch using URLs supplied in event.data.url.",
+          "is_false_positive": false,
+          "false_positive_reason": "An ASCII text manipulation library ('ascii2text') has no legitimate operational need to listen to message events and make dynamic external HTTP requests via fetch using event data parameters."
+        },
+        "malware_similarity": {
+          "most_similar_package": "defca",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Matches structural patterns of network-based malware packages (defca, zwhrce, zoom-pyutils) that perform unverified outbound network connections or remote file fetching."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-05",
+            "policy_name": "Suspicious External Connections",
+            "violation_reason": "The code constructs and executes outbound fetch HTTP calls targeting URLs extracted directly from event data."
+          },
+          {
+            "policy_id": "CAPEC-185",
+            "policy_name": "Malicious Software Download",
+            "violation_reason": "Automated dynamic fetch calls based on external input can be leveraged to retrieve secondary remote payloads."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1071.001",
+            "technique_name": "Application Layer Protocol: Web Protocols",
+            "relevance": "Uses HTTP/HTTPS fetch calls to communicate with external resources based on event parameters."
+          },
+          {
+            "technique_id": "T1105",
+            "technique_name": "Ingress Tool Transfer",
+            "relevance": "Fetches remote data dynamically from externally controlled URLs."
+          }
+        ],
+        "summary": "The package 'ascii2text' contains anomalous network functionality that listens to message events and dynamically initiates external fetch requests using parameters passed in event data. Given that a utility package for ASCII text conversion has no valid purpose for network communication or remote content fetching, this behavior represents malicious intent consistent with remote payload fetchers or C2 beacons.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}

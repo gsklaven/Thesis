@@ -8,7 +8,11 @@ import glob
 import json
 import os
 
-RESULTS_DIR = "/home/sklavenitis/thesis/results"
+import sys
+sys.path.insert(0, "/home/sklavenitis/thesis/inference")
+from query_rag import PROMPT_VERSION  # noqa: E402
+
+RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
 EXPECTED_LABELS_FILE = "/home/sklavenitis/thesis/expected_labels.json"
 TAGS_FILE = "/home/sklavenitis/thesis/dataset/attack_type_tags.json"
 

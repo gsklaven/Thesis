@@ -1,13 +1,5 @@
 """
 Multi-Hop RAG Query System & LLM Prompt Generator (SSVC Ready).
-
-Redesign (Fixes I2, I3, I5, I8, M4):
-  - RAGEngine singleton: φόρτωσε model/vectors/metadata ΜΙΑ φορά.
-  - Structured output: similarity scores, matched packages, policy IDs.
-  - Symmetric embedding: δεν περνάμε attack_type_tags στο query
-    (ταιριάζει τώρα με το index, βλ. R2 fix στο build_rag_index).
-  - Chain-of-Thought prompt template αντί για flat instructions.
-  - Package name included in context για πληρέστερη ανάλυση.
 """
 import json
 import sys
@@ -32,19 +24,14 @@ MALWARE_TOP_K = 3
 POLICY_TOP_K = 3
 MALWARE_THRESHOLD = 0.55
 
+# ΝΕΟ: prompt version tracking. Αύξησε αυτό ΚΑΘΕ ΦΟΡΑ που αλλάζεις ουσιαστικά
+# το SSVC_COT_PROMPT παρακάτω (όχι για τυπογραφικά) - ώστε τα reports να
+# κρατούν ΡΗΤΑ ποιο prompt τα παρήγαγε. Χωρίς αυτό, ένα before/after
+# πείραμα σε νέο prompt θα μπέρδευε ασυνείδητα v1 και v2 reports μαζί σε
+# ένα evaluation_summary.py run - κάνοντας αδύνατη τη σωστή σύγκριση.
+PROMPT_VERSION = "v2"
 
-def cosine_search(query_vec, vectors, top_k=5):
-    similarities = np.dot(vectors, query_vec)
-    best_indices = np.argsort(similarities)[::-1][:top_k]
-    return [(float(similarities[i]), i) for i in best_indices]
 
-
-# ========================================================================
-# Chain-of-Thought SSVC Prompt Template
-# Υλοποιεί τα βήματα 5 & 6 της αρχιτεκτονικής:
-#   5. RAG retrieval → context injection
-#   6. CoT prompting → structured JSON output
-# ========================================================================
 SSVC_COT_PROMPT = """You are a Senior Cybersecurity Analyst specializing in software supply chain threats.
 You must evaluate the following Python/npm package for malicious intent using the SSVC framework.
 
@@ -74,23 +61,30 @@ anomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,
 obfuscated strings, and network calls at import time.
 
 STEP 2 — FALSE POSITIVE CHECK:
-Legitimate packages often use subprocess, exec(), socket, or file I/O for 
-standard build scripts, testing, or API features. 
-HOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short 
-flows as FALSE POSITIVE if they exhibit malicious patterns such as:
-- Connecting to hardcoded/unverified IPs or external domains.
-- Executing obfuscated code (e.g., base64, hex encoding).
-- Downloading and executing secondary payloads silently during setup/import.
-If these patterns exist, the intent is likely malicious despite being a short chain.
+CRITICAL: Legitimate packages often use subprocess, exec(), socket, or
+file I/O for standard build scripts, testing, or API features. If the
+detected flow is clearly standard library functionality, well-documented
+benign build tooling, or normal operations UNAMBIGUOUSLY consistent with
+the package's stated purpose (e.g., an SSH library making SSH connections,
+a cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,
+do NOT default to FALSE POSITIVE merely because the API usage pattern is
+common or the package name sounds legitimate — a common API used for a
+purpose UNRELATED to the package's stated function (e.g., unexpected
+outbound network calls, credential access, or process execution with no
+connection to any documented feature) remains a valid signal of malicious
+intent, even if each individual API call looks unremarkable in isolation.
 
 STEP 3 — MALWARE SIMILARITY ASSESSMENT:
 Compare with the known malware samples in Section 2. How structurally
 similar is this code to known-malicious behavior? Consider: Are the data
 flows (source → sink) analogous? Is the control flow pattern (gating
-conditions) similar? 
-IMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight 
-to exec() or subprocess). If a 1-chain package closely matches a known malware 
-signature from Section 2, weight the decision heavily towards MALICIOUS.
+conditions) similar? Or is the similarity superficial (both use sockets,
+but for entirely different purposes)? IMPORTANT: a high similarity score
+(above ~0.90) to a matched sample remains meaningful evidence even when
+that sample's own attack-type tag is "unclassified" — many confirmed
+malicious samples in this dataset lack a specific label for data-sourcing
+reasons unrelated to severity. Do not discount a strong structural match
+solely because the matched neighbor's tag is generic.
 
 STEP 4 — POLICY VIOLATION ANALYSIS:
 Check each policy in Section 3. Does this code violate any of these
@@ -107,6 +101,12 @@ Apply the SSVC decision framework:
 - Exploitation: Is this automatable? (yes/no)
 - Technical Impact: partial or total?
 - Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)
+When the evidence is suggestive but not fully conclusive (e.g., moderate-
+to-high similarity with plausible but not certain malicious intent),
+prefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case
+for review is preferable to silently missing a genuine threat. Reserve
+BENIGN/TRACK for cases where the false-positive explanation from STEP 2
+is clear and well-supported by the code's stated purpose.
 
 ═══════════════════════════════════════════════════════
 OUTPUT — Respond ONLY with a valid JSON object:
@@ -144,13 +144,13 @@ OUTPUT — Respond ONLY with a valid JSON object:
 }}"""
 
 
+def cosine_search(query_vec, vectors, top_k=5):
+    similarities = np.dot(vectors, query_vec)
+    best_indices = np.argsort(similarities)[::-1][:top_k]
+    return [(float(similarities[i]), i) for i in best_indices]
+
+
 class RAGEngine:
-    """
-    M4 FIX: Singleton — φόρτωσε model/vectors/metadata ΜΙΑ φορά.
-    Χωρίς αυτό, κάθε κλήση analyze_package() ξανα-φορτώνει:
-    - SentenceTransformer (βαρύ initialization)
-    - numpy vectors + JSON metadata (I/O)
-    """
     _instance = None
 
     def __new__(cls):
@@ -178,10 +178,6 @@ class RAGEngine:
         self._initialized = True
 
     def analyze_package(self, json_path, extra_context=""):
-        """
-        Αναλύει ένα behavior chain JSON και επιστρέφει structured results
-        με similarity scores, matched packages, policy IDs, και CoT prompt.
-        """
         self._ensure_init()
 
         if not os.path.exists(json_path):
@@ -195,15 +191,12 @@ class RAGEngine:
         results = []
 
         for idx, chain in enumerate(pkg_data.get("behavior_chains", [])):
-            # I8 FIX: Symmetric embedding — ΔΕΝ περνάμε attack_type_tags
-            # στο query, γιατί αυτά δεν υπάρχουν σε unknown πακέτα.
             text = flatten_chain_to_text(chain)
             query_vec = self.model.encode([text], normalize_embeddings=True)[0]
 
             m_matches = cosine_search(query_vec, self.malware_vectors, MALWARE_TOP_K)
             p_matches = cosine_search(query_vec, self.policy_vectors, POLICY_TOP_K)
 
-            # I5 FIX: Structured match info — forward similarity scores + IDs
             malware_hits = [{
                 "package": self.malware_meta[i]["package"],
                 "similarity": round(sim, 4),
@@ -222,7 +215,6 @@ class RAGEngine:
 
             best_sim = malware_hits[0]["similarity"] if malware_hits else 0.0
 
-            # Build human-readable context strings for the prompt
             malware_context = "\n".join([
                 f"- [{h['similarity']:.2f}] Package: {h['package']} | "
                 f"Tags: {', '.join(h['attack_type_tags'])} | "
@@ -236,7 +228,6 @@ class RAGEngine:
                 for h in policy_hits
             ]) or "No relevant security policies matched."
 
-            # I2+I3: CoT prompt with all expected elements
             prompt = SSVC_COT_PROMPT.format(
                 package_name=package_name,
                 behavior_text=text,
@@ -253,22 +244,19 @@ class RAGEngine:
                 "flow_boundary": chain.get("flow_boundary", "Unknown"),
                 "sensitive_api": chain.get("sensitive_api", ""),
                 "location": chain.get("location", ""),
-                # RAG retrieval results
                 "top_malware_similarity": best_sim,
                 "malware_matches": malware_hits,
                 "policy_matches": policy_hits,
                 "pre_verdict": "MATCHES_KNOWN_MALWARE" if best_sim >= MALWARE_THRESHOLD else "NO_STRONG_MATCH",
-                # For LLM
                 "behavior_text": text,
                 "prompt_for_llm": prompt,
+                "prompt_version": PROMPT_VERSION,
             })
 
         return results
 
 
-# Backward compatibility: standalone usage
 def analyze_package(json_path):
-    """Wrapper για backward compatibility με llm_evaluator.py."""
     engine = RAGEngine()
     return engine.analyze_package(json_path)
 

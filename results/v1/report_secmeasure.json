@@ -1,0 +1,610 @@
+{
+  "package_name": "secmeasure",
+  "analysis_timestamp": "2026-09-11T14:58:21",
+  "final_verdict": "MALICIOUS",
+  "total_chains_analyzed": 6,
+  "malicious_chains": 6,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for corcho()",
+      "location": "0.1.2/py3-none-any-whl/secmeasure/__init__.py:4",
+      "top_malware_similarity": 0.8872,
+      "malware_matches": [
+        {
+          "package": "jsonist",
+          "similarity": 0.8872,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "4e06e7c074b7a16b43a4ef640246ba11"
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5457
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5119
+        },
+        {
+          "source": "CWE Database",
+          "id": "CWE-114",
+          "name": "Process Control",
+          "description": "Executing commands or loading libraries from an untrusted source or in an untrusted environment can cause an application to execute malicious commands (and payloads) on behalf of an attacker.",
+          "similarity": 0.5022
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: secmeasure\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.89] Package: jsonist | Tags: spyware_infostealer, supply_chain_downloader | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.51] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.50] CWE Database [CWE-114]: Process Control — Executing commands or loading libraries from an untrusted source or in an untrusted environment can \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.88,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package decodes obfuscated data using hex and encoding/string manipulation routines (bytes.fromhex, unicodedata.normalize, re.sub) and passes control flow to process execution sinks.",
+          "is_false_positive": false,
+          "false_positive_reason": "The combination of string de-obfuscation (bytes.fromhex, unicode normalization) directly feeding into dynamic process execution indicates intentional evasion and unauthorized command execution rather than legitimate library functionality."
+        },
+        "malware_similarity": {
+          "most_similar_package": "jsonist",
+          "similarity_score": 0.89,
+          "similarity_explanation": "Exhibits similar structural behavior to known supply chain infostealers and downloaders that utilize process execution combined with string decoding to hide payload execution."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "CWE-114",
+            "policy_name": "Process Control",
+            "violation_reason": "Executes dynamic commands constructed via de-obfuscated byte strings, risking unauthorized process execution."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses bytes.fromhex and character normalization routines to de-obfuscate payload strings before execution."
+          },
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes arbitrary commands/processes dynamically based on decoded input strings."
+          }
+        ],
+        "summary": "The package 'secmeasure' exhibits malicious characteristics by utilizing string obfuscation techniques (such as bytes.fromhex and unicodedata normalization) to reconstruct hidden payloads and dynamically execute external processes. This behavior closely mirrors known supply chain droppers like 'jsonist', violating security policies around dynamic process control (CWE-114). Immediate action should be taken to isolate and block this package.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for corcho()",
+      "location": "0.1.1/tar-gz/secmeasure/__init__.py:4",
+      "top_malware_similarity": 0.8872,
+      "malware_matches": [
+        {
+          "package": "jsonist",
+          "similarity": 0.8872,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "4e06e7c074b7a16b43a4ef640246ba11"
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5457
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5119
+        },
+        {
+          "source": "CWE Database",
+          "id": "CWE-114",
+          "name": "Process Control",
+          "description": "Executing commands or loading libraries from an untrusted source or in an untrusted environment can cause an application to execute malicious commands (and payloads) on behalf of an attacker.",
+          "similarity": 0.5022
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: secmeasure\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.89] Package: jsonist | Tags: spyware_infostealer, supply_chain_downloader | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.51] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.50] CWE Database [CWE-114]: Process Control — Executing commands or loading libraries from an untrusted source or in an untrusted environment can \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.9,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package uses hex decoding (`bytes.fromhex`) and string manipulation (`decode`, `encode`, `join`, `split`) to deobfuscate strings and trigger process execution routines (`corcho`).",
+          "is_false_positive": false,
+          "false_positive_reason": "The combination of hex string deobfuscation with command/process execution is a distinct indicator of malicious code execution rather than legitimate package management functionality."
+        },
+        "malware_similarity": {
+          "most_similar_package": "jsonist",
+          "similarity_score": 0.89,
+          "similarity_explanation": "Matches the behavior of process execution and downloader payloads seen in malicious packages like jsonist, which obfuscate execution triggers using string encoding techniques."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "CWE-114",
+            "policy_name": "Process Control",
+            "violation_reason": "The package executes commands dynamically constructed or decoded from obfuscated sources."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses `bytes.fromhex` and string transformations to obscure executable payloads."
+          },
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes process execution APIs using decoded command flows."
+          }
+        ],
+        "summary": "The package 'secmeasure' exhibits malicious supply chain dropper behavior. It employs hex string deobfuscation (`bytes.fromhex`) and string manipulation routines to dynamically reconstruct and execute commands via sensitive process execution functions (`corcho`). Due to its structural similarity to known malicious packages like 'jsonist' and violation of process control security policies, this package is classified as MALICIOUS.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 2,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.1.0/py3-none-any-whl/secmeasure/__init__.py:5",
+      "top_malware_similarity": 0.9738,
+      "malware_matches": [
+        {
+          "package": "jsonist",
+          "similarity": 0.9738,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "4e06e7c074b7a16b43a4ef640246ba11"
+        },
+        {
+          "package": "argklass",
+          "similarity": 0.9632,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.9602,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5719
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5341
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5315
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for string. Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, html.escape, os.system, re.sub, s.strip, unicodedata.normalize.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: secmeasure\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for string. Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, html.escape, os.system, re.sub, s.strip, unicodedata.normalize.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: jsonist | Tags: spyware_infostealer, supply_chain_downloader | Category: process_exec\n- [0.96] Package: argklass | Tags: unclassified | Category: process_exec\n- [0.96] Package: mo-imports | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.57] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.53] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.53] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package decodes string constructs and executes shell commands using `os.system`, indicative of executing obfuscated code or secondary payloads.",
+          "is_false_positive": false,
+          "false_positive_reason": "Executing encoded/manipulated strings directly via `os.system` is a strong indicator of malicious intent and evasive behavior, non-standard for legitimate utility libraries."
+        },
+        "malware_similarity": {
+          "most_similar_package": "jsonist",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Extremely high structural and behavioral match with jsonist, a known supply chain malware that utilizes process execution to run obfuscated commands."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "Executes underlying process execution routines combined with obfuscated data flow to profile or execute commands on the host."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Leverages Python scripts to execute shell commands via os.system."
+          },
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses string encoding and decoding techniques prior to system command execution to evade basic static analysis."
+          }
+        ],
+        "summary": "The package 'secmeasure' exhibits malicious supply chain behavior by leveraging string encoding and decoding mechanisms to obfuscate system commands executed via 'os.system'. It shares a 0.97 similarity score with 'jsonist', a known infostealer/downloader package, justifying an ACT decision under the SSVC framework.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 3,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for corcho()",
+      "location": "0.1.1/py3-none-any-whl/secmeasure/__init__.py:4",
+      "top_malware_similarity": 0.8872,
+      "malware_matches": [
+        {
+          "package": "jsonist",
+          "similarity": 0.8872,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "4e06e7c074b7a16b43a4ef640246ba11"
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5457
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5119
+        },
+        {
+          "source": "CWE Database",
+          "id": "CWE-114",
+          "name": "Process Control",
+          "description": "Executing commands or loading libraries from an untrusted source or in an untrusted environment can cause an application to execute malicious commands (and payloads) on behalf of an attacker.",
+          "similarity": 0.5022
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: secmeasure\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.89] Package: jsonist | Tags: spyware_infostealer, supply_chain_downloader | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.51] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.50] CWE Database [CWE-114]: Process Control — Executing commands or loading libraries from an untrusted source or in an untrusted environment can \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.92,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package decodes hex-encoded strings using bytes.fromhex and performs string manipulations prior to executing arbitrary system commands or sub-processes.",
+          "is_false_positive": false,
+          "false_positive_reason": "The execution of system processes combined with obfuscated hex string decoding is inconsistent with legitimate software behavior and strongly indicates hidden execution intent."
+        },
+        "malware_similarity": {
+          "most_similar_package": "jsonist",
+          "similarity_score": 0.89,
+          "similarity_explanation": "Matches known supply chain downloaders and infostealers that decode hex payloads dynamically to invoke process execution sinks."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "CWE-114",
+            "policy_name": "Process Control",
+            "violation_reason": "Executes dynamically decoded strings or commands as sub-processes without verification or explicit input validation."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses byte encoding and hex transformations to obfuscate payload text prior to execution."
+          },
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes malicious sub-processes or system commands using decoded runtime parameters."
+          }
+        ],
+        "summary": "The package 'secmeasure' exhibits malicious characteristics consistent with supply chain downloaders. It utilizes string encoding and hex byte decoding (bytes.fromhex) to obfuscate commands that are passed directly to a process execution sink. Given its high similarity to known infostealers like 'jsonist' and violation of CWE-114, this package is classified as MALICIOUS requiring immediate removal.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 4,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for corcho()",
+      "location": "0.1.2/tar-gz/secmeasure/__init__.py:4",
+      "top_malware_similarity": 0.8872,
+      "malware_matches": [
+        {
+          "package": "jsonist",
+          "similarity": 0.8872,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "4e06e7c074b7a16b43a4ef640246ba11"
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.8814,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5457
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5119
+        },
+        {
+          "source": "CWE Database",
+          "id": "CWE-114",
+          "name": "Process Control",
+          "description": "Executing commands or loading libraries from an untrusted source or in an untrusted environment can cause an application to execute malicious commands (and payloads) on behalf of an attacker.",
+          "similarity": 0.5022
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: secmeasure\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for corcho(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, bytes.fromhex, corcho, html.escape, re.sub, s.strip, unicodedata.normalize.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.89] Package: jsonist | Tags: spyware_infostealer, supply_chain_downloader | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n- [0.88] Package: mo-imports | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.51] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.50] CWE Database [CWE-114]: Process Control — Executing commands or loading libraries from an untrusted source or in an untrusted environment can \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.88,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package decodes hex-encoded byte strings (`bytes.fromhex`, `.decode`, `.encode`) and processes strings using normalization and sub routines before triggering dynamic process execution (`corcho`).",
+          "is_false_positive": false,
+          "false_positive_reason": "The usage of string decoding/hex conversions combined directly with process execution indicates deliberate obfuscation to hide executed commands or secondary payloads."
+        },
+        "malware_similarity": {
+          "most_similar_package": "jsonist",
+          "similarity_score": 0.89,
+          "similarity_explanation": "Exhibits similar obfuscated process execution patterns used in supply chain downloaders and infostealer payloads such as jsonist."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "CWE-114",
+            "policy_name": "Process Control",
+            "violation_reason": "Executes obfuscated commands or binaries dynamically constructed from hex-decoded input."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses `bytes.fromhex` and complex string encodings to hide execution payloads."
+          },
+          {
+            "technique_id": "T1059",
+            "technique_name": "Command and Scripting Interpreter",
+            "relevance": "Executes external commands or process execution flows dynamically."
+          }
+        ],
+        "summary": "The package 'secmeasure' uses hex string decoding and string manipulations to obfuscate dynamic process execution (`process_exec`). This pattern is strongly aligned with malicious supply chain downloaders such as 'jsonist'. Immediate action is recommended to mitigate risk.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 5,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.1.0/tar-gz/secmeasure/__init__.py:5",
+      "top_malware_similarity": 0.9738,
+      "malware_matches": [
+        {
+          "package": "jsonist",
+          "similarity": 0.9738,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "4e06e7c074b7a16b43a4ef640246ba11"
+        },
+        {
+          "package": "argklass",
+          "similarity": 0.9632,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "mo-imports",
+          "similarity": 0.9602,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5719
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5341
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5315
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for string. Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, html.escape, os.system, re.sub, s.strip, unicodedata.normalize.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: secmeasure\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for string. Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.split, html.escape, os.system, re.sub, s.strip, unicodedata.normalize.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.97] Package: jsonist | Tags: spyware_infostealer, supply_chain_downloader | Category: process_exec\n- [0.96] Package: argklass | Tags: unclassified | Category: process_exec\n- [0.96] Package: mo-imports | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.57] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.53] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.53] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.92,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package decodes and manipulates strings to execute shell commands using `os.system`, hiding process execution logic inside encoded strings.",
+          "is_false_positive": false,
+          "false_positive_reason": "The combination of string encoding/decoding operations directly feeding into process execution sinks like `os.system` without administrative justification is characteristic of malicious payload delivery rather than benign package utility."
+        },
+        "malware_similarity": {
+          "most_similar_package": "jsonist",
+          "similarity_score": 0.97,
+          "similarity_explanation": "Extremely high behavioral similarity to `jsonist` and `argklass`, sharing the exact process_exec flow pattern where encoded payloads are reconstructed and passed to system command interpreters."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "The package executes arbitrary commands via `os.system` to inspect or manipulate host system state without user consent."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Uses Python execution environment to invoke OS-level commands through os.system."
+          },
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses encode and decode routines to obfuscate shell command strings prior to execution."
+          }
+        ],
+        "summary": "The package 'secmeasure' is identified as malicious supply chain malware. It uses string manipulation and decoding mechanisms to obfuscate commands that are directly passed to the OS shell via `os.system`. This pattern closely matches previously identified malicious Python packages such as 'jsonist'. Immediate remediation (ACT) is required to remove this package and isolate impacted systems.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}

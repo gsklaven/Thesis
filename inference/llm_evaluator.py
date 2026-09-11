@@ -22,10 +22,16 @@ try:
 except ImportError:
     _OpenAIClient = None
 
-from query_rag import RAGEngine
+from query_rag import RAGEngine, PROMPT_VERSION
 
 BASE_DIR = "/home/sklavenitis/thesis/dataset"
-RESULTS_DIR = "/home/sklavenitis/thesis/results"
+
+# ΝΕΟ: ο φάκελος αποτελεσμάτων είναι πλέον ΑΝΑ prompt version, αυτόματα.
+# Χωρίς αυτό, ένα re-run μετά από αλλαγή prompt θα έγραφε ΠΑΝΩ από τα
+# προηγούμενα reports (ίδιο filename), χάνοντας τη δυνατότητα before/after
+# σύγκρισης. Τώρα: results/v1/, results/v2/, κ.λπ. - ποτέ δεν συγκρούονται,
+# χωρίς να χρειάζεται να διαχειρίζεσαι φακέλους χειροκίνητα.
+RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
 TAGS_FILE = os.path.join(BASE_DIR, "attack_type_tags.json")
 
 MAX_RETRIES = 3
@@ -298,7 +304,30 @@ def main(json_path):
     results = engine.analyze_package(json_path, extra_context=extra_context)
 
     if not results:
+        # ΚΡΙΣΙΜΟ FIX: ΠΡΙΝ, εδώ απλά "return" χωρίς να γράψει τίποτα - το
+        # check_test_set.py μετά έβρισκε "κανένα report" και το μέτραγε
+        # σιωπηλά σαν "ΔΕΝ ΤΡΕΞΕ" -> λάθος αποτέλεσμα (false negative), ενώ
+        # στην πραγματικότητα ΠΟΤΕ δεν δοκιμάστηκε - το CodeQL απλά δεν
+        # βρήκε καμία ευαίσθητη συμπεριφορά σε αυτό το πακέτο. Τώρα γράφουμε
+        # ΠΑΝΤΑ ένα report, με ρητό, ΞΕΧΩΡΙΣΤΟ verdict "NO_CHAINS_FOUND" -
+        # ώστε να είναι σαφές ότι αυτό είναι περιορισμός του στατικού
+        # ανάλυσης σταδίου (CodeQL), όχι του LLM reasoning.
         print("[-] Δεν βρέθηκαν behavior chains για ανάλυση.")
+        report = {
+            "package_name": package_name,
+            "prompt_version": "n/a",
+            "analysis_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "final_verdict": "NO_CHAINS_FOUND",
+            "total_chains_analyzed": 0,
+            "malicious_chains": 0,
+            "suspicious_chains": 0,
+            "chain_details": [],
+        }
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        output_path = os.path.join(RESULTS_DIR, f"report_{package_name}.json")
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+        print(f"[✓] Report (0 chains) αποθηκεύτηκε: {output_path}")
         return
 
     print(f"[*] {len(results)} behavior chains βρέθηκαν. Αποστολή στο Gemini "
@@ -343,6 +372,7 @@ def main(json_path):
 
     report = {
         "package_name": package_name,
+        "prompt_version": results[0].get("prompt_version", "unversioned") if results else "unversioned",
         "analysis_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "final_verdict": final_verdict,
         "total_chains_analyzed": len(results),

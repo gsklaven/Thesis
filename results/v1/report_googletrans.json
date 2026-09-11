@@ -1,0 +1,1098 @@
+{
+  "package_name": "googletrans",
+  "analysis_timestamp": "2026-09-11T13:23:42",
+  "final_verdict": "BENIGN",
+  "total_chains_analyzed": 13,
+  "malicious_chains": 0,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/httpx/_decoders.py:74",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "ugmobilemoney",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "aiosmartoilgauge",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "supafunc",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5993
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5291
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5208
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (was_first_attempt) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for UnaryExpr. Calls external/library functions: <complex_expr>, <complex_expr>.decompressobj, <complex_expr>.join, ImportError, NotImplementedError, SUPPORTED_DECODERS.pop, brotli.Decompressor, bytes, child.decode, child.flush.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (was_first_attempt) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for UnaryExpr. Calls external/library functions: <complex_expr>, <complex_expr>.decompressobj, <complex_expr>.join, ImportError, NotImplementedError, SUPPORTED_DECODERS.pop, brotli.Decompressor, bytes, child.decode, child.flush.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: ugmobilemoney | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: aiosmartoilgauge | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: supafunc | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.60] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.53] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.52] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package handles HTTP response decompression using stream decoders such as Brotli (brotli.Decompressor) and zlib decompressobj to process compressed HTTP payload data returned from translation endpoints.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis tool misidentified standard HTTP payload decompression routines (Brotli/zlib decoders) as cryptographic obfuscation. This is expected functionality for an HTTP client library like googletrans when handling compressed web responses."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "Although RAG results matched generic crypto_obfuscation tags from synthetic/unclassified datasets, the actual implementation in googletrans is standard response decoding logic rather than malicious payload deobfuscation."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The flagged behavior in googletrans represents a false positive. Static analysis highlighted string/stream decoding functions (such as brotli.Decompressor and decompressobj), which are legitimate utilities used by the library to decode compressed web responses from Google Translate API endpoints. No malicious setup hooks, reverse shells, or obfuscated payloads are present.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/httpx/_decoders.py:93",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "ugmobilemoney",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "aiosmartoilgauge",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "crapsolver-python",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.6276
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5577
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.014",
+          "name": "Polymorphic Code",
+          "description": "Adversaries may utilize polymorphic code (also known as metamorphic or mutating code) to evade detection. Polymorphic code is a type of software capable of changing its runtime footprint during code e",
+          "similarity": 0.547
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for BinaryExpr. Calls external/library functions: <complex_expr>, <complex_expr>.decompressobj, <complex_expr>.join, ImportError, NotImplementedError, SUPPORTED_DECODERS.pop, brotli.Decompressor, bytes, child.decode, child.flush.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for BinaryExpr. Calls external/library functions: <complex_expr>, <complex_expr>.decompressobj, <complex_expr>.join, ImportError, NotImplementedError, SUPPORTED_DECODERS.pop, brotli.Decompressor, bytes, child.decode, child.flush.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: ugmobilemoney | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: aiosmartoilgauge | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: crapsolver-python | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.63] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.56] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.55] MITRE ATT&CK [T1027.014]: Polymorphic Code — Adversaries may utilize polymorphic code (also known as metamorphic or mutating code) to evade detec\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code handles HTTP response decompression and string decoding (e.g., Brotli decompression and decoder management) required to process HTTP responses from translation services.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis tool incorrectly flagged standard HTTP payload decompressors (Brotli/zlib) and text decoders in the legitimate 'googletrans' library as obfuscation."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The similarity matches are artifacts of high-level generic rules flagging stream decompression operations, which are benign standard HTTP client utilities in this package."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The package 'googletrans' is a legitimate Python library for Google Translate API interactions. The CodeQL findings flagged standard payload decompression routines (such as Brotli and zlib handling) as obfuscation, which is a clear false positive.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 2,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/httpcore/_models.py:512",
+      "top_malware_similarity": 0.936,
+      "malware_matches": [
+        {
+          "package": "opentelemetry-instrumentation-fastapi",
+          "similarity": 0.936,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "thrift-sasl",
+          "similarity": 0.9275,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "aiosmartoilgauge",
+          "similarity": 0.9253,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5559
+        },
+        {
+          "source": "OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset)",
+          "id": "OWASP-SCP-210",
+          "name": "Never Pass Untrusted Data to Dynamic Code Execution Functions",
+          "description": "User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval() or exec(), a primary technique used by obfuscated malicious payloads to hide their true behavior u",
+          "similarity": 0.5449
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.010",
+          "name": "Command Obfuscation",
+          "description": "Adversaries may obfuscate content during command execution to impede detection. Command-line obfuscation is a method of making strings and patterns within commands and scripts more difficult to signat",
+          "similarity": 0.5408
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ModuleVariableNode in Module httpcore._models for None; ControlFlowNode for value; ControlFlowNode for Attribute(); ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.encode, <complex_expr>.join, DEFAULT_PORTS.get, RuntimeError, TypeError, base64.b64encode, hasattr, isinstance, k.lower, len.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ModuleVariableNode in Module httpcore._models for None; ControlFlowNode for value; ControlFlowNode for Attribute(); ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.encode, <complex_expr>.join, DEFAULT_PORTS.get, RuntimeError, TypeError, base64.b64encode, hasattr, isinstance, k.lower, len.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.94] Package: opentelemetry-instrumentation-fastapi | Tags: unclassified | Category: crypto_obfuscation\n- [0.93] Package: thrift-sasl | Tags: unclassified | Category: crypto_obfuscation\n- [0.93] Package: aiosmartoilgauge | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.54] OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset) [OWASP-SCP-210]: Never Pass Untrusted Data to Dynamic Code Execution Functions — User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval(\n- [0.54] MITRE ATT&CK [T1027.010]: Command Obfuscation — Adversaries may obfuscate content during command execution to impede detection. Command-line obfusca\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The flagged behavior corresponds to standard HTTP Basic Authentication handling within the httpcore dependency, where user credentials (userpass) are base64 encoded for inclusion in authorization headers.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis tool misidentified standard base64 encoding of HTTP Basic Auth credentials in httpcore._models as crypto_obfuscation. There are no malicious import-time side effects, obfuscated droppers, or unauthorized C2 connections."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The code pattern matches legitimate HTTP client authentication mechanisms rather than malicious credential exfiltration or code obfuscation techniques."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the googletrans package static analysis findings indicates a false positive. The identified flow originates from httpcore, an HTTP library dependency, performing standard base64 encoding on user/pass strings for legitimate HTTP Basic Authentication headers. No malicious obfuscation or malicious intent was observed.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 3,
+      "category": "process_exec",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for compile()",
+      "location": "3.0.0/tar-gz/googletrans/gtoken.py:100",
+      "top_malware_similarity": 0.9896,
+      "malware_matches": [
+        {
+          "package": "protojit",
+          "similarity": 0.9896,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "hashstation",
+          "similarity": 0.9896,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "obfuscated_payload",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "3b93bae419a6f6dda27f4c6ea18ad7ef"
+        },
+        {
+          "package": "p5250-ovako",
+          "similarity": 0.988,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5918
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-01",
+          "name": "Dynamic Code Execution (Eval/Exec)",
+          "description": "Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated strings, a common zero-day evasion technique.",
+          "similarity": 0.5566
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5561
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for compile(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for compile(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.99] Package: protojit | Tags: unclassified | Category: process_exec\n- [0.99] Package: hashstation | Tags: data_exfiltration, obfuscated_payload, spyware_infostealer | Category: process_exec\n- [0.99] Package: p5250-ovako | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.59] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.56] Threat Hunting Heuristics (custom) [HEUR-01]: Dynamic Code Execution (Eval/Exec) — Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated stri\n- [0.56] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code performs internal Python string processing, regular expression, or code object compilation, likely related to HTTP request/response parsing or token generation for the Google Translate API.",
+          "is_false_positive": true,
+          "false_positive_reason": "Data flows are entirely App-Internal and originate from string literals into standard library attributes/compilation methods. There are no network execution hooks, obfuscated dynamic payloads, or setup.py side-effects."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The flagged behavior lacks malicious operational characteristics present in packages like hashstation or protojit, such as obfuscated execution, spyware features, or unverified C2 connections."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Evaluation of the static analysis output for 'googletrans' indicates that the identified risks represent a false positive. The triggers relate to standard app-internal string compilation and attribute resolution rather than malicious execution or unauthorized exfiltration. The package is assessed as BENIGN with an SSVC recommendation of TRACK.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 4,
+      "category": "process_exec",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for eval()",
+      "location": "3.0.0/tar-gz/googletrans/gtoken.py:102",
+      "top_malware_similarity": 0.9892,
+      "malware_matches": [
+        {
+          "package": "protojit",
+          "similarity": 0.9892,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "hashstation",
+          "similarity": 0.9878,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "obfuscated_payload",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "3b93bae419a6f6dda27f4c6ea18ad7ef"
+        },
+        {
+          "package": "p5250-ovako",
+          "similarity": 0.986,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.6008
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-01",
+          "name": "Dynamic Code Execution (Eval/Exec)",
+          "description": "Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated strings, a common zero-day evasion technique.",
+          "similarity": 0.5816
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055.002",
+          "name": "Portable Executable Injection",
+          "description": "Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in",
+          "similarity": 0.5567
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for eval(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for eval(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Execution is gated by a\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.99] Package: protojit | Tags: unclassified | Category: process_exec\n- [0.99] Package: hashstation | Tags: data_exfiltration, obfuscated_payload, spyware_infostealer | Category: process_exec\n- [0.99] Package: p5250-ovako | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.60] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.58] Threat Hunting Heuristics (custom) [HEUR-01]: Dynamic Code Execution (Eval/Exec) — Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated stri\n- [0.56] MITRE ATT&CK [T1055.002]: Portable Executable Injection — Adversaries may inject portable executables (PE) into processes in order to evade process-based defe\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package performs string manipulation and internal evaluation via eval() for parsing and token calculation required to interact with Google Translate services.",
+          "is_false_positive": true,
+          "false_positive_reason": "googletrans is a popular standard library for Google Translation. The flagged eval() call is restricted to internal string literal processing for token generation, with no remote payload execution, credential stealing, or malicious import-time activity."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "RAG matches are high due to generic CodeQL process_exec tags, but structural comparison reveals no malicious patterns such as obfuscation, C2 exfiltration, or dropper behavior."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-01",
+            "policy_name": "Dynamic Code Execution (Eval/Exec)",
+            "violation_reason": "Static analysis identified dynamic evaluation routines via eval() on app-internal string literals."
+          }
+        ],
+        "mitre_mapping": [],
+        "summary": "The package 'googletrans' is a legitimate Python library used to interact with the Google Translate API. Static analysis flagged internal calls to eval() used during token generation math and string parsing as process execution risks. However, further review confirms the flow is strictly application-internal without network exfiltration, obfuscated payloads, or install-time hooks. The finding is a false positive and the package is BENIGN.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 5,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for b64encode()",
+      "location": "vendor/httpx/_auth.py:141",
+      "top_malware_similarity": 0.9929,
+      "malware_matches": [
+        {
+          "package": "crapsolver-python",
+          "similarity": 0.9929,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "supafunc",
+          "similarity": 0.9753,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "supafunc",
+          "similarity": 0.9673,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.6222
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5406
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.010",
+          "name": "Command Obfuscation",
+          "description": "Adversaries may obfuscate content during command execution to impede detection. Command-line obfuscation is a method of making strings and patterns within commands and scripts more difficult to signat",
+          "similarity": 0.5238
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Contributing data-flow nodes: ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth. Calls external/library functions: <complex_expr>, <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.endswith, <complex_expr>.get, <complex_expr>.hexdigest, <complex_expr>.items, <complex_expr>.join, <complex_expr>.split, <complex_expr>.startswith.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Contributing data-flow nodes: ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth; ControlFlowNode for None; ControlFlowNode for auth. Calls external/library functions: <complex_expr>, <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.endswith, <complex_expr>.get, <complex_expr>.hexdigest, <complex_expr>.items, <complex_expr>.join, <complex_expr>.split, <complex_expr>.startswith.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.99] Package: crapsolver-python | Tags: unclassified | Category: crypto_obfuscation\n- [0.98] Package: supafunc | Tags: unclassified | Category: crypto_obfuscation\n- [0.97] Package: supafunc | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.62] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.54] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n- [0.52] MITRE ATT&CK [T1027.010]: Command Obfuscation — Adversaries may obfuscate content during command execution to impede detection. Command-line obfusca\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code constructs standard HTTP Basic Authentication headers using Base64 encoding (`b64encode`) for HTTP proxy or API request authentication.",
+          "is_false_positive": true,
+          "false_positive_reason": "Base64 encoding of username and password pairs (`userpass`) is standard RFC 7617 protocol implementation for HTTP Basic Authentication in web client/translation libraries like googletrans, not malicious obfuscation."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The CodeQL heuristic flagged generic Base64 string encoding; however, the data flow context indicates standard library proxy authentication rather than payload execution or obfuscated malware droppers."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The flagged behavior in `googletrans` is a clear false positive. The static analysis detected `b64encode` acting upon authentication strings (`userpass`), which is standard functionality for encoding credentials when communicating through HTTP proxies or authenticated APIs. No malicious intent, execution hooks, or unauthorized data exfiltration behaviors were detected.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 6,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for b64encode()",
+      "location": "vendor/httpx/_auth.py:171",
+      "top_malware_similarity": 0.9999,
+      "malware_matches": [
+        {
+          "package": "crapsolver-python",
+          "similarity": 0.9999,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "supafunc",
+          "similarity": 0.9999,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "aiosmartoilgauge",
+          "similarity": 0.9999,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.651
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5766
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.010",
+          "name": "Command Obfuscation",
+          "description": "Adversaries may obfuscate content during command execution to impede detection. Command-line obfuscation is a method of making strings and patterns within commands and scripts more difficult to signat",
+          "similarity": 0.5687
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Contributing data-flow nodes: ControlFlowNode for Attribute(); ControlFlowNode for Subscript; ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for Attribute(); ControlFlowNode for to_bytes(); ControlFlowNode for value; ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.endswith, <complex_expr>.hexdigest, <complex_expr>.join, <complex_expr>.split, <complex_expr>.startswith, NotImplementedError, ValueError, _DigestAuthChallenge.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Contributing data-flow nodes: ControlFlowNode for Attribute(); ControlFlowNode for Subscript; ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for Attribute(); ControlFlowNode for to_bytes(); ControlFlowNode for value; ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>.decode, <complex_expr>.encode, <complex_expr>.endswith, <complex_expr>.hexdigest, <complex_expr>.join, <complex_expr>.split, <complex_expr>.startswith, NotImplementedError, ValueError, _DigestAuthChallenge.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: crapsolver-python | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: supafunc | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: aiosmartoilgauge | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.65] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.58] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n- [0.57] MITRE ATT&CK [T1027.010]: Command Obfuscation — Adversaries may obfuscate content during command execution to impede detection. Command-line obfusca\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code handles standard HTTP network authentication mechanisms, specifically Digest Auth and Basic Auth encoding using base64 and cryptographic hashing methods.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis flagged standard HTTP authentication header creation (`_DigestAuthChallenge`, base64 encoding of userpass tuples) as obfuscation/malicious data flow. This is expected functionality for an HTTP client library."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "Although static analysis tools grouped base64/digest usage with packages categorized under 'crypto_obfuscation', the actual code context represents standard HTTP Basic/Digest authentication handling."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The flagged behavior in the 'googletrans' package represents legitimate base64 and digest hashing operations used during HTTP authentication mechanisms (_DigestAuthChallenge, username/password encoding). This is benign behavior consistent with standard HTTP client utility functions and is classified as a false positive.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 7,
+      "category": "process_exec",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for compile()",
+      "location": "vendor/googletrans/gtoken.py:113",
+      "top_malware_similarity": 0.976,
+      "malware_matches": [
+        {
+          "package": "krakenvirus",
+          "similarity": 0.976,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "39a83111cd2936db413c757af8e92ebd"
+        },
+        {
+          "package": "krakenvirus",
+          "similarity": 0.976,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "39a83111cd2936db413c757af8e92ebd"
+        },
+        {
+          "package": "krakenvirus",
+          "similarity": 0.976,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "39a83111cd2936db413c757af8e92ebd"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.6159
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5828
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055.002",
+          "name": "Portable Executable Injection",
+          "description": "Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in",
+          "similarity": 0.5676
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for compile(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Execution is gated by a condition (raw_tkk) which must evaluate to false. Execution is gated by a condition (code) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for IntegerLiteral; ControlFlowNode for dict(); ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Subscript. Calls external/library functions: <complex_expr>.decode, <complex_expr>.format, <complex_expr>.replace, ast.parse, ast.walk, b.split, code.encode, code.group, compile, dict.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for compile(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Execution is gated by a condition (raw_tkk) which must evaluate to false. Execution is gated by a condition (code) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for IntegerLiteral; ControlFlowNode for dict(); ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Subscript. Calls external/library functions: <complex_expr>.decode, <complex_expr>.format, <complex_expr>.replace, ast.parse, ast.walk, b.split, code.encode, code.group, compile, dict.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.98] Package: krakenvirus | Tags: data_exfiltration, spyware_infostealer | Category: process_exec\n- [0.98] Package: krakenvirus | Tags: data_exfiltration, spyware_infostealer | Category: process_exec\n- [0.98] Package: krakenvirus | Tags: data_exfiltration, spyware_infostealer | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.62] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.58] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.57] MITRE ATT&CK [T1055.002]: Portable Executable Injection — Adversaries may inject portable executables (PE) into processes in order to evade process-based defe\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package extracts Google Translate TKK (Translation Knowledge Key) dynamic JavaScript token generation logic from Google's endpoints and evaluates/parses arithmetic token expressions using Python AST parsing and compile functions.",
+          "is_false_positive": true,
+          "false_positive_reason": "The use of compile() and AST parsing (ast.parse, ast.walk) is part of the package's core functionality to dynamically derive the TKK security token required by Google Translate web API requests, not for executing malicious payloads or C2 commands."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "Although flagged against krakenvirus by generic static detection rules due to dynamic string compilation calls, the implementation is strictly dedicated to parsing arithmetic token key functions from Google Translate interface responses."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The package 'googletrans' was flagged due to static analysis alerts on compile() and ast.parse usage. Analysis confirms these dynamic execution primitives are legitimately used to extract and compute Google Translate's dynamic TKK request signature tokens. The package exhibits no malicious behavioral traits, exfiltration, or unauthorized process execution, confirming a false positive.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 8,
+      "category": "process_exec",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for eval()",
+      "location": "vendor/googletrans/gtoken.py:116",
+      "top_malware_similarity": 0.9868,
+      "malware_matches": [
+        {
+          "package": "protojit",
+          "similarity": 0.9868,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "p5250-ovako",
+          "similarity": 0.9863,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "hashstation",
+          "similarity": 0.9859,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "obfuscated_payload",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "3b93bae419a6f6dda27f4c6ea18ad7ef"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5958
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-01",
+          "name": "Dynamic Code Execution (Eval/Exec)",
+          "description": "Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated strings, a common zero-day evasion technique.",
+          "similarity": 0.5793
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055.002",
+          "name": "Portable Executable Injection",
+          "description": "Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in",
+          "similarity": 0.5471
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for eval(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Execution is gated by a",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for eval(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for clause sink. Execution is gated by a\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.99] Package: protojit | Tags: unclassified | Category: process_exec\n- [0.99] Package: p5250-ovako | Tags: unclassified | Category: process_exec\n- [0.99] Package: hashstation | Tags: data_exfiltration, obfuscated_payload, spyware_infostealer | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.60] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.58] Threat Hunting Heuristics (custom) [HEUR-01]: Dynamic Code Execution (Eval/Exec) — Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated stri\n- [0.55] MITRE ATT&CK [T1055.002]: Portable Executable Injection — Adversaries may inject portable executables (PE) into processes in order to evade process-based defe\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.9,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package googletrans uses string evaluation / eval() in its internal logic to process and calculate Google Translate API tokens (TKK generation).",
+          "is_false_positive": true,
+          "false_positive_reason": "The eval() call operates on vendor-internal string literals for translation token calculation and does not execute obfuscated code, download secondary payloads, or establish suspicious remote connections."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The flagged behavior does not match malicious patterns such as C2 exfiltration, reverse shells, or dropper scripts seen in known malware samples."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-01",
+            "policy_name": "Dynamic Code Execution (Eval/Exec)",
+            "violation_reason": "Triggers static analysis rule HEUR-01 due to explicit eval() usage, though used benignly for internal expression parsing."
+          }
+        ],
+        "mitre_mapping": [],
+        "summary": "The 'googletrans' package was flagged due to static CodeQL detections of eval() usage during string processing. Deep analysis confirms this behavior is part of legitimate translation token parsing (TKK calculation) standard to the library's functionality. No malicious network exfiltration, obfuscation, or backdoor mechanics were present, confirming this is a false positive.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 9,
+      "category": "network",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/httpcore/_backends/sync.py:240",
+      "top_malware_similarity": 0.947,
+      "malware_matches": [
+        {
+          "package": "apiclient",
+          "similarity": 0.947,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "quant-backtest-helpers",
+          "similarity": 0.9457,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "network",
+          "campaign_preview": "6c8fd3e671e4a0b1df547fe9969ce84b"
+        },
+        {
+          "package": "apiclient",
+          "similarity": 0.9389,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5479
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5156
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5083
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for path. Calls external/library functions: NotImplementedError, RuntimeError, func, functools.partial, isinstance, self._incoming.write, self._incoming.write_eof, self._outgoing.read, self._sock.close, self._sock.getpeername.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for path. Calls external/library functions: NotImplementedError, RuntimeError, func, functools.partial, isinstance, self._incoming.write, self._incoming.write_eof, self._outgoing.read, self._sock.close, self._sock.getpeername.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.95] Package: apiclient | Tags: unclassified | Category: network\n- [0.95] Package: quant-backtest-helpers | Tags: data_exfiltration, spyware_infostealer | Category: network\n- [0.94] Package: apiclient | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.52] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.51] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "Standard network socket and stream handling routines (writing to incoming buffers, reading outgoing buffers, socket peer name checks) expected in an HTTP client or API wrapper library.",
+          "is_false_positive": true,
+          "false_positive_reason": "The identified network behavior reflects normal stream transport and socket management necessary for making API requests to Google Translate, without any indicative signs of payload downloading, execution, or exfiltration."
+        },
+        "malware_similarity": {
+          "most_similar_package": "apiclient",
+          "similarity_score": 0.95,
+          "similarity_explanation": "The package matches generic network API client structures that rely on standard socket and IO communication streams."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The googletrans package exhibits benign network stream and socket handling consistent with its documented intent as a Google Translate API library. Analysis of the code flow confirms these actions are standard low-level HTTP/transport operations, presenting no malicious characteristics or security policy violations.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 10,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/httpcore/_sync/http_proxy.py:141",
+      "top_malware_similarity": 0.9115,
+      "malware_matches": [
+        {
+          "package": "ugmobilemoney",
+          "similarity": 0.9115,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pythemo",
+          "similarity": 0.9115,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "opentelemetry-instrumentation-fastapi",
+          "similarity": 0.9114,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5489
+        },
+        {
+          "source": "OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset)",
+          "id": "OWASP-SCP-210",
+          "name": "Never Pass Untrusted Data to Dynamic Code Execution Functions",
+          "description": "User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval() or exec(), a primary technique used by obfuscated malicious payloads to hide their true behavior u",
+          "similarity": 0.5245
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.517
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for value; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ModuleVariableNode in Module httpcore._sync.http_proxy for None; ControlFlowNode for None; ControlFlowNode for proxy_auth; ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(). Calls external/library functions: <complex_expr>.encode, <complex_expr>.join, DEFAULT_PORTS.get, HTTPCORE_EXC_MAP.items, ImportError, ProxyError, RuntimeError, TypeError, ValueError, base64.b64encode.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for value; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ModuleVariableNode in Module httpcore._sync.http_proxy for None; ControlFlowNode for None; ControlFlowNode for proxy_auth; ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(). Calls external/library functions: <complex_expr>.encode, <complex_expr>.join, DEFAULT_PORTS.get, HTTPCORE_EXC_MAP.items, ImportError, ProxyError, RuntimeError, TypeError, ValueError, base64.b64encode.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.91] Package: ugmobilemoney | Tags: unclassified | Category: crypto_obfuscation\n- [0.91] Package: pythemo | Tags: unclassified | Category: crypto_obfuscation\n- [0.91] Package: opentelemetry-instrumentation-fastapi | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.52] OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset) [OWASP-SCP-210]: Never Pass Untrusted Data to Dynamic Code Execution Functions — User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval(\n- [0.52] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code constructs standard HTTP Basic Authentication headers for proxies within the dependency library httpcore using base64 encoding (base64.b64encode) on proxy user credentials.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis tool flagged base64 encoding of proxy credentials in httpcore._sync.http_proxy as obfuscation. However, this is standard HTTP Basic Authentication functionality required for proxy connections in legitimate networking libraries."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "Although RAG matches packages under crypto_obfuscation due to base64 usage keywords, the actual code flow is benign proxy credential formatting within a vendor HTTP client."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The flagged behavior in the googletrans package corresponds to standard HTTP proxy authentication header generation within the httpcore dependency. The use of base64 encoding for proxy userpass credentials was incorrectly categorized as crypto-obfuscation by static analysis. There is no evidence of malicious intent or unauthorized exfiltration.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 11,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/httpcore/_async/http_proxy.py:141",
+      "top_malware_similarity": 0.9012,
+      "malware_matches": [
+        {
+          "package": "pythemo",
+          "similarity": 0.9012,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "ugmobilemoney",
+          "similarity": 0.9012,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "opentelemetry-instrumentation-fastapi",
+          "similarity": 0.8976,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5475
+        },
+        {
+          "source": "OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset)",
+          "id": "OWASP-SCP-210",
+          "name": "Never Pass Untrusted Data to Dynamic Code Execution Functions",
+          "description": "User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval() or exec(), a primary technique used by obfuscated malicious payloads to hide their true behavior u",
+          "similarity": 0.5256
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5134
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for value; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ModuleVariableNode in Module httpcore._async.http_proxy for None; ControlFlowNode for None; ControlFlowNode for proxy_auth; ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(). Calls external/library functions: <complex_expr>.encode, <complex_expr>.join, DEFAULT_PORTS.get, HTTPCORE_EXC_MAP.items, ImportError, ProxyError, RuntimeError, TypeError, ValueError, base64.b64encode.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for userpass sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for value; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ModuleVariableNode in Module httpcore._async.http_proxy for None; ControlFlowNode for None; ControlFlowNode for proxy_auth; ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(); ControlFlowNode for Subscript; ControlFlowNode for enforce_bytes(). Calls external/library functions: <complex_expr>.encode, <complex_expr>.join, DEFAULT_PORTS.get, HTTPCORE_EXC_MAP.items, ImportError, ProxyError, RuntimeError, TypeError, ValueError, base64.b64encode.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.90] Package: pythemo | Tags: unclassified | Category: crypto_obfuscation\n- [0.90] Package: ugmobilemoney | Tags: unclassified | Category: crypto_obfuscation\n- [0.90] Package: opentelemetry-instrumentation-fastapi | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.53] OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset) [OWASP-SCP-210]: Never Pass Untrusted Data to Dynamic Code Execution Functions — User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval(\n- [0.51] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code handles standard HTTP proxy authentication by base64-encoding proxy credentials (userpass) within the internal httpcore HTTP client module.",
+          "is_false_positive": true,
+          "false_positive_reason": "Static analysis misidentified standard Base64 encoding of proxy authentication headers in the httpcore dependency as malicious crypto_obfuscation. This is legitimate network library behavior."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The flagged pattern corresponds to standard HTTP basic authentication logic for proxy tunnels, showing no structural or behavioral similarity to actual malicious obfuscation payloads."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the 'googletrans' package reveals that the flagged 'crypto_obfuscation' behavior is a false positive resulting from standard HTTP proxy authorization handling in the underlying 'httpcore' dependency. The module encodes proxy credentials using base64 to construct standard HTTP headers, which is completely standard and benign network functionality.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 12,
+      "category": "network",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "fetch(e ... Params)",
+      "location": "vendor/urllib3/contrib/emscripten/emscripten_fetch_worker.js:70",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "defca",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "zwhrce",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "zoom-pyutils",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5181
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-05",
+          "name": "Suspicious External Connections",
+          "description": "The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services like Pastebin/ngrok used as C2 infrastructure.",
+          "similarity": 0.4957
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Malicious Software Download",
+          "description": "An attacker uses deceptive methods to cause a user or an automated process to download and install dangerous code that originates from an attacker controlled source. There are several variations to th",
+          "similarity": 0.4859
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: fetch(e ... Params). Flow boundary: Unknown. Execution is gated by a condition (event.data.close) which must evaluate to false. Execution is gated by a condition (event.data.getMore) which must evaluate to false. Contributing data-flow nodes: event; event.data; event.data.url; event.d ... hParams.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: googletrans\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: fetch(e ... Params). Flow boundary: Unknown. Execution is gated by a condition (event.data.close) which must evaluate to false. Execution is gated by a condition (event.data.getMore) which must evaluate to false. Contributing data-flow nodes: event; event.data; event.data.url; event.d ... hParams.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: defca | Tags: unclassified | Category: network\n- [1.00] Package: zwhrce | Tags: unclassified | Category: network\n- [1.00] Package: zoom-pyutils | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.52] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-05]: Suspicious External Connections — The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services\n- [0.49] CAPEC Attack Patterns [CAPEC-]: Malicious Software Download — An attacker uses deceptive methods to cause a user or an automated process to download and install d\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nLegitimate packages often use subprocess, exec(), socket, or file I/O for \nstandard build scripts, testing, or API features. \nHOWEVER (CRITICAL EXCEPTION): Do NOT automatically mark 1-chain or short \nflows as FALSE POSITIVE if they exhibit malicious patterns such as:\n- Connecting to hardcoded/unverified IPs or external domains.\n- Executing obfuscated code (e.g., base64, hex encoding).\n- Downloading and executing secondary payloads silently during setup/import.\nIf these patterns exist, the intent is likely malicious despite being a short chain.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? \nIMPORTANT: Malicious droppers often use a single, direct chain (e.g., straight \nto exec() or subprocess). If a 1-chain package closely matches a known malware \nsignature from Section 2, weight the decision heavily towards MALICIOUS.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.9,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package processes incoming event data and executes network fetch requests, which is standard functionality for a library interfacing with translation endpoints.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected network activity via fetch is consistent with the legitimate operational scope of a translation library (googletrans). There is no evidence of obfuscation, execution of secondary payloads, or unauthorized exfiltration."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The CodeQL flag represents standard network request patterns required for API connectivity, rather than malicious C2 communication or data exfiltration routines seen in malicious packages."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The flagged network activities in the package 'googletrans' stem from benign HTTP operations required to communicate with translation services. The analysis revealed no malicious patterns such as remote code execution, obfuscation, or stolen credential exfiltration. Consequently, this alert is classified as a false positive, and the package is assessed as BENIGN.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}
