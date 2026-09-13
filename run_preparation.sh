@@ -7,7 +7,7 @@ echo "[*] Ξεκινάει η Προετοιμασία του Dual-Index RAG Pip
 echo "[*] ==================================================="
 
 # Πάμε στον κεντρικό φάκελο
-cd /home/sklavenitis/thesis
+cd "${THESIS_BASE_DIR:-/home/sklavenitis/thesis}"
 
 echo -e "\n[1/4] Βήμα 1 — Συλλογή OSV reports & πηγαίου κώδικα από ΟΛΑ τα sources..."
 # 1a. Διαβάζει OSV reports από malicious-packages + ossf, εφαρμόζει

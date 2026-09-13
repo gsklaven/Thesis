@@ -13,7 +13,8 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from utils import find_target_dir
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 EXISTING_COMBINED = os.path.join(BASE_DIR, "malware_dataset.json")
 OUTPUT_JSON = os.path.join(BASE_DIR, "malware_dataset_all_sources.json")
 

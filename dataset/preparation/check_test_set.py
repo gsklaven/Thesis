@@ -5,7 +5,7 @@
 τα verdicts σε έναν τελικό πίνακα.
 
 ΔΟΜΗ ΠΟΥ ΠΕΡΙΜΕΝΕΙ:
-    /home/sklavenitis/thesis/test_set/
+    /Users/giorgos/Documents/Thesis/test_set/
         paramiko.json        <- sliced_behavior_chain.json, μετονομασμένο
         fabric.json
         boto3.json
@@ -17,13 +17,13 @@
 
 Για να παράξεις ένα τέτοιο αρχείο χειροκίνητα:
     export CODEQL_TARGET_DIR=/path/to/extracted/paramiko/source
-    cd /home/sklavenitis/thesis/inference/codeql_pipeline
+    cd /Users/giorgos/Documents/Thesis/inference/codeql_pipeline
     rm -f results/final_codeql_results_*.csv results/call_graph_*.csv \
           results/backward_slice_*.csv results/control_deps_*.csv \
           results/sliced_behavior_chain.json
     python3 analysis.py
     python3 build_behavior_chain.py
-    cp results/sliced_behavior_chain.json /home/sklavenitis/thesis/test_set/paramiko.json
+    cp results/sliced_behavior_chain.json /Users/giorgos/Documents/Thesis/test_set/paramiko.json
 
 (Το καθάρισμα πριν το analysis.py ΔΕΝ είναι προαιρετικό - βλ. το stale-CSV
 bug που βρήκαμε στο πρώτο benign test. Χωρίς αυτό, ένα πακέτο όπου το
@@ -38,15 +38,16 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, "/home/sklavenitis/thesis/inference")
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
 from query_rag import PROMPT_VERSION  # noqa: E402
 
-DEFAULT_TEST_SET_DIR = "/home/sklavenitis/thesis/test_set"
-EXPECTED_LABELS_FILE = "/home/sklavenitis/thesis/expected_labels.json"
+DEFAULT_TEST_SET_DIR = os.path.join(_THESIS_ROOT, "test_set")
+EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
 
-INFERENCE_DIR = "/home/sklavenitis/thesis/inference"
+INFERENCE_DIR = os.path.join(_THESIS_ROOT, "inference")
 LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator.py")
-LLM_RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
+LLM_RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
 
 
 def main():
@@ -191,7 +192,7 @@ def main():
               f"{inconclusive[:10]}{'...' if len(inconclusive) > 10 else ''}")
         print(f"    Ξανατρέξε το ίδιο script - αυτά θα ξαναπροσπαθήσουν αυτόματα.")
 
-    summary_out = f"/home/sklavenitis/thesis/test_set_summary_{PROMPT_VERSION}.json"
+    summary_out = os.path.join(_THESIS_ROOT, f"test_set_summary_{PROMPT_VERSION}.json")
     llm_stage_scored = scored - len(static_analysis_misses)
     with open(summary_out, "w", encoding="utf-8") as f:
         json.dump({

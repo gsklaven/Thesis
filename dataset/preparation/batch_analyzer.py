@@ -7,13 +7,15 @@ import zipfile
 import signal
 import glob
 
-_DEDUPED_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_deduped.json"
-_MATCHED_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_matched.json"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
+_DEDUPED_JSON = os.path.join(_DATASET_DIR, "malware_dataset_deduped.json")
+_MATCHED_JSON = os.path.join(_DATASET_DIR, "malware_dataset_matched.json")
 DATASET_JSON = _DEDUPED_JSON if os.path.exists(_DEDUPED_JSON) else _MATCHED_JSON
-FINAL_JSON_DIR = "/home/sklavenitis/thesis/dataset/analyzed_chains"
+FINAL_JSON_DIR = os.path.join(_DATASET_DIR, "analyzed_chains")
 
-STAGING_DIR = "/home/sklavenitis/thesis/temp_malware_analysis"
-PIPELINE_DIR = "/home/sklavenitis/thesis/inference/codeql_pipeline"
+STAGING_DIR = os.path.join(_THESIS_ROOT, "temp_malware_analysis")
+PIPELINE_DIR = os.path.join(_THESIS_ROOT, "inference", "codeql_pipeline")
 PIPELINE_RESULTS_DIR = os.path.join(PIPELINE_DIR, "results")
 
 ANALYSIS_SCRIPT = os.path.join(PIPELINE_DIR, "analysis.py")

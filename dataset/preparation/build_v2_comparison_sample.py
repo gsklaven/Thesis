@@ -12,8 +12,8 @@ prompt v1 έναντι v2 - ΧΩΡΙΣ να χρειάζεται να ξανατ
 Το αποτέλεσμα μπαίνει σε ένα ΝΕΟ, μικρό φάκελο - δεν πειράζει καθόλου το
 αρχικό rag_test/. Μετά την αλλαγή σε PROMPT_VERSION="v2" στο query_rag.py,
 τρέξε:
-    python3 check_test_set.py /home/sklavenitis/thesis/dataset/rag_test_v2_sample
-    python3 check_test_set.py /home/sklavenitis/thesis/test_set
+    python3 check_test_set.py /Users/giorgos/Documents/Thesis/dataset/rag_test_v2_sample
+    python3 check_test_set.py /Users/giorgos/Documents/Thesis/test_set
 (και τα δύο γράφουν αυτόματα στο ίδιο results/v2/, χωρίς σύγκρουση)
 """
 
@@ -23,12 +23,13 @@ import random
 import shutil
 import sys
 
-sys.path.insert(0, "/home/sklavenitis/thesis/inference")
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
 from query_rag import PROMPT_VERSION  # noqa: E402
 
-RAG_TEST_DIR = "/home/sklavenitis/thesis/dataset/rag_test"
-RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
-OUTPUT_DIR = "/home/sklavenitis/thesis/dataset/rag_test_v2_sample"
+RAG_TEST_DIR = os.path.join(_THESIS_ROOT, "dataset", "rag_test")
+RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
+OUTPUT_DIR = os.path.join(_THESIS_ROOT, "dataset", "rag_test_v2_sample")
 
 SAMPLE_SIZE_FROM_CORRECT = 30
 SEED = 42
@@ -75,7 +76,7 @@ def main():
     print(f"\nΕπόμενα βήματα:")
     print(f"  1. Άλλαξε PROMPT_VERSION = \"v2\" στο query_rag.py (μαζί με το ίδιο το prompt)")
     print(f"  2. python3 check_test_set.py {OUTPUT_DIR}")
-    print(f"  3. python3 check_test_set.py /home/sklavenitis/thesis/test_set")
+    print(f"  3. python3 check_test_set.py /Users/giorgos/Documents/Thesis/test_set")
     print(f"  4. python3 evaluation_summary.py   (θα διαβάσει αυτόματα το results/v2/)")
 
 

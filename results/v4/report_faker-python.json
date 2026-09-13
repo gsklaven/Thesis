@@ -1,0 +1,231 @@
+{
+  "package_name": "faker-python",
+  "prompt_version": "v4",
+  "analysis_timestamp": "2026-09-12T14:32:23",
+  "final_verdict": "MALICIOUS",
+  "total_chains_analyzed": 2,
+  "malicious_chains": 2,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "network",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "999.0.0/py3-none-any-whl/faker_python/__init__.py:49",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "python-requirements-inspector",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "network",
+          "campaign_preview": "8c1ad154bb194cfd747e1bb7becac375"
+        },
+        {
+          "package": "python-requirements-inspector",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "network",
+          "campaign_preview": "8c1ad154bb194cfd747e1bb7becac375"
+        },
+        {
+          "package": "faker_python",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5525
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5293
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-05",
+          "name": "Suspicious External Connections",
+          "description": "The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services like Pastebin/ngrok used as C2 infrastructure.",
+          "similarity": 0.5037
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(); ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.encode, <complex_expr>.items, getpass.getuser, json.dumps, os.getcwd, os.getenv, os.path.expanduser, platform.machine, platform.python_version, platform.system.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: faker-python\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(); ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.encode, <complex_expr>.items, getpass.getuser, json.dumps, os.getcwd, os.getenv, os.path.expanduser, platform.machine, platform.python_version, platform.system.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: python-requirements-inspector | Tags: data_exfiltration | Category: network\n- [1.00] Package: python-requirements-inspector | Tags: data_exfiltration | Category: network\n- [1.00] Package: faker_python | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.53] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-05]: Suspicious External Connections — The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK (EXECUTION CONTEXT):\nCRITICAL: Legitimate packages often use subprocess, sockets, or file I/O. \nTo distinguish them from malware, analyze the EXECUTION CONTEXT in the CodeQL chain. \n- BENIGN INDICATOR: If the sensitive API is part of an exported class or function \nintended to be explicitly called by the developer (e.g., a network client library, \na system administration tool), this is highly likely a FALSE POSITIVE.\n- MALICIOUS INDICATOR: If the sensitive API executes automatically and secretly \nduring package installation (e.g., inside setup.py, custom setuptools build hooks) \nor as a hidden side-effect upon import (e.g., inside __init__.py) without explicit \ndeveloper invocation, it is highly likely MALICIOUS.\nDo not evaluate based on whether the package name sounds famous; evaluate solely \nbased on how the sensitive action is triggered.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v4",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.98,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package collects environment and host metadata (user, working directory, platform info, env variables) and encodes/exfiltrates it over the network via HTTP/socket calls.",
+          "is_false_positive": false,
+          "false_positive_reason": "The behavior includes gathering sensitive system details (getpass.getuser, os.getenv) and exfiltrating them via network calls. This is inconsistent with the legitimate functionality of mock data generators like 'faker', indicating a typosquatting supply chain attack."
+        },
+        "malware_similarity": {
+          "most_similar_package": "faker_python",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Identical structure and function calls matching known malicious data exfiltration packages, specifically profiling system details and transmitting them to a remote server."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "The script gathers excessive system and user information including platform architecture, Python version, current user, working directory, and environment variables."
+          },
+          {
+            "policy_id": "HEUR-05",
+            "policy_name": "Suspicious External Connections",
+            "violation_reason": "The package serializes collected host metrics into JSON and transmits them over network connections without user explicit instruction."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1082",
+            "technique_name": "System Information Discovery",
+            "relevance": "Uses platform and os functions to gather operating system details, architecture, and environment configuration."
+          },
+          {
+            "technique_id": "T1033",
+            "technique_name": "System Owner/User Discovery",
+            "relevance": "Uses getpass.getuser to retrieve the logged-in username."
+          },
+          {
+            "technique_id": "T1041",
+            "technique_name": "Exfiltration Over C2 Protocol",
+            "relevance": "Encodes collected profile data into JSON payload and transmits it across network streams."
+          }
+        ],
+        "summary": "The package 'faker-python' is a malicious typosquatting package designed to steal host information. Upon execution, it profiles the target system by harvesting the system architecture, OS details, current username, working directory, and environment variables, then serializes and exfiltrates this data to an external endpoint over the network.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "network",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "999.0.0/py3-none-any-whl/dateutil/__init__.py:49",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "python-requirements-inspector",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "network",
+          "campaign_preview": "8c1ad154bb194cfd747e1bb7becac375"
+        },
+        {
+          "package": "python-requirements-inspector",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "network",
+          "campaign_preview": "8c1ad154bb194cfd747e1bb7becac375"
+        },
+        {
+          "package": "faker_python",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5525
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5293
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-05",
+          "name": "Suspicious External Connections",
+          "description": "The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services like Pastebin/ngrok used as C2 infrastructure.",
+          "similarity": 0.5037
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(); ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.encode, <complex_expr>.items, getpass.getuser, json.dumps, os.getcwd, os.getenv, os.path.expanduser, platform.machine, platform.python_version, platform.system.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: faker-python\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for Attribute(); ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.encode, <complex_expr>.items, getpass.getuser, json.dumps, os.getcwd, os.getenv, os.path.expanduser, platform.machine, platform.python_version, platform.system.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: python-requirements-inspector | Tags: data_exfiltration | Category: network\n- [1.00] Package: python-requirements-inspector | Tags: data_exfiltration | Category: network\n- [1.00] Package: faker_python | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.53] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-05]: Suspicious External Connections — The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK (EXECUTION CONTEXT):\nCRITICAL: Legitimate packages often use subprocess, sockets, or file I/O. \nTo distinguish them from malware, analyze the EXECUTION CONTEXT in the CodeQL chain. \n- BENIGN INDICATOR: If the sensitive API is part of an exported class or function \nintended to be explicitly called by the developer (e.g., a network client library, \na system administration tool), this is highly likely a FALSE POSITIVE.\n- MALICIOUS INDICATOR: If the sensitive API executes automatically and secretly \nduring package installation (e.g., inside setup.py, custom setuptools build hooks) \nor as a hidden side-effect upon import (e.g., inside __init__.py) without explicit \ndeveloper invocation, it is highly likely MALICIOUS.\nDo not evaluate based on whether the package name sounds famous; evaluate solely \nbased on how the sensitive action is triggered.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v4",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.98,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package collects system fingerprinting data (username via getpass.getuser, OS details via platform module, current working directory, user home directory, environment variables) and serializes it using json.dumps and string encoding to exfiltrate over network boundaries.",
+          "is_false_positive": false,
+          "false_positive_reason": "The package 'faker-python' is a typosquat of the popular fake data generation library 'Faker'. A mock data generation library has no legitimate reason to collect host user accounts, system architecture, environment variables, and directory locations upon import or setup."
+        },
+        "malware_similarity": {
+          "most_similar_package": "faker_python",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Identical behavior and naming pattern to known malicious package 'faker_python' and 'python-requirements-inspector', performing unauthorized system profiling and data exfiltration."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "HEUR-06",
+            "policy_name": "System Profiling & Fingerprinting",
+            "violation_reason": "The code uses platform, getpass, and os APIs to harvest system metadata, user accounts, and environment variables."
+          },
+          {
+            "policy_id": "HEUR-05",
+            "policy_name": "Suspicious External Connections",
+            "violation_reason": "The gathered telemetry and fingerprinting data are encoded and prepared for exfiltration over network calls."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1082",
+            "technique_name": "System Information Discovery",
+            "relevance": "Uses platform.system, platform.machine, platform.python_version, and os.getcwd to gather information about the host system."
+          },
+          {
+            "technique_id": "T1033",
+            "technique_name": "System Owner/User Discovery",
+            "relevance": "Uses getpass.getuser and os.path.expanduser to discover local system user identity and path structure."
+          },
+          {
+            "technique_id": "T1041",
+            "technique_name": "Exfiltration Over C2 Channel",
+            "relevance": "Encodes collected system metadata into JSON format to transmit out of the environment."
+          }
+        ],
+        "summary": "The package 'faker-python' is a malicious typosquat mimicking the popular legitimate 'Faker' library. Analysis reveals it collects sensitive system profiling data—including username, host system specifications, directory paths, and environment variables—and encodes it for network exfiltration. Immediate removal and credential revocation are recommended.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}

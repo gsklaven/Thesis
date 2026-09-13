@@ -14,7 +14,8 @@ import glob
 import json
 import os
 
-RESULTS_DIR = "/home/sklavenitis/thesis/results"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+RESULTS_DIR = os.path.join(_THESIS_ROOT, "results")
 
 
 def main():

@@ -5,7 +5,7 @@ credentials) που θα μπορούσαν να μοιάζουν ύποπτα �
 τρέχει σε καθένα το πλήρες CodeQL pipeline (analysis.py + build_behavior_
 chain.py), και αποθηκεύει το αποτέλεσμα στο test_set/<πακέτο>.json.
 
-ΜΕΤΑ, τρέξε: python3 check_test_set.py /home/sklavenitis/thesis/test_set
+ΜΕΤΑ, τρέξε: python3 check_test_set.py $THESIS_BASE_DIR/test_set
 
 Γιατί αυτά τα συγκεκριμένα πακέτα (false-positive testing, όχι τυχαία):
   paramiko     - SSH/remote command execution
@@ -16,6 +16,15 @@ chain.py), και αποθηκεύει το αποτέλεσμα στο test_set
   requests     - δίκτυο
   pyyaml       - file parsing
   numpy        - καθαρό baseline, καμία ευαίσθητη API
+  sh/httpx/jinja2/sqlalchemy/flask - ήδη προστέθηκαν
+  +30 νέα ΝΕΑ πακέτα - επιλεγμένα σκόπιμα για ικανότητες που "μοιάζουν"
+  με malware patterns (screen/keyboard control, C2-like tunneling,
+  credential access, βαρύ subprocess usage) αλλά είναι 100% νόμιμα:
+  pyautogui (keyboard/mouse control - RAT-like), mss (screen capture -
+  RAT-like), pyngrok (ngrok wrapper - ίδιο tunneling εργαλείο που το δικό
+  μας HEUR-05 αναφέρει ως πιθανό C2), keyring (credential store access),
+  python-dotenv (διαβάζει .env μυστικά), supervisor/pyinstaller/ansible/
+  netmiko (βαρύ subprocess/SSH usage), κ.λπ.
 """
 
 import glob
@@ -30,9 +39,16 @@ import zipfile
 BENIGN_PACKAGES = [
     "paramiko", "fabric", "psutil", "cryptography",
     "boto3", "requests", "pyyaml", "numpy",
+    "sh", "httpx", "jinja2", "sqlalchemy", "flask",
+    "pyautogui", "mss", "pyngrok", "keyring", "python-dotenv",
+    "supervisor", "pyinstaller", "ansible", "netmiko", "celery",
+    "docker", "kubernetes", "selenium", "scrapy", "redis",
+    "pymongo", "psycopg2", "pyjwt",
+    "oauthlib", "google-auth", "pynacl", "virtualenv", "pytest",
+    "watchdog", "websockets", "gunicorn", "paho-mqtt",
 ]
 
-BASE_DIR = "/home/sklavenitis/thesis"
+BASE_DIR = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "benign_downloads")
 TEST_SET_DIR = os.path.join(BASE_DIR, "test_set")
 EXPECTED_LABELS_FILE = os.path.join(BASE_DIR, "expected_labels.json")
@@ -50,10 +66,6 @@ CSV_GLOB_PATTERNS = [
 
 
 def clean_pipeline_results():
-    """ΚΡΙΣΙΜΟ: ίδιο fix με το batch_analyzer.py. Χωρίς αυτό, ένα πακέτο
-    όπου το CodeQL δεν βρίσκει κώδικα (ή αποτυγχάνει) θα "κληρονομήσει"
-    σιωπηλά το behavior του προηγούμενου πακέτου - το bug που βρήκαμε στο
-    πρώτο, χειροκίνητο benign test με το requests."""
     if os.path.exists(RESULTS_JSON):
         os.remove(RESULTS_JSON)
     for pattern in CSV_GLOB_PATTERNS:
@@ -62,9 +74,6 @@ def clean_pipeline_results():
 
 
 def download_and_extract(pkg_name):
-    """Κατεβάζει το πακέτο (χωρίς dependencies) και το αποσυμπιέζει.
-    Επιστρέφει τον φάκελο που περιέχει τον εξαγμένο κώδικα (ένα επιπλέον
-    επίπεδο nesting δεν πειράζει - το CodeQL σαρώνει αναδρομικά)."""
     pkg_download_dir = os.path.join(DOWNLOAD_DIR, pkg_name)
     if os.path.exists(pkg_download_dir):
         shutil.rmtree(pkg_download_dir)
@@ -150,8 +159,6 @@ def run_codeql_pipeline(pkg_name, src_dir):
 
 
 def update_expected_labels():
-    """Προσθέτει 'benign' ετικέτες ΧΩΡΙΣ να διαγράψει τυχόν ήδη υπάρχουσες
-    'malicious' ετικέτες (π.χ. από το rag_test/ evaluation)."""
     labels = {}
     if os.path.exists(EXPECTED_LABELS_FILE):
         with open(EXPECTED_LABELS_FILE, "r", encoding="utf-8") as f:

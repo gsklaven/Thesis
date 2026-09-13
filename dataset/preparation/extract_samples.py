@@ -6,7 +6,8 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from utils import find_target_dir, CANDIDATE_SOURCES_DIRS
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 DATASET_JSON = os.path.join(BASE_DIR, "malware_dataset_all_sources.json")
 MATCHED_OUTPUT = os.path.join(BASE_DIR, "malware_dataset_matched.json")
 UNMATCHED_OUTPUT = os.path.join(BASE_DIR, "malware_dataset_unmatched.json")

@@ -14,7 +14,8 @@ import os
 import random
 import shutil
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 SOURCE_DIR = os.path.join(BASE_DIR, "final_diverse_subset")
 ATTACK_TAGS_JSON = os.path.join(BASE_DIR, "attack_type_tags.json")
 

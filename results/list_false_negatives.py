@@ -9,12 +9,13 @@ import json
 import os
 
 import sys
-sys.path.insert(0, "/home/sklavenitis/thesis/inference")
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
 from query_rag import PROMPT_VERSION  # noqa: E402
 
-RESULTS_DIR = f"/home/sklavenitis/thesis/results/{PROMPT_VERSION}"
-EXPECTED_LABELS_FILE = "/home/sklavenitis/thesis/expected_labels.json"
-TAGS_FILE = "/home/sklavenitis/thesis/dataset/attack_type_tags.json"
+RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
+EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
+TAGS_FILE = os.path.join(_THESIS_ROOT, "dataset", "attack_type_tags.json")
 
 
 def main():

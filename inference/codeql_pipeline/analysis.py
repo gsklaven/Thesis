@@ -9,8 +9,19 @@ import sys
 import time
 
 # Βασικές ρυθμίσεις του προγράμματος
-CODEQL_BIN = "/home/sklavenitis/codeql/codeql"
-TARGET_DIR = os.environ.get("CODEQL_TARGET_DIR", "/home/sklavenitis/thesis/behavior_chain")
+CODEQL_BIN = (
+    shutil.which("codeql")
+    or next(
+        (p for p in [
+            "/opt/homebrew/bin/codeql",
+            "/usr/local/bin/codeql",
+            os.path.expanduser("~/codeql/codeql"),
+        ] if os.path.isfile(p)),
+        "codeql",  # fallback: hope it's on PATH at runtime
+    )
+)
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+TARGET_DIR = os.environ.get("CODEQL_TARGET_DIR", os.path.join(_THESIS_ROOT, "behavior_chain"))
 LANGUAGE = "python"
 VENDOR_FOLDER = "vendor"
 

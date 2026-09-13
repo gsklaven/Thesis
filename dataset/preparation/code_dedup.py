@@ -27,7 +27,8 @@ from utils import campaign_signature  # noqa: E402
 
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 MATCHED_JSON = os.path.join(BASE_DIR, "malware_dataset_matched.json")
 TAGS_JSON = os.path.join(BASE_DIR, "attack_type_tags.json")
 OUTPUT_JSON = os.path.join(BASE_DIR, "malware_dataset_deduped.json")

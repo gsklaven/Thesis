@@ -16,12 +16,14 @@ import os
 import re
 import shutil
 
-ANALYZED_DIR = "/home/sklavenitis/thesis/dataset/analyzed_chains"
-ATTACK_TAGS_JSON = "/home/sklavenitis/thesis/dataset/attack_type_tags.json"
-REPORT_OUT = "/home/sklavenitis/thesis/dataset/final_dataset_report.json"
-FINAL_SUBSET_DIR = "/home/sklavenitis/thesis/dataset/final_diverse_subset"
-FINAL_LIST_OUT = "/home/sklavenitis/thesis/dataset/final_diverse_subset_packages.json"
-SKIPPED_OVERSIZED_OUT = "/home/sklavenitis/thesis/dataset/skipped_oversized_packages.json"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
+ANALYZED_DIR = os.path.join(_DATASET_DIR, "analyzed_chains")
+ATTACK_TAGS_JSON = os.path.join(_DATASET_DIR, "attack_type_tags.json")
+REPORT_OUT = os.path.join(_DATASET_DIR, "final_dataset_report.json")
+FINAL_SUBSET_DIR = os.path.join(_DATASET_DIR, "final_diverse_subset")
+FINAL_LIST_OUT = os.path.join(_DATASET_DIR, "final_diverse_subset_packages.json")
+SKIPPED_OVERSIZED_OUT = os.path.join(_DATASET_DIR, "skipped_oversized_packages.json")
 
 MAX_PER_CAMPAIGN = 5
 

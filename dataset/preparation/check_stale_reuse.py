@@ -17,7 +17,8 @@ import json
 import os
 import re
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 ANALYZED_DIR = os.path.join(BASE_DIR, "analyzed_chains")
 
 _DEDUPED_JSON = os.path.join(BASE_DIR, "malware_dataset_deduped.json")

@@ -24,10 +24,12 @@ from utils import campaign_signature  # noqa: E402
 
 # Χρησιμοποιούμε malware_dataset_matched.json (μετά την extract_samples.py)
 # ώστε να μην χρησιμοποιούμε χρόνο σε πακέτα χωρίς κώδικα (unmatched).
-DATASET_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_matched.json"
-OUTPUT_JSON = "/home/sklavenitis/thesis/dataset/attack_type_tags.json"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
+DATASET_JSON = os.path.join(_DATASET_DIR, "malware_dataset_matched.json")
+OUTPUT_JSON = os.path.join(_DATASET_DIR, "attack_type_tags.json")
 
-POPULAR_PACKAGES_FILE = "/home/sklavenitis/thesis/dataset/top_pypi_packages.json"
+POPULAR_PACKAGES_FILE = os.path.join(_DATASET_DIR, "top_pypi_packages.json")
 
 POPULAR_PACKAGES_FALLBACK = [
     "requests", "numpy", "pandas", "flask", "django", "urllib3", "boto3",

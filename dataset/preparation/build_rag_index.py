@@ -19,7 +19,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import flatten_chain_to_text  # noqa: E402
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 TRAIN_DIR = os.path.join(BASE_DIR, "rag_train")
 ATTACK_TAGS_JSON = os.path.join(BASE_DIR, "attack_type_tags.json")
 

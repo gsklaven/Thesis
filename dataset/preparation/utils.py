@@ -20,7 +20,7 @@ CANDIDATE_SOURCES_DIRS = [
     "/media/sklavenitis/C09F-7FCB",
     "/media/sklavenitis/123 GB Volume",
     "/media/sklavenitis/Giorgos",
-    "/home/sklavenitis/thesis/dataset/sources",
+    os.path.join(os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis"), "dataset", "sources"),
 ]
 
 def campaign_signature(description):

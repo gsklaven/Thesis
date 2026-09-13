@@ -11,7 +11,8 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from utils import campaign_signature, find_target_dir  # noqa: E402
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 OUTPUT_FILE = os.path.join(BASE_DIR, "malware_dataset.json")
 BACKUP_FILE = os.path.join(BASE_DIR, "malware_dataset_backup.json")
 

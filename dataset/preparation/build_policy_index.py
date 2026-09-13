@@ -3,7 +3,8 @@ import os
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-BASE_DIR = "/home/sklavenitis/thesis/dataset"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 POLICY_JSON = os.path.join(BASE_DIR, "policy_rules.json")
 
 # Πατη εξόδου συγχρονισμένη με το query_rag.py (dataset/indexes/policy_index/)
