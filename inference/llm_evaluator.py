@@ -1,37 +1,99 @@
 """
-LLM SSVC Evaluator using local Ollama (Llama 3.1).
+LLM SSVC Evaluator using Google Gemini (Modern SDK).
 
-ΝΕΟ: Τοπική εκτέλεση για μηδενικό κόστος.
+ΝΕΟ: Παράλληλα API calls (ThreadPoolExecutor) αντί για σειριακά με
+υποχρεωτική καθυστέρηση 1.5s ανά chain. I/O-bound δουλειά (κάθε request
+απλά περιμένει απάντηση δικτύου) - threads αρκούν, δεν χρειάζεται
+multiprocessing. Κάθε thread έχει το ΔΙΚΟ ΤΟΥ Client instance (thread-local),
+ώστε να μη μοιράζονται κατάσταση μεταξύ ταυτόχρονων κλήσεων.
 """
 import sys
 import os
 import re
 import time
 import json
-import requests
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from google import genai
+from google.genai import types
+
+try:
+    from openai import OpenAI as _OpenAIClient
+except ImportError:
+    _OpenAIClient = None
 
 from query_rag import RAGEngine, PROMPT_VERSION
 
 _THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 
+# ΝΕΟ: ο φάκελος αποτελεσμάτων είναι πλέον ΑΝΑ prompt version, αυτόματα.
+# Χωρίς αυτό, ένα re-run μετά από αλλαγή prompt θα έγραφε ΠΑΝΩ από τα
+# προηγούμενα reports (ίδιο filename), χάνοντας τη δυνατότητα before/after
+# σύγκρισης. Τώρα: results/v1/, results/v2/, κ.λπ. - ποτέ δεν συγκρούονται,
+# χωρίς να χρειάζεται να διαχειρίζεσαι φακέλους χειροκίνητα.
 RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
 TAGS_FILE = os.path.join(BASE_DIR, "attack_type_tags.json")
 
 MAX_RETRIES = 3
 INITIAL_RETRY_DELAY = 3
 
-# ΚΡΙΣΙΜΟ: Για τοπική εκτέλεση με Ollama, το MAX_WORKERS πρέπει να είναι 1 ή 2
-# το πολύ, ώστε να μην εξαντληθεί η μνήμη (RAM) του συστήματος από ταυτόχρονα inferences.
-MAX_WORKERS = 3
-OLLAMA_MODEL = "llama3.1"
-OLLAMA_URL = "http://localhost:11434/api/generate"
+# ΝΕΟ: πόσα ταυτόχρονα API calls. Συντηρητική προεπιλογή - ανέβασέ το αν ΔΕΝ
+# βλέπεις σφάλματα rate-limit (429) στο output, κατέβασέ το αν βλέπεις.
+MAX_WORKERS = 4
+
+API_KEY = os.environ.get("GEMINI_API_KEY")
+if not API_KEY:
+    print("[!] Σφάλμα: Δεν βρέθηκε το GEMINI_API_KEY στο περιβάλλον (environment).")
+    print("    Τρέξε πρώτα: export GEMINI_API_KEY='το_κλειδί_σου'")
+    sys.exit(1)
+
+# ΝΕΟ: OpenRouter fallback - ενεργοποιείται ΜΟΝΟ όταν το Gemini επιστρέψει
+# πραγματικό quota-exhaustion σφάλμα (όχι σε κάθε τυχαίο error). Προαιρετικό -
+# αν δεν οριστεί το κλειδί, δουλεύει όπως πριν (μόνο Gemini, χωρίς fallback).
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = "openrouter/free"  # αυτόματος router σε ό,τι δωρεάν μοντέλο δουλεύει τώρα
+
+_thread_local = threading.local()
+
+
+def get_client():
+    """Ένα Client instance ανά thread - όχι κοινόχρηστο, για ασφάλεια."""
+    if not hasattr(_thread_local, "client"):
+        _thread_local.client = genai.Client(api_key=API_KEY)
+    return _thread_local.client
+
+
+def get_openrouter_client():
+    if not hasattr(_thread_local, "openrouter_client"):
+        _thread_local.openrouter_client = _OpenAIClient(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=OPENROUTER_API_KEY,
+        )
+    return _thread_local.openrouter_client
+
+
+def _is_quota_exhausted(error_str):
+    """Ανιχνεύει ΕΙΔΙΚΑ quota exhaustion - όχι κάθε σφάλμα. Το fallback έχει
+    νόημα ΜΟΝΟ εδώ (retry στο ίδιο quota δεν βοηθάει ποτέ), όχι σε παροδικά
+    network/5xx σφάλματα όπου το κανονικό Gemini retry ήδη αρκεί."""
+    markers = ("RESOURCE_EXHAUSTED", "exceeded your current quota", "429")
+    return any(m in error_str for m in markers)
 
 
 def _extract_json(text):
     """
-    Προσπαθεί να εξάγει έγκυρο JSON από κείμενο που ΔΕΝ είναι καθαρό JSON.
+    Προσπαθεί να εξάγει έγκυρο JSON από κείμενο που ΔΕΝ είναι καθαρό JSON -
+    συχνό όταν το OpenRouter's δωρεάν router διαλέγει μοντέλο που δεν τηρεί
+    αυστηρά το response_format={"type": "json_object"} constraint (π.χ. το
+    τυλίγει σε markdown code fence, ή προσθέτει επεξηγηματικό κείμενο πριν/μετά).
+
+    Δοκιμάζει, με σειρά:
+      1. Απευθείας parse (ήδη καθαρό JSON)
+      2. Αφαίρεση ```json ... ``` ή ``` ... ``` markdown code fence
+      3. Bracket-matching: από το πρώτο '{' έως το ΤΕΛΕΥΤΑΙΟ '}' στο κείμενο
+
+    Επιστρέφει το parsed dict, ή None αν αποτύχουν όλα (γνήσιο PARSE_ERROR).
     """
     if not text:
         return None
@@ -60,61 +122,135 @@ def _extract_json(text):
     return None
 
 
-def evaluate_with_ollama(prompt_text, retries=MAX_RETRIES):
-    payload = {
-    "model": OLLAMA_MODEL,
-    "prompt": prompt_text,
-    "stream": False,
-    "format": "json",
-    "options": {
-        "num_ctx": 8192   # δοκίμασε πρώτα αυτό, ανέβασε αν χρειαστεί
-    }
-}
+def evaluate_with_openrouter(prompt_text, retries=MAX_RETRIES):
+    if not OPENROUTER_API_KEY or _OpenAIClient is None:
+        return {
+            "verdict": "ERROR",
+            "error": "OpenRouter fallback μη διαθέσιμο (λείπει OPENROUTER_API_KEY ή 'pip install openai').",
+        }
 
+    client = get_openrouter_client()
     for attempt in range(retries):
         try:
-            response = requests.post(OLLAMA_URL, json=payload, timeout=300)
-            response.raise_for_status()
-            
-            result_data = response.json()
-            content = result_data.get("response", "")
+            response = client.chat.completions.create(
+                model=OPENROUTER_MODEL,
+                messages=[{"role": "user", "content": prompt_text}],
+                temperature=0.1,
+                top_p=0.8,
+                response_format={"type": "json_object"},
+            )
+            choice = response.choices[0] if response.choices else None
+            content = choice.message.content if choice else None
 
             if not content:
-                print(f"  [!] Ollama: κενή απάντηση - retry {attempt+1}/{retries}")
+                finish_reason = getattr(choice, "finish_reason", None) if choice else None
+                print(f"  [!] OpenRouter: κενή απάντηση (finish_reason={finish_reason}) - "
+                      f"retry {attempt+1}/{retries}")
                 if attempt < retries - 1:
-                    time.sleep(INITIAL_RETRY_DELAY)
+                    time.sleep(INITIAL_RETRY_DELAY * (2 ** attempt))
                     continue
                 return {
                     "verdict": "ERROR",
-                    "error": f"Ollama: κενή απάντηση μετά από {retries} προσπάθειες",
-                    "model_used": OLLAMA_MODEL,
+                    "error": f"OpenRouter: κενή απάντηση μετά από {retries} προσπάθειες "
+                             f"(finish_reason={finish_reason})",
+                    "model_used": OPENROUTER_MODEL,
                 }
-                
             try:
                 result = _extract_json(content)
                 if result is None:
                     raise json.JSONDecodeError("δεν βρέθηκε έγκυρο JSON", content, 0)
-                result["model_used"] = OLLAMA_MODEL
+                result["model_used"] = OPENROUTER_MODEL
                 return result
             except json.JSONDecodeError:
                 return {
                     "verdict": "PARSE_ERROR",
                     "raw_response": content[:2000],
-                    "error": "Ollama returned non-JSON response",
-                    "model_used": OLLAMA_MODEL,
+                    "error": "OpenRouter (fallback) returned non-JSON response",
+                    "model_used": OPENROUTER_MODEL,
                 }
-                
         except Exception as e:
             error_str = str(e)
             if attempt < retries - 1:
-                delay = INITIAL_RETRY_DELAY
-                print(f"  [!] Ollama retry {attempt+1}/{retries} (σε {delay}s): {error_str[:100]}")
+                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+                print(f"  [!] OpenRouter retry {attempt+1}/{retries} (σε {delay}s): {error_str[:100]}")
                 time.sleep(delay)
             else:
-                return {"verdict": "ERROR", "error": f"Ollama request failed: {error_str[:200]}"}
+                return {"verdict": "ERROR", "error": f"OpenRouter fallback failed: {error_str[:200]}"}
+
+
+def evaluate_with_gemini(prompt_text, retries=MAX_RETRIES):
+    client = get_client()
+    for attempt in range(retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-3.6-flash',
+                contents=prompt_text,
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    top_p=0.8,
+                    response_mime_type="application/json",
+                ),
+            )
+
+            if response.text is None:
+                return {
+                    "verdict": "ERROR",
+                    "error": "Response blocked by safety filters",
+                    "raw_response": None,
+                }
+
+            try:
+                result = _extract_json(response.text)
+                if result is None:
+                    raise json.JSONDecodeError("δεν βρέθηκε έγκυρο JSON", response.text, 0)
+                result["model_used"] = "gemini-3.6-flash"
+                return result
+            except json.JSONDecodeError:
+                return {
+                    "verdict": "PARSE_ERROR",
+                    "raw_response": response.text[:2000],
+                    "error": "LLM returned non-JSON response",
+                    "model_used": "gemini-3.6-flash",
+                }
+
+        except Exception as e:
+            error_str = str(e)
+
+            # ΝΕΟ: αν είναι πραγματικό quota exhaustion, ΜΗΝ ξαναδοκιμάσεις
+            # Gemini (δεν θα βοηθήσει) - πήγαινε ΑΜΕΣΩΣ σε OpenRouter fallback.
+            if _is_quota_exhausted(error_str):
+                if OPENROUTER_API_KEY:
+                    print(f"  [→] Gemini quota εξαντλήθηκε - fallback σε OpenRouter (δωρεάν)...")
+                    return evaluate_with_openrouter(prompt_text)
+                else:
+                    return {
+                        "verdict": "EVALUATION_FAILED",
+                        "error": f"Gemini quota εξαντλήθηκε, χωρίς OPENROUTER_API_KEY για fallback: {error_str[:200]}",
+                    }
+
+            if attempt < retries - 1:
+                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+                print(f"  [!] Retry {attempt+1}/{retries} (σε {delay}s): {error_str[:100]}")
+                time.sleep(delay)
+            else:
+                return {
+                    "verdict": "ERROR",
+                    "error": f"API call failed after {retries} retries: {error_str[:200]}",
+                }
 
 
 def aggregate_verdicts(chain_results):
+    """
+    I7: Συγκεντρωτικό verdict για ολόκληρο το πακέτο.
+
+    ΚΡΙΣΙΜΟ FIX: ελέγχουμε ΠΡΩΤΑ αν ΟΛΑ τα chains απέτυχαν (ERROR/PARSE_ERROR/
+    UNKNOWN) ΠΡΙΝ τον έλεγχο "όλα BENIGN". Χωρίς αυτή τη σειρά: αν ΟΛΑ τα
+    chains είναι ERROR (π.χ. εξαντλημένο API quota), το φιλτραρισμένο "μόνο
+    μη-αποτυχημένα" σύνολο είναι ΚΕΝΟ - και all() πάνω σε κενό iterable
+    επιστρέφει True στην Python, οδηγώντας σε ΛΑΝΘΑΣΜΕΝΟ "BENIGN" αντί για
+    το σωστό "EVALUATION_FAILED". Αυτό σιωπηλά μεταμφίεζε αποτυχίες API σε
+    "καθαρά" αποτελέσματα - ακριβώς το bug που βρήκαμε σε 17/19 reports.
+    """
     verdicts = []
     for r in chain_results:
         llm_eval = r.get("llm_evaluation", {})
@@ -135,8 +271,8 @@ def aggregate_verdicts(chain_results):
 
 
 def _evaluate_one(idx, chain_result):
-    """Worker function - καλείται παράλληλα (αν MAX_WORKERS > 1)."""
-    llm_result = evaluate_with_ollama(chain_result['prompt_for_llm'])
+    """Worker function - καλείται παράλληλα, μία φορά ανά behavior chain."""
+    llm_result = evaluate_with_gemini(chain_result['prompt_for_llm'])
     return idx, llm_result
 
 
@@ -169,6 +305,14 @@ def main(json_path):
     results = engine.analyze_package(json_path, extra_context=extra_context)
 
     if not results:
+        # ΚΡΙΣΙΜΟ FIX: ΠΡΙΝ, εδώ απλά "return" χωρίς να γράψει τίποτα - το
+        # check_test_set.py μετά έβρισκε "κανένα report" και το μέτραγε
+        # σιωπηλά σαν "ΔΕΝ ΤΡΕΞΕ" -> λάθος αποτέλεσμα (false negative), ενώ
+        # στην πραγματικότητα ΠΟΤΕ δεν δοκιμάστηκε - το CodeQL απλά δεν
+        # βρήκε καμία ευαίσθητη συμπεριφορά σε αυτό το πακέτο. Τώρα γράφουμε
+        # ΠΑΝΤΑ ένα report, με ρητό, ΞΕΧΩΡΙΣΤΟ verdict "NO_CHAINS_FOUND" -
+        # ώστε να είναι σαφές ότι αυτό είναι περιορισμός του στατικού
+        # ανάλυσης σταδίου (CodeQL), όχι του LLM reasoning.
         print("[-] Δεν βρέθηκαν behavior chains για ανάλυση.")
         report = {
             "package_name": package_name,
@@ -187,7 +331,7 @@ def main(json_path):
         print(f"[✓] Report (0 chains) αποθηκεύτηκε: {output_path}")
         return
 
-    print(f"[*] {len(results)} behavior chains βρέθηκαν. Αποστολή στο Ollama "
+    print(f"[*] {len(results)} behavior chains βρέθηκαν. Αποστολή στο Gemini "
           f"({MAX_WORKERS} παράλληλα)...")
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -200,6 +344,10 @@ def main(json_path):
             try:
                 idx, llm_result = future.result()
             except Exception as exc:
+                # ΝΕΟ: αν σκάσει το thread (απρόβλεπτο exception), ΜΗΝ αφήσεις
+                # το chain χωρίς llm_evaluation - χωρίς αυτό, ένα crashed chain
+                # μπορεί σιωπηλά να οδηγήσει σε λάθος "BENIGN" aggregate αν τα
+                # υπόλοιπα chains είναι όλα BENIGN.
                 idx = orig_idx
                 llm_result = {"verdict": "ERROR", "error": f"Thread exception: {exc}"}
                 print(f"  [!] Απρόβλεπτο σφάλμα σε chain #{idx}: {exc}")

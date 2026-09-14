@@ -30,6 +30,25 @@ MALWARE_THRESHOLD = 0.55
 # κρατούν ΡΗΤΑ ποιο prompt τα παρήγαγε. Χωρίς αυτό, ένα before/after
 # πείραμα σε νέο prompt θα μπέρδευε ασυνείδητα v1 και v2 reports μαζί σε
 # ένα evaluation_summary.py run - κάνοντας αδύνατη τη σωστή σύγκριση.
+# ΣΗΜΕΙΩΣΗ: v3 έχει ΤΑΥΤΟΣΗΜΟ prompt κείμενο με το v2 (καμία αλλαγή στο
+# SSVC_COT_PROMPT παρακάτω). Ο λόγος που υπάρχει ξεχωριστό version label:
+# το v2 αξιολογήθηκε μόνο σε ένα stratified δείγμα 117 πακέτων (87 πρώην
+# false negatives + 30 τυχαία ήδη-σωστά), ΟΧΙ στο πλήρες σύνολο 391+8. Το
+# v3 τρέχει το ΙΔΙΟ prompt πάνω στο ΠΛΗΡΕΣ σύνολο, ώστε η σύγκριση με το
+# v1 (που επίσης έτρεξε πλήρες) να είναι απευθείας συγκρίσιμη - ίδιος
+# πληθυσμός και στις δύο πλευρές, χωρίς να χρειάζεται stratified-sample
+# ανάλυση. Για το thesis: "v2" και "v3" αναφέρονται στο ΙΔΙΟ prompt σε
+# διαφορετικό evaluation sample size, όχι σε διαφορετική prompt λογική.
+# ΣΗΜΕΙΩΣΗ v6: πραγματική αλλαγή ΣΤΟ ΙΔΙΟ ΤΟ PROMPT ΚΕΙΜΕΝΟ (STEP 2) - όχι
+# μόνο στο RAG index όπως το v5. Διόρθωση επιβεβαιωμένου precision
+# regression: 9 γνωστά benign πακέτα (fabric, docker, kubernetes, pymongo,
+# httpx, pyinstaller, pyyaml, python-dotenv, pytest) ταξινομήθηκαν λάθος ως
+# MALICIOUS/SUSPICIOUS στο v5. Ρίζα του προβλήματος: το v4 αφαίρεσε την
+# προηγούμενη προειδοποίηση για "διάσημα, καθιερωμένα πακέτα" από το STEP 2,
+# αφήνοντας το LLM ευάλωτο σε γενικά, κοινά "σχήματα κώδικα" (base64+
+# dynamic import, event-driven fetch) που ταιριάζουν με sim>0.9 σε ΟΠΟΙΟΔΗΠΟΤΕ
+# πακέτο έχει παρόμοια επιφανειακή δομή, ανεξάρτητα από πραγματική πρόθεση.
+# Το STEP 2 τώρα επαναφέρει ΚΑΙ ενισχύει αυτή την προστασία, στοχευμένα.
 PROMPT_VERSION = "v5"
 
 
@@ -61,18 +80,36 @@ Is this behavior consistent with the package's stated purpose, or is it
 anomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,
 obfuscated strings, and network calls at import time.
 
-STEP 2 — FALSE POSITIVE CHECK (EXECUTION CONTEXT):
-CRITICAL: Legitimate packages often use subprocess, sockets, or file I/O. 
-To distinguish them from malware, analyze the EXECUTION CONTEXT in the CodeQL chain. 
-- BENIGN INDICATOR: If the sensitive API is part of an exported class or function 
-intended to be explicitly called by the developer (e.g., a network client library, 
-a system administration tool), this is highly likely a FALSE POSITIVE.
-- MALICIOUS INDICATOR: If the sensitive API executes automatically and secretly 
-during package installation (e.g., inside setup.py, custom setuptools build hooks) 
-or as a hidden side-effect upon import (e.g., inside __init__.py) without explicit 
-developer invocation, it is highly likely MALICIOUS.
-Do not evaluate based on whether the package name sounds famous; evaluate solely 
-based on how the sensitive action is triggered.
+STEP 2 — FALSE POSITIVE CHECK:
+CRITICAL: Legitimate packages often use subprocess, exec(), socket, or
+file I/O for standard build scripts, testing, or API features. If the
+detected flow is clearly standard library functionality, well-documented
+benign build tooling, or normal operations UNAMBIGUOUSLY consistent with
+the package's stated purpose (e.g., an SSH library making SSH connections,
+a cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,
+do NOT default to FALSE POSITIVE merely because the API usage pattern is
+common or the package name sounds legitimate — a common API used for a
+purpose UNRELATED to the package's stated function (e.g., unexpected
+outbound network calls, credential access, or process execution with no
+connection to any documented feature) remains a valid signal of malicious
+intent, even if each individual API call looks unremarkable in isolation.
+IMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns
+such as "base64 decode + dynamic __import__/exec" or "extract a value from
+incoming data + make an outbound request" are extremely common in
+legitimate code (plugin/lazy-loading systems, compressed asset or config
+decoding, webhook/event handlers, feature flags) and appear near-identically
+across thousands of unrelated packages. A high similarity score to Section 2
+built ONLY on this kind of generic shape — especially when the matched
+neighbor itself has no specific attack-type tag or analyst description
+confirming what it actually does — is weak evidence on its own. Weigh it
+against the package's real, well-established purpose: for a package that is
+one of the most widely used, foundational tools in its ecosystem (e.g. a
+major testing framework, container/orchestration client, or database
+driver), a single structurally-generic match is NOT sufficient grounds for
+MALICIOUS — look for something SPECIFIC to this package's actual behavior
+(concrete evidence of what the decoded/fetched content is used for, an
+install-time hook, credential harvesting, etc.) before concluding malicious
+intent for such a package.
 
 STEP 3 — MALWARE SIMILARITY ASSESSMENT:
 Compare with the known malware samples in Section 2. How structurally
@@ -203,6 +240,12 @@ class RAGEngine:
                 "attack_type_tags": self.malware_meta[i].get("attack_type_tags", []),
                 "category": self.malware_meta[i].get("category"),
                 "campaign_preview": self.malware_meta[i].get("campaign_signature_preview", ""),
+                # ΝΕΟ: πραγματικό OSV description (όχι μόνο tags) - επικυρωμένο
+                # εύρημα (p<0.000001 στο δικό μας recall-by-tag τεστ, ΚΑΙ το
+                # ablation study του IntelGuard) ότι το πλούσιο, εξηγηματικό
+                # κείμενο γύρω από ένα malware δείγμα βοηθάει σημαντικά το
+                # LLM reasoning, πέρα από μόνο tags/category.
+                "description": self.malware_meta[i].get("description", ""),
             } for sim, i in m_matches]
 
             policy_hits = [{
@@ -219,6 +262,7 @@ class RAGEngine:
                 f"- [{h['similarity']:.2f}] Package: {h['package']} | "
                 f"Tags: {', '.join(h['attack_type_tags'])} | "
                 f"Category: {h['category']}"
+                + (f" | Analyst description: {h['description'][:250]}" if h.get("description") else "")
                 for h in malware_hits
             ]) or "No similar malware found in the database."
 
