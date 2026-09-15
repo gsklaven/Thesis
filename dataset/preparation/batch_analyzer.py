@@ -138,6 +138,18 @@ def _safe_zip_extract(zf, dest_path):
         zf.extract(info, dest_path)
 
 
+def _try_extract_as_tar(fpath, root):
+    # "r:*" αυτόματα ανιχνεύει gzip/bz2/xz/χωρίς συμπίεση - πιο ανθεκτικό
+    # από το πριν "r:gz" (που απαιτούσε ΑΠΟΚΛΕΙΣΤΙΚΑ gzip).
+    with tarfile.open(fpath, "r:*") as tar:
+        _safe_tar_extract(tar, root)
+
+
+def _try_extract_as_zip(fpath, root):
+    with zipfile.ZipFile(fpath, "r") as z:
+        _safe_zip_extract(z, root)
+
+
 def extract_archives(directory):
     for _ in range(MAX_EXTRACT_PASSES):
         found_archive = False
@@ -145,24 +157,36 @@ def extract_archives(directory):
             for fname in files:
                 fpath = os.path.join(root, fname)
                 lower = fname.lower()
-                try:
-                    if lower.endswith((".tar.gz", ".tgz")):
-                        with tarfile.open(fpath, "r:gz") as tar:
-                            _safe_tar_extract(tar, root)
-                        os.remove(fpath)
-                        found_archive = True
-                    elif lower.endswith(".tar"):
-                        with tarfile.open(fpath, "r:") as tar:
-                            _safe_tar_extract(tar, root)
-                        os.remove(fpath)
-                        found_archive = True
-                    elif lower.endswith((".zip", ".whl")):
-                        with zipfile.ZipFile(fpath, "r") as z:
-                            _safe_zip_extract(z, root)
-                        os.remove(fpath)
-                        found_archive = True
-                except Exception as e:
-                    print(f"  [!] Αδυναμία αποσυμπίεσης {fname}: {e}")
+
+                if not lower.endswith((".tar.gz", ".tgz", ".tar", ".zip", ".whl")):
+                    continue
+
+                # ΝΕΟ FIX: μερικά αρχεία στο πηγαίο dataset έχουν ΛΑΘΟΣ
+                # επέκταση (π.χ. πραγματικό .whl αποθηκευμένο ως ".tar.gz" -
+                # δίνει "not a gzip file"). Δοκιμάζουμε ΠΡΩΤΑ τη μέθοδο που
+                # υποδεικνύει η επέκταση, και αν αποτύχει με σφάλμα ΜΟΡΦΗΣ,
+                # δοκιμάζουμε την ΑΛΛΗ πριν τα παρατήσουμε εντελώς.
+                prefers_tar = lower.endswith((".tar.gz", ".tgz", ".tar"))
+                strategies = (
+                    [_try_extract_as_tar, _try_extract_as_zip] if prefers_tar
+                    else [_try_extract_as_zip, _try_extract_as_tar]
+                )
+
+                extracted = False
+                last_error = None
+                for strategy in strategies:
+                    try:
+                        strategy(fpath, root)
+                        extracted = True
+                        break
+                    except Exception as e:
+                        last_error = e
+
+                if extracted:
+                    os.remove(fpath)
+                    found_archive = True
+                else:
+                    print(f"  [!] Αδυναμία αποσυμπίεσης {fname} (δοκιμάστηκαν tar ΚΑΙ zip): {last_error}")
         if not found_archive:
             break
 

@@ -1,0 +1,343 @@
+{
+  "package_name": "nkeys",
+  "prompt_version": "v3",
+  "analysis_timestamp": "2026-09-11T22:05:11",
+  "final_verdict": "BENIGN",
+  "total_chains_analyzed": 4,
+  "malicious_chains": 0,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "process_exec",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for exec()",
+      "location": "0.1.0/tar-gz/setup.py:41",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "pyawscron",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "opencensus-ext-requests",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "bigquery-schema-generator",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5939
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5856
+        },
+        {
+          "source": "CWE Database",
+          "id": "CWE-114",
+          "name": "Process Control",
+          "description": "Executing commands or loading libraries from an untrusted source or in an untrusted environment can cause an application to execute malicious commands (and payloads) on behalf of an attacker.",
+          "similarity": 0.5806
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for exec(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for Attribute() source into a ControlFlowNode for Attribute() sink. Contributing data-flow nodes: ControlFlowNode for Dict; ControlFlowNode for open(); ControlFlowNode for Attribute().",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: nkeys\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for exec(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for Attribute() source into a ControlFlowNode for Attribute() sink. Contributing data-flow nodes: ControlFlowNode for Dict; ControlFlowNode for open(); ControlFlowNode for Attribute().\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: pyawscron | Tags: unclassified | Category: process_exec\n- [1.00] Package: opencensus-ext-requests | Tags: unclassified | Category: process_exec\n- [1.00] Package: bigquery-schema-generator | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.59] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.59] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.58] CWE Database [CWE-114]: Process Control — Executing commands or loading libraries from an untrusted source or in an untrusted environment can \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package uses standard Python dynamic code evaluation (exec) typically found in package build configurations (setup.py) to read version information or configuration dictionaries from local files.",
+          "is_false_positive": true,
+          "false_positive_reason": "The exec() call operates on local file contents (open()) within app-internal boundaries. This pattern is standard practice in Python packaging for dynamically reading version strings or setup configurations and exhibits no remote payload execution or malicious intent."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pyawscron",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The similarity match is based on superficial static analysis heuristics flagging standard use of exec() or dynamic evaluation shared by many benign PyPI packages."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The flagged behavior in the 'nkeys' package is a false positive resulting from standard Python packaging practices, such as executing a local version/metadata file during setup. There are no indications of obfuscation, remote C2 communication, or unauthorized command execution.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.1.0/tar-gz/nkeys/nkeys.py:52",
+      "top_malware_similarity": 0.9318,
+      "malware_matches": [
+        {
+          "package": "yocolor",
+          "similarity": 0.9318,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "3web",
+          "similarity": 0.9248,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pygamke",
+          "similarity": 0.9248,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.6257
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.004",
+          "name": "Compile After Delivery",
+          "description": "Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to victims as uncompiled code. Text-based source code files may subvert analysis and scrutiny from protec",
+          "similarity": 0.5584
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5349
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for BinaryExpr sink. Contributing data-flow nodes: ControlFlowNode for seed; ControlFlowNode for src; ControlFlowNode for bytearray(); ControlFlowNode for StringLiteral; ControlFlowNode for BinaryExpr; ControlFlowNode for BinaryExpr; ControlFlowNode for Attribute. Calls external/library functions: ErrInvalidPrefixByte, ErrInvalidSeed, ErrInvalidSignature, base64.b32decode, base64.b32encode, bytearray, crc.to_bytes, ed25519.SigningKey, hasattr, kp.to_bytes.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: nkeys\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for BinaryExpr sink. Contributing data-flow nodes: ControlFlowNode for seed; ControlFlowNode for src; ControlFlowNode for bytearray(); ControlFlowNode for StringLiteral; ControlFlowNode for BinaryExpr; ControlFlowNode for BinaryExpr; ControlFlowNode for Attribute. Calls external/library functions: ErrInvalidPrefixByte, ErrInvalidSeed, ErrInvalidSignature, base64.b32decode, base64.b32encode, bytearray, crc.to_bytes, ed25519.SigningKey, hasattr, kp.to_bytes.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.93] Package: yocolor | Tags: unclassified | Category: crypto_obfuscation\n- [0.92] Package: 3web | Tags: unclassified | Category: crypto_obfuscation\n- [0.92] Package: pygamke | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.63] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.56] MITRE ATT&CK [T1027.004]: Compile After Delivery — Adversaries may attempt to make payloads difficult to discover and analyze by delivering files to vi\n- [0.53] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.98,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package implements NATS public key system (nkeys) functionalities, performing Ed25519 cryptographic key generation, base32 encoding/decoding, and CRC checksum calculations.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis flagged standard cryptographic byte manipulations (base32 encoding, CRC calculation, and Ed25519 signing key handling) as crypto_obfuscation. These routines are entirely expected and fundamental to the legitimate function of the standard 'nkeys' library."
+        },
+        "malware_similarity": {
+          "most_similar_package": "yocolor",
+          "similarity_score": 0.93,
+          "similarity_explanation": "The high similarity score is a superficial match resulting from generic byte array manipulations and encoding/decoding routines common in obfuscation detection heuristics."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The 'nkeys' package is determined to be benign. The static analysis findings of crypto_obfuscation represent a clear false positive triggered by legitimate Ed25519 cryptographic operations, CRC checksum calculations, and base32 byte encoding routine typical of the NATS nkeys key handling specification.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 2,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.1.0/tar-gz/nkeys/nkeys.py:172",
+      "top_malware_similarity": 0.9224,
+      "malware_matches": [
+        {
+          "package": "pkce",
+          "similarity": 0.9224,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pkce",
+          "similarity": 0.9224,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "bitstruct",
+          "similarity": 0.9222,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5845
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5369
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5303
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for bytearray(). Calls external/library functions: ErrInvalidPrefixByte, ErrInvalidSeed, ErrInvalidSignature, base64.b32decode, base64.b32encode, bytearray, crc.to_bytes, ed25519.SigningKey, hasattr, kp.to_bytes.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: nkeys\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for bytearray(). Calls external/library functions: ErrInvalidPrefixByte, ErrInvalidSeed, ErrInvalidSignature, base64.b32decode, base64.b32encode, bytearray, crc.to_bytes, ed25519.SigningKey, hasattr, kp.to_bytes.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.92] Package: pkce | Tags: unclassified | Category: crypto_obfuscation\n- [0.92] Package: pkce | Tags: unclassified | Category: crypto_obfuscation\n- [0.92] Package: bitstruct | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.58] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.54] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.53] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "Provides key generation, signing, and Base32 byte encoding/decoding with CRC checksum validation for the NATS Ed25519 public-key signature system (nkeys).",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected calls to base64.b32decode, base64.b32encode, bytearray, and ed25519.SigningKey are core cryptographic primitives for the legitimate NATS nkeys implementation. Static analysis heuristics incorrectly categorized standard base32 byte-manipulation as crypto_obfuscation."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pkce",
+          "similarity_score": 0.92,
+          "similarity_explanation": "The similarity match arises from generic cryptographic and binary structure handling functions (e.g., base32/64 encoding, bit/byte operations) common to both benign crypto libraries like pkce/bitstruct and obfuscated code."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The evaluated package 'nkeys' is a legitimate library providing Ed25519 key management and Base32 key encoding for the NATS messaging system. The automated alert regarding crypto_obfuscation is a false positive triggered by standard Base32 decoding and cryptographic operations. There is no evidence of malicious intent.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 3,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.1.0/tar-gz/nkeys/nkeys.py:190",
+      "top_malware_similarity": 0.9224,
+      "malware_matches": [
+        {
+          "package": "pkce",
+          "similarity": 0.9224,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pkce",
+          "similarity": 0.9224,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "bitstruct",
+          "similarity": 0.9222,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5845
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5369
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5303
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for bytearray(). Calls external/library functions: ErrInvalidPrefixByte, ErrInvalidSeed, ErrInvalidSignature, base64.b32decode, base64.b32encode, bytearray, crc.to_bytes, ed25519.SigningKey, hasattr, kp.to_bytes.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: nkeys\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for bytearray(). Calls external/library functions: ErrInvalidPrefixByte, ErrInvalidSeed, ErrInvalidSignature, base64.b32decode, base64.b32encode, bytearray, crc.to_bytes, ed25519.SigningKey, hasattr, kp.to_bytes.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.92] Package: pkce | Tags: unclassified | Category: crypto_obfuscation\n- [0.92] Package: pkce | Tags: unclassified | Category: crypto_obfuscation\n- [0.92] Package: bitstruct | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.58] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.54] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.53] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.98,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code performs Ed25519 key generation, CRC checksum validation, and base32 encoding/decoding for NATS ecosystem NKeys handling.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected pattern of byte array manipulation, base32 encoding/decoding, and Ed25519 key signing is entirely consistent with the standard implementation of the NATS NKeys authentication key library. Static analysis misidentified standard binary/encoding operations as obfuscation."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pkce",
+          "similarity_score": 0.92,
+          "similarity_explanation": "The similarity is driven by overlapping usage of base64/base32 encoding and string/byte transformations present in benign security and cryptographic libraries."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The 'nkeys' package is a legitimate cryptographic utility used in the NATS ecosystem for managing public/private keys using Ed25519 and base32 encoding. Static analysis heuristics flagged its byte manipulation and encoding routines as potential obfuscation, but these are standard, expected cryptographic behaviors with no malicious payload or side effects.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}

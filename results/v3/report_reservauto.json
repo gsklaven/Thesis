@@ -1,0 +1,1183 @@
+{
+  "package_name": "reservauto",
+  "prompt_version": "v3",
+  "analysis_timestamp": "2026-09-11T22:46:06",
+  "final_verdict": "BENIGN",
+  "total_chains_analyzed": 14,
+  "malicious_chains": 0,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "process_exec",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for __import__()",
+      "location": "vendor/requests/packages.py:9",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "0x000testqwe",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "googlemaps",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "fdkit",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5661
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5597
+        },
+        {
+          "source": "OWASP Top 10 CI/CD Security Risks",
+          "id": "CICD-SEC-04",
+          "name": "Poisoned Pipeline Execution (PPE)",
+          "description": "Attackers modify the CI configuration file or build scripts to execute malicious commands during the build process.",
+          "similarity": 0.5516
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for __import__(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for package sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for package. Calls external/library functions: __import__, list, locals, mod.replace, mod.startswith.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for __import__(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for package sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for package. Calls external/library functions: __import__, list, locals, mod.replace, mod.startswith.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: 0x000testqwe | Tags: unclassified | Category: process_exec\n- [1.00] Package: googlemaps | Tags: unclassified | Category: process_exec\n- [1.00] Package: fdkit | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.57] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.56] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.55] OWASP Top 10 CI/CD Security Risks [CICD-SEC-04]: Poisoned Pipeline Execution (PPE) — Attackers modify the CI configuration file or build scripts to execute malicious commands during the\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package uses standard Python string utilities (startswith, replace) on string literals to dynamically load internal submodules via __import__.",
+          "is_false_positive": true,
+          "false_positive_reason": "The data flow is vendor-internal, originating from hardcoded string literals to dynamically load package modules. This is a standard Python pattern for plugin/submodule initialization and lacks malicious behaviors such as remote payload fetching or command execution."
+        },
+        "malware_similarity": {
+          "most_similar_package": "0x000testqwe",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Matches generic process execution/dynamic import patterns in static analysis rules, but the structural context in reservauto indicates standard internal module dynamic loading rather than malicious execution."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the 'reservauto' package reveals standard dynamic module import patterns using built-in functions like __import__() operating on vendor-internal string literals. The CodeQL static analysis trigger is a false positive caused by generic dynamic import detection rules. No malicious network activity, persistence, or code execution hooks were identified, making this package benign.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "process_exec",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/compat.py:43",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "brokescolors",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "douctils",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "process_exec",
+          "campaign_preview": ""
+        },
+        {
+          "package": "kekovayalibka",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "8a1f7d488a160353bab5a534881b5366"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5582
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5276
+        },
+        {
+          "source": "CWE Database",
+          "id": "CWE-114",
+          "name": "Process Control",
+          "description": "Executing commands or loading libraries from an untrusted source or in an untrusted environment can cause an application to execute malicious commands (and payloads) on behalf of an attacker.",
+          "similarity": 0.5249
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for lib sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for lib. Calls external/library functions: importlib.import_module, int, urllib3_version.split.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for lib sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for lib. Calls external/library functions: importlib.import_module, int, urllib3_version.split.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: brokescolors | Tags: unclassified | Category: process_exec\n- [1.00] Package: douctils | Tags: typosquatting | Category: process_exec\n- [1.00] Package: kekovayalibka | Tags: data_exfiltration, spyware_infostealer | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n- [0.53] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.52] CWE Database [CWE-114]: Process Control — Executing commands or loading libraries from an untrusted source or in an untrusted environment can \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code performs standard dynamic module loading via importlib.import_module and checks urllib3 version strings, typical for API client libraries managing HTTP dependencies.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis trigger for process execution is a false positive caused by dynamic module imports and version parsing in legitimate library code."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "While similarity algorithms matched generic process execution flags across unclassified packages, the specific code structure in reservauto consists of standard HTTP client version compatibility logic."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the 'reservauto' package reveals standard library dependency checks and dynamic imports using standard Python tools (importlib, urllib3 version splitting). The process_exec signal from static analysis is a false positive triggered by dynamic execution patterns common in legitimate API wrappers. No malicious payloads, exfiltration, or policy violations were detected.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 2,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/__init__.py:102",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "douctils",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "dbnodeindicator",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "supply_chain_downloader"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "8746168973c73482d970d5cf20d24a60"
+        },
+        {
+          "package": "kirux189894",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "2d3a3167fabfe64b6f3022124c2c45cc"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.6043
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.014",
+          "name": "Polymorphic Code",
+          "description": "Adversaries may utilize polymorphic code (also known as metamorphic or mutating code) to evade detection. Polymorphic code is a type of software capable of changing its runtime footprint during code e",
+          "similarity": 0.5719
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5669
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.addHandler, NullHandler, chardet_version.split, charset_normalizer_version.split, cryptography_version.split, getattr, int, len, list, logging.getLogger.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.addHandler, NullHandler, chardet_version.split, charset_normalizer_version.split, cryptography_version.split, getattr, int, len, list, logging.getLogger.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: douctils | Tags: typosquatting | Category: crypto_obfuscation\n- [1.00] Package: dbnodeindicator | Tags: supply_chain_downloader | Category: crypto_obfuscation\n- [1.00] Package: kirux189894 | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.60] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.57] MITRE ATT&CK [T1027.014]: Polymorphic Code — Adversaries may utilize polymorphic code (also known as metamorphic or mutating code) to evade detec\n- [0.57] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "Standard library logging initialization and dependency version inspection (e.g., checking versions for chardet, charset_normalizer, and cryptography).",
+          "is_false_positive": true,
+          "false_positive_reason": "The CodeQL alert for crypto_obfuscation is triggered by standard Python version-string parsing and dynamic attribute access (getattr) commonly used in HTTP client libraries and API wrappers. There is no execution of obfuscated payloads, credential theft, or suspicious network access."
+        },
+        "malware_similarity": {
+          "most_similar_package": null,
+          "similarity_score": 0.0,
+          "similarity_explanation": "The similarity matches are superficial and result from generic rule matches on dynamic function calls and library imports rather than shared malicious control flows or payload delivery mechanisms."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The reservauto package was evaluated and determined to be benign. Static analysis flagged standard Python package code—specifically dependency version checks and logging setup using NullHandler—as potential obfuscation. Manual analysis confirms these patterns are entirely legitimate standard-library operations typical of API integration libraries.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 3,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for get()",
+      "location": "0.1.0/py3-none-any-whl/client.py:34",
+      "top_malware_similarity": 0.9612,
+      "malware_matches": [
+        {
+          "package": "cfkv",
+          "similarity": 0.9612,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "randrange",
+          "similarity": 0.9591,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytest-tt-ddriven",
+          "similarity": 0.9572,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "network",
+          "campaign_preview": "49bd01c0b2e94189c94278b85a4a8450"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel. The data may also be sent to an alternate network location from the main ",
+          "similarity": 0.5105
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local system sources, such as file systems, configuration files, local databases, virtual machine files, or process memory, to find files of interest and sensitive data prior to",
+          "similarity": 0.4908
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.4881
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for i; ControlFlowNode for range(); ControlFlowNode for Dict; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, range, start_datetime.strftime.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for i; ControlFlowNode for range(); ControlFlowNode for Dict; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, range, start_datetime.strftime.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.96] Package: cfkv | Tags: typosquatting | Category: network\n- [0.96] Package: randrange | Tags: unclassified | Category: network\n- [0.96] Package: pytest-tt-ddriven | Tags: data_exfiltration | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.51] MITRE ATT&CK [T1048]: Exfiltration Over Alternative Protocol — Adversaries may steal data by exfiltrating it over a different protocol than that of the existing co\n- [0.49] MITRE ATT&CK [T1005]: Data from Local System — Adversaries may search local system sources, such as file systems, configuration files, local databa\n- [0.49] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package functions as an API client wrapper for the Reservauto car-sharing platform, making standard HTTP GET requests to retrieve city, branch, and vehicle availability data.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected outbound network calls and data flows represent normal HTTP GET requests required for querying the legitimate Reservauto API, completely aligned with the package's intended functionality."
+        },
+        "malware_similarity": {
+          "most_similar_package": "randrange",
+          "similarity_score": 0.96,
+          "similarity_explanation": "The similarity is superficial, driven by generic network operations (HTTP GET requests) common to both web API clients and unclassified network malware samples."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The package 'reservauto' is a benign API client for interacting with the Reservauto service. Static analysis identified standard library calls for handling JSON payloads, formatting dates, and making HTTP GET requests to fetch location and availability information. No indicators of compromise, obfuscation, or suspicious side effects were found.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 4,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for get()",
+      "location": "0.1.0/py3-none-any-whl/client.py:57",
+      "top_malware_similarity": 0.9467,
+      "malware_matches": [
+        {
+          "package": "cfkv",
+          "similarity": 0.9467,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9434,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "genesisbot",
+          "similarity": 0.9397,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel. The data may also be sent to an alternate network location from the main ",
+          "similarity": 0.5009
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local system sources, such as file systems, configuration files, local databases, virtual machine files, or process memory, to find files of interest and sensitive data prior to",
+          "similarity": 0.4876
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.48
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for branch_id; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, range, start_datetime.strftime.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for branch_id; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, range, start_datetime.strftime.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.95] Package: cfkv | Tags: typosquatting | Category: network\n- [0.94] Package: pytopypi | Tags: unclassified | Category: network\n- [0.94] Package: genesisbot | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.50] MITRE ATT&CK [T1048]: Exfiltration Over Alternative Protocol — Adversaries may steal data by exfiltrating it over a different protocol than that of the existing co\n- [0.49] MITRE ATT&CK [T1005]: Data from Local System — Adversaries may search local system sources, such as file systems, configuration files, local databa\n- [0.48] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package implements an API wrapper or client for the Reservauto / Communauto car-sharing service, using HTTP GET requests to fetch city, branch, and vehicle availability data while formatting timestamps and logging activity.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected HTTP network interactions and string formatting are standard library and API client behaviors consistent with querying a third-party web service for car reservations. There is no evidence of stealthy execution, credential theft, or unauthorized exfiltration."
+        },
+        "malware_similarity": {
+          "most_similar_package": "cfkv",
+          "similarity_score": 0.95,
+          "similarity_explanation": "High structural similarity score is driven by basic network communication primitives (HTTP GET requests via standard APIs), but the underlying intent is benign application logic rather than malicious C2 or exfiltration."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The reservauto package was evaluated and determined to be benign. The static analysis findings flag HTTP GET requests and string/URL building, which are expected, standard operations for a package interacting with the Reservauto/Communauto car-sharing API endpoints. No malicious indicators or policy violations were present.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 5,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for get()",
+      "location": "0.1.0/py3-none-any-whl/client.py:90",
+      "top_malware_similarity": 0.9568,
+      "malware_matches": [
+        {
+          "package": "cfkv",
+          "similarity": 0.9568,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9524,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9508,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel. The data may also be sent to an alternate network location from the main ",
+          "similarity": 0.4874
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-05",
+          "name": "Suspicious External Connections",
+          "description": "The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services like Pastebin/ngrok used as C2 infrastructure.",
+          "similarity": 0.4706
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.4702
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for city; ControlFlowNode for min_latitude; ControlFlowNode for max_latitude; ControlFlowNode for min_longitude; ControlFlowNode for max_longitute; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, range, start_datetime.strftime.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for city; ControlFlowNode for min_latitude; ControlFlowNode for max_latitude; ControlFlowNode for min_longitude; ControlFlowNode for max_longitute; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, range, start_datetime.strftime.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.96] Package: cfkv | Tags: typosquatting | Category: network\n- [0.95] Package: pytopypi | Tags: unclassified | Category: network\n- [0.95] Package: pytopypi | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.49] MITRE ATT&CK [T1048]: Exfiltration Over Alternative Protocol — Adversaries may steal data by exfiltrating it over a different protocol than that of the existing co\n- [0.47] Threat Hunting Heuristics (custom) [HEUR-05]: Suspicious External Connections — The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services\n- [0.47] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package functions as an API client wrapper for the Reservauto car-sharing platform, making standard HTTP requests with parameters such as city, latitude, and longitude to fetch vehicle availability.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected HTTP GET network flows and data formatting (datetime, JSON parsing) are standard library functionalities directly related to the package's expected purpose as a car-sharing API client."
+        },
+        "malware_similarity": {
+          "most_similar_package": "cfkv",
+          "similarity_score": 0.96,
+          "similarity_explanation": "The similarity is superficial, caused by standard network request patterns present in both benign API wrappers and generic network-category malware samples."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The 'reservauto' package is evaluated as benign. The detected network activity and data flows involve querying geographic coordinates and city names for a car-sharing service, fully consistent with the package's intended feature set. No malicious code execution, credential theft, or suspicious side effects were observed.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 6,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for get()",
+      "location": "0.1.0/tar-gz/reservauto/client.py:34",
+      "top_malware_similarity": 0.9612,
+      "malware_matches": [
+        {
+          "package": "cfkv",
+          "similarity": 0.9612,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "randrange",
+          "similarity": 0.9591,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytest-tt-ddriven",
+          "similarity": 0.9572,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "network",
+          "campaign_preview": "49bd01c0b2e94189c94278b85a4a8450"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel. The data may also be sent to an alternate network location from the main ",
+          "similarity": 0.5105
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local system sources, such as file systems, configuration files, local databases, virtual machine files, or process memory, to find files of interest and sensitive data prior to",
+          "similarity": 0.4908
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.4881
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for i; ControlFlowNode for range(); ControlFlowNode for Dict; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, logger.setLevel, logging.basicConfig.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for i; ControlFlowNode for range(); ControlFlowNode for Dict; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, logger.setLevel, logging.basicConfig.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.96] Package: cfkv | Tags: typosquatting | Category: network\n- [0.96] Package: randrange | Tags: unclassified | Category: network\n- [0.96] Package: pytest-tt-ddriven | Tags: data_exfiltration | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.51] MITRE ATT&CK [T1048]: Exfiltration Over Alternative Protocol — Adversaries may steal data by exfiltrating it over a different protocol than that of the existing co\n- [0.49] MITRE ATT&CK [T1005]: Data from Local System — Adversaries may search local system sources, such as file systems, configuration files, local databa\n- [0.49] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package acts as a library or client wrapper for the Reservauto car-sharing service, performing benign HTTP requests to fetch city, branch, and reservation information.",
+          "is_false_positive": true,
+          "false_positive_reason": "The network calls and string manipulations identified by static analysis are normal operations required for communicating with the legitimate Reservauto API service, with no malicious intent or unexpected exfiltration detected."
+        },
+        "malware_similarity": {
+          "most_similar_package": "cfkv",
+          "similarity_score": 0.96,
+          "similarity_explanation": "The high similarity score is an artifact of basic HTTP request patterns and logging functionality common to both generic network scripts and API clients, rather than shared malicious control flow."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The reservauto package was evaluated as benign. While static analysis flagged outbound network GET requests, these actions are entirely consistent with the package's purpose as an API wrapper for querying Reservauto car-sharing service endpoints (such as city and branch data). No malicious indicators, obfuscation, or unauthorized exfiltration were found.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 7,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for get()",
+      "location": "0.1.0/tar-gz/reservauto/client.py:57",
+      "top_malware_similarity": 0.9483,
+      "malware_matches": [
+        {
+          "package": "cfkv",
+          "similarity": 0.9483,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9447,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9397,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel. The data may also be sent to an alternate network location from the main ",
+          "similarity": 0.5033
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local system sources, such as file systems, configuration files, local databases, virtual machine files, or process memory, to find files of interest and sensitive data prior to",
+          "similarity": 0.4927
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.4815
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for branch_id; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, logger.setLevel, logging.basicConfig.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for branch_id; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring; ControlFlowNode for IntegerLiteral. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, logger.setLevel, logging.basicConfig.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.95] Package: cfkv | Tags: typosquatting | Category: network\n- [0.94] Package: pytopypi | Tags: unclassified | Category: network\n- [0.94] Package: pytopypi | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.50] MITRE ATT&CK [T1048]: Exfiltration Over Alternative Protocol — Adversaries may steal data by exfiltrating it over a different protocol than that of the existing co\n- [0.49] MITRE ATT&CK [T1005]: Data from Local System — Adversaries may search local system sources, such as file systems, configuration files, local databa\n- [0.48] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package implements an API client/wrapper for the Reservauto car-sharing service, using HTTP GET requests to fetch city and branch availability data and formatting datetimes and JSON responses.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected network GET requests and data flows are standard internal API interactions consistent with the legitimate purpose of querying the Reservauto service."
+        },
+        "malware_similarity": {
+          "most_similar_package": "cfkv",
+          "similarity_score": 0.95,
+          "similarity_explanation": "High similarity score is triggered superficially by generic HTTP GET calls and network traffic indicators, but the control flow and payload contain standard client API logic without malicious exfiltration or execution."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the 'reservauto' package reveals legitimate Python code designed to interact with the Reservauto service API. The network activity detected by static analysis corresponds to routine HTTP GET requests for querying branch and city reservation data, accompanied by standard logging and datetime handling. No malicious persistence, obfuscation, or credential exfiltration behaviors were identified, making this a false positive.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 8,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for get()",
+      "location": "0.1.0/tar-gz/reservauto/client.py:90",
+      "top_malware_similarity": 0.9567,
+      "malware_matches": [
+        {
+          "package": "cfkv",
+          "similarity": 0.9567,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9535,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        },
+        {
+          "package": "pytopypi",
+          "similarity": 0.9519,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1048",
+          "name": "Exfiltration Over Alternative Protocol",
+          "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel. The data may also be sent to an alternate network location from the main ",
+          "similarity": 0.4828
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-05",
+          "name": "Suspicious External Connections",
+          "description": "The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services like Pastebin/ngrok used as C2 infrastructure.",
+          "similarity": 0.4748
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.4642
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for city; ControlFlowNode for min_latitude; ControlFlowNode for max_latitude; ControlFlowNode for min_longitude; ControlFlowNode for max_longitute; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, logger.setLevel, logging.basicConfig.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for get(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for url sink. Contributing data-flow nodes: ControlFlowNode for city; ControlFlowNode for min_latitude; ControlFlowNode for max_latitude; ControlFlowNode for min_longitude; ControlFlowNode for max_longitute; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute; ControlFlowNode for Fstring. Calls external/library functions: <complex_expr>.get, branch.get, branches.append, city.get, end_datetime.strftime, json.dumps, logger.debug, logger.error, logger.setLevel, logging.basicConfig.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.96] Package: cfkv | Tags: typosquatting | Category: network\n- [0.95] Package: pytopypi | Tags: unclassified | Category: network\n- [0.95] Package: pytopypi | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.48] MITRE ATT&CK [T1048]: Exfiltration Over Alternative Protocol — Adversaries may steal data by exfiltrating it over a different protocol than that of the existing co\n- [0.47] Threat Hunting Heuristics (custom) [HEUR-05]: Suspicious External Connections — The code makes HTTP or socket connections to raw IP addresses, newly registered domains, or services\n- [0.46] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package queries an external API using HTTP GET requests with geographic bounding box parameters (latitude/longitude coordinates, city) to retrieve car-sharing vehicle and branch availability data.",
+          "is_false_positive": true,
+          "false_positive_reason": "The network requests and data processing (bounding box coordinates, branch formatting, json logging) are standard and expected operations for a client library interacting with the Reservauto/Communauto car-sharing service API."
+        },
+        "malware_similarity": {
+          "most_similar_package": "cfkv",
+          "similarity_score": 0.96,
+          "similarity_explanation": "The high similarity score is a superficial match caused by generic HTTP GET calls. The actual code structure performs benign API queries rather than malicious exfiltration or dynamic command execution."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The 'reservauto' package demonstrates entirely benign functionality consistent with an API wrapper for a car-sharing reservation service. Flagged network interactions involve querying geographic coordinates and branch details via standard HTTP GET requests, with no evidence of obfuscation, sensitive system credential harvesting, or malicious execution.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 9,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for b64encode()",
+      "location": "vendor/requests/auth.py:72",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "xFileSyncerx",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": ""
+        },
+        {
+          "package": "libtpu-nightly",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "c3425fca48e5d6fcfd24612a0b24913d"
+        },
+        {
+          "package": "artifact-lab-3-package-ccd28738",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "backdoor",
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "7308ec779b349f7a907a9b87a33946f4"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5771
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5391
+        },
+        {
+          "source": "OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset)",
+          "id": "OWASP-SCP-210",
+          "name": "Never Pass Untrusted Data to Dynamic Code Execution Functions",
+          "description": "User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval() or exec(), a primary technique used by obfuscated malicious payloads to hide their true behavior u",
+          "similarity": 0.5367
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Contributing data-flow nodes: ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for str(); ControlFlowNode for str(); ControlFlowNode for Attribute(); ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Tuple; ControlFlowNode for username. Calls external/library functions: <complex_expr>, <complex_expr>.__init__, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.hexdigest, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.scheme.lower, <complex_expr>.split, <complex_expr>.startswith.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Contributing data-flow nodes: ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for str(); ControlFlowNode for str(); ControlFlowNode for Attribute(); ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Tuple; ControlFlowNode for username. Calls external/library functions: <complex_expr>, <complex_expr>.__init__, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.hexdigest, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.scheme.lower, <complex_expr>.split, <complex_expr>.startswith.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: xFileSyncerx | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: libtpu-nightly | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: artifact-lab-3-package-ccd28738 | Tags: backdoor, data_exfiltration, spyware_infostealer | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.58] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.54] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n- [0.54] OWASP Secure Coding Practices Quick Reference Guide v2.0 (curated subset) [OWASP-SCP-210]: Never Pass Untrusted Data to Dynamic Code Execution Functions — User- or dependency-supplied data must never be passed to dynamic execution constructs such as eval(\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code handles user authentication workflows, including processing credentials (username and password) using encoding functions (b64encode), hashing (hexdigest), and standard string manipulation to format authentication headers or request schemes for the Reservauto service.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected pattern of passing username and password credentials into b64encode and hexdigest functions is standard behavior for an API client performing HTTP Basic Authentication or token generation. Static analysis misidentified the encoding/hashing of credentials as crypto_obfuscation."
+        },
+        "malware_similarity": {
+          "most_similar_package": "artifact-lab-3-package-ccd28738",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The high similarity score is based strictly on generic static analysis rules detecting b64encode usage, which is common in both legitimate API clients handling authentication and obfuscated malware."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The package 'reservauto' was flagged for potential crypto_obfuscation due to calls to b64encode and string manipulation involving username and password attributes. Analysis confirms this is a false positive: the code performs legitimate credential encoding and hashing required for authenticating against the Reservauto API service. No malicious behavior or data exfiltration was identified.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 10,
+      "category": "file_ops",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:319",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "atlasctf-21-prod-21",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "2bb775611268f5bc5ca5daee3fdf4a39"
+        },
+        {
+          "package": "csvmonitor",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "brokescolors3",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5238
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1564.013",
+          "name": "Bind Mounts",
+          "description": "Adversaries may abuse bind mounts on file structures to hide their activity and artifacts from native utilities. A bind mount maps a directory or file from one location on the filesystem to another, s",
+          "similarity": 0.5144
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-01",
+          "name": "Dynamic Code Execution (Eval/Exec)",
+          "description": "Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated strings, a common zero-day evasion technique.",
+          "similarity": 0.5043
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for suffix sink. Execution is gated by a condition (Attribute()) which must evaluate to false. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for path; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for archive; ControlFlowNode for member; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for prefix; ControlFlowNode for archive; ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for suffix sink. Execution is gated by a condition (Attribute()) which must evaluate to false. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for path; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for archive; ControlFlowNode for member; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for prefix; ControlFlowNode for archive; ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: atlasctf-21-prod-21 | Tags: data_exfiltration | Category: file_ops\n- [1.00] Package: csvmonitor | Tags: unclassified | Category: file_ops\n- [1.00] Package: brokescolors3 | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.52] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n- [0.51] MITRE ATT&CK [T1564.013]: Bind Mounts — Adversaries may abuse bind mounts on file structures to hide their activity and artifacts from nativ\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-01]: Dynamic Code Execution (Eval/Exec) — Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated stri\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package performs standard file operations, string manipulation (split, join, replace, strip), archive handling, and typing utilities (TypeVar, OrderedDict).",
+          "is_false_positive": true,
+          "false_positive_reason": "The identified static analysis flow represents standard file path and archive parsing routines commonly found in normal Python applications and libraries, without any indicative signs of exfiltration or unauthorized execution."
+        },
+        "malware_similarity": {
+          "most_similar_package": "csvmonitor",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Matches generic file_ops structural heuristics due to common path and archive handling patterns, but lacks malicious payload execution or C2 communication."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The 'reservauto' package exhibits standard file and string handling behavior consistent with benign Python code structures. Static analysis flags standard file operations and archive extraction routines, but there are no indications of malicious obfuscation, network exfiltration, or unauthorized command execution.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 11,
+      "category": "file_ops",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:331",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "sqlalchemy-os",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "dd38b056f2c06a108097b2afb14775fe"
+        },
+        {
+          "package": "libtpu-nightly",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "c3425fca48e5d6fcfd24612a0b24913d"
+        },
+        {
+          "package": "request-cache-py",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "credential_stealer",
+            "data_exfiltration",
+            "obfuscated_payload",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "721d88488b3ed6849f4557d728981b97"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5652
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5488
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1204.002",
+          "name": "Malicious File",
+          "description": "An adversary may rely upon a user opening a malicious file in order to gain execution. Users may be subjected to social engineering to get them to open a file that will lead to code execution. This us",
+          "similarity": 0.5267
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: sqlalchemy-os | Tags: unclassified | Category: file_ops\n- [1.00] Package: libtpu-nightly | Tags: unclassified | Category: file_ops\n- [1.00] Package: request-cache-py | Tags: credential_stealer, data_exfiltration, obfuscated_payload, spyware_infostealer | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.57] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.55] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.53] MITRE ATT&CK [T1204.002]: Malicious File — An adversary may rely upon a user opening a malicious file in order to gain execution. Users may be \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "Standard string processing, file path operations, and type/data structure definitions (e.g., OrderedDict, TypeVar) typical of library configuration and authenticator handling.",
+          "is_false_positive": true,
+          "false_positive_reason": "The identified static analysis flow represents basic file I/O and standard string utilities (split, strip, join, encode) used legitimately for parsing configurations or local files, without any malicious payload or unauthorized network execution."
+        },
+        "malware_similarity": {
+          "most_similar_package": "sqlalchemy-os",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The similarity is superficial and driven strictly by generic file operation (file_ops) static patterns common across both benign libraries and malicious packages."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Evaluation of the 'reservauto' package indicates benign intent. The flagged CodeQL behavior stems from standard Python file operations, string manipulation, and standard data structure handling used within normal library functionality (such as authentication or configuration processing). No malicious indicators, obfuscation, or malicious network/execution hooks were identified.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 12,
+      "category": "file_ops",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:335",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "roblopython",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "d0dc911df21c5384451012e667a6f5f1"
+        },
+        {
+          "package": "brokesrcl",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "artifact-lab-3-package-2b6a4744",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "backdoor",
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "c5e4f78483cf7927c18a9641df6a0fa1"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5342
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5026
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1204.002",
+          "name": "Malicious File",
+          "description": "An adversary may rely upon a user opening a malicious file in order to gain execution. Users may be subjected to social engineering to get them to open a file that will lead to code execution. This us",
+          "similarity": 0.4972
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: roblopython | Tags: unclassified | Category: file_ops\n- [1.00] Package: brokesrcl | Tags: unclassified | Category: file_ops\n- [1.00] Package: artifact-lab-3-package-2b6a4744 | Tags: backdoor, data_exfiltration, spyware_infostealer | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.53] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.50] MITRE ATT&CK [T1204.002]: Malicious File — An adversary may rely upon a user opening a malicious file in order to gain execution. Users may be \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package performs standard file and authentication operations, such as handling temporary files (tmp_name, filename) and parsing authentication configurations or tokens for interacting with the Reservauto service API.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected file operations and authentication calls reflect standard library utility functions (e.g., netrc auth handling, temporary file creation, string formatting) typical of an API client library for car-sharing reservation services."
+        },
+        "malware_similarity": {
+          "most_similar_package": "brokesrcl",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The similarity match is based purely on generic static analysis rules for standard file operations (file_ops category) rather than shared malicious control flow or payloads."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The package 'reservauto' exhibits standard file handling and authentication utility behaviors consistent with a legitimate API client library. The static analysis triggers on basic temporary file creation and string manipulation, representing a false positive with no evidence of malicious intent.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 13,
+      "category": "file_ops",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:337",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "roblopython",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "d0dc911df21c5384451012e667a6f5f1"
+        },
+        {
+          "package": "brokesrcl",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": ""
+        },
+        {
+          "package": "artifact-lab-3-package-2b6a4744",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "backdoor",
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "c5e4f78483cf7927c18a9641df6a0fa1"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5342
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5026
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1204.002",
+          "name": "Malicious File",
+          "description": "An adversary may rely upon a user opening a malicious file in order to gain execution. Users may be subjected to social engineering to get them to open a file that will lead to code execution. This us",
+          "similarity": 0.4972
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: reservauto\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: roblopython | Tags: unclassified | Category: file_ops\n- [1.00] Package: brokesrcl | Tags: unclassified | Category: file_ops\n- [1.00] Package: artifact-lab-3-package-2b6a4744 | Tags: backdoor, data_exfiltration, spyware_infostealer | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.53] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.50] MITRE ATT&CK [T1204.002]: Malicious File — An adversary may rely upon a user opening a malicious file in order to gain execution. Users may be \n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nDo not forget though some packages are one of the most famous and well-known \npackages, used by users, so they may not have intented malicious behavior, just\nbecause their structure and API call look similar to malicious packages.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v3",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The package performs standard file path handling and string/dict manipulation, likely managing temporary files, tokens, or configuration settings for authenticating with the Reservauto/Communauto API.",
+          "is_false_positive": true,
+          "false_positive_reason": "The detected file operations and attribute references are standard Python library patterns for session caching and string formatting. No malicious activity such as setup execution hooks, obfuscation, or arbitrary command execution was observed."
+        },
+        "malware_similarity": {
+          "most_similar_package": "roblopython",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The similarity is based purely on generic static data flows related to standard file operations (file_ops), which are shared by many legitimate and utility packages."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the 'reservauto' package indicates benign behavior. The static analysis flagged basic file operations and string formatting routines used for temporary files and authentication handling. There are no indications of malicious code injection, obfuscation, or unauthorized data exfiltration, making this a false positive.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}

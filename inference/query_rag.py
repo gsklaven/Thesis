@@ -29,7 +29,7 @@ MALWARE_THRESHOLD = 0.55
 # κρατούν ΡΗΤΑ ποιο prompt τα παρήγαγε. Χωρίς αυτό, ένα before/after
 # πείραμα σε νέο prompt θα μπέρδευε ασυνείδητα v1 και v2 reports μαζί σε
 # ένα evaluation_summary.py run - κάνοντας αδύνατη τη σωστή σύγκριση.
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 
 SSVC_COT_PROMPT = """You are a Senior Cybersecurity Analyst specializing in software supply chain threats.
