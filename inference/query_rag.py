@@ -49,7 +49,7 @@ MALWARE_THRESHOLD = 0.55
 # dynamic import, event-driven fetch) που ταιριάζουν με sim>0.9 σε ΟΠΟΙΟΔΗΠΟΤΕ
 # πακέτο έχει παρόμοια επιφανειακή δομή, ανεξάρτητα από πραγματική πρόθεση.
 # Το STEP 2 τώρα επαναφέρει ΚΑΙ ενισχύει αυτή την προστασία, στοχευμένα.
-PROMPT_VERSION = "v5"
+PROMPT_VERSION = "v6"
 
 
 SSVC_COT_PROMPT = """You are a Senior Cybersecurity Analyst specializing in software supply chain threats.
