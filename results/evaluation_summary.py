@@ -114,6 +114,21 @@ def print_metrics(label, tp, tn, fp, fn, static_misses, unscored):
     print(f"  Recall    LLM-STAGE ONLY: {recall_llm:.3f}")
     print(f"  F1        LLM-STAGE ONLY: {f1:.3f}")
 
+    # ΝΕΟ: επίστρεψε τα ίδια νούμερα που μόλις τυπώθηκαν, ώστε ο καλών να
+    # μπορεί να τα αποθηκεύσει - πριν, αυτοί οι υπολογισμοί ζούσαν ΜΟΝΟ
+    # στην οθόνη, ποτέ στο αποθηκευμένο summary JSON.
+    return {
+        "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+        "static_analysis_misses": static_misses, "unscored": unscored,
+        "accuracy_end_to_end": round(accuracy_e2e, 4),
+        "recall_end_to_end": round(recall_e2e, 4),
+        "accuracy_llm_stage_only": round(accuracy_llm, 4),
+        "precision_llm_stage_only": round(precision, 4),
+        "recall_llm_stage_only": round(recall_llm, 4),
+        "f1_llm_stage_only": round(f1, 4),
+        "precision_trivial": (fp == 0 and tp > 0),
+    }
+
 
 def main():
     reports = load_reports()
@@ -163,10 +178,10 @@ def main():
     print(f"\n[*] expected_labels.json: {n_malicious_labels} malicious, {n_benign_labels} benign")
 
     tp, tn, fp, fn, static_misses, unscored = compute_confusion(reports, expected_labels, {"MALICIOUS"})
-    print_metrics("STRICT (θετικό = μόνο MALICIOUS)", tp, tn, fp, fn, static_misses, unscored)
+    print_metrics_strict = print_metrics("STRICT (θετικό = μόνο MALICIOUS)", tp, tn, fp, fn, static_misses, unscored)
 
     tp, tn, fp, fn, static_misses, unscored = compute_confusion(reports, expected_labels, {"MALICIOUS", "SUSPICIOUS"})
-    print_metrics("LENIENT (θετικό = MALICIOUS ή SUSPICIOUS)", tp, tn, fp, fn, static_misses, unscored)
+    print_metrics_lenient = print_metrics("LENIENT (θετικό = MALICIOUS ή SUSPICIOUS)", tp, tn, fp, fn, static_misses, unscored)
 
     if n_benign_labels == 0:
         print("\n[!] ΚΑΝΕΝΑ 'benign' label στο expected_labels.json ακόμα - το Precision/F1 "
@@ -215,6 +230,8 @@ def main():
         "model_used_counts": model_counts,
         "expected_labels_malicious": n_malicious_labels,
         "expected_labels_benign": n_benign_labels,
+        "metrics_strict": print_metrics_strict,
+        "metrics_lenient": print_metrics_lenient,
     }
     with open(SUMMARY_OUT, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
