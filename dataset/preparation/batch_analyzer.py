@@ -8,18 +8,19 @@ import signal
 import glob
 import time
 
-_DEDUPED_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_deduped.json"
-_MATCHED_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_matched.json"
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_DEDUPED_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_deduped.json")
+_MATCHED_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_matched.json")
 DATASET_JSON = _DEDUPED_JSON if os.path.exists(_DEDUPED_JSON) else _MATCHED_JSON
-FINAL_JSON_DIR = "/home/sklavenitis/thesis/dataset/analyzed_chains"
+FINAL_JSON_DIR = os.path.join(_THESIS_ROOT, "dataset", "analyzed_chains")
 
 # ΝΕΟ: STAGING_DIR μπορεί τώρα να δείχνει οπουδήποτε (π.χ. σε στικάκι με
 # άφθονο ελεύθερο χώρο), μέσω env var - χρήσιμο όταν ο κύριος δίσκος δεν
 # έχει άλλο χώρο. Χωρίς να οριστεί, συνεχίζει να δουλεύει όπως πριν.
 STAGING_DIR = os.environ.get(
-    "BATCH_STAGING_DIR", "/home/sklavenitis/thesis/temp_malware_analysis"
+    "BATCH_STAGING_DIR", os.path.join(_THESIS_ROOT, "temp_malware_analysis")
 )
-PIPELINE_DIR = "/home/sklavenitis/thesis/inference/codeql_pipeline"
+PIPELINE_DIR = os.path.join(_THESIS_ROOT, "inference", "codeql_pipeline")
 PIPELINE_RESULTS_DIR = os.path.join(PIPELINE_DIR, "results")
 
 ANALYSIS_SCRIPT = os.path.join(PIPELINE_DIR, "analysis.py")

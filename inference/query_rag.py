@@ -231,6 +231,26 @@ class RAGEngine:
             text = flatten_chain_to_text(chain)
             query_vec = self.model.encode([text], normalize_embeddings=True)[0]
 
+            # Πακέτο-επίπεδο γράφος εξαρτήσεων: διαθέσιμο στο JSON αλλά δεν
+            # έφτανε ποτέ στο LLM prompt. Το προσθέτουμε ως συμπληρωματικό
+            # context (μία φορά ανά chain, κρατάμε μικρό για να μην τρώει
+            # tokens) ώστε το LLM να βλέπει τι τρίτου-μέρους βιβλιοθήκες
+            # περικλείει το πακέτο - σημαντικό για supply-chain ανάλυση.
+            dep_graph = pkg_data.get("package_dependency_graph", {})
+            chain_extra = extra_context
+            if dep_graph:
+                dep_lines = [
+                    f"  {pkg}: [{', '.join(deps[:5])}{'...' if len(deps) > 5 else ''}]"
+                    for pkg, deps in list(dep_graph.items())[:10]
+                ]
+                dep_summary = (
+                    "\n[PACKAGE DEPENDENCY GRAPH (vendored third-party libs)]:\n"
+                    + "\n".join(dep_lines)
+                    + (f"\n  ... ({len(dep_graph)} packages total)" if len(dep_graph) > 10 else "")
+                    + "\n"
+                )
+                chain_extra = (extra_context + dep_summary) if extra_context else dep_summary
+
             m_matches = cosine_search(query_vec, self.malware_vectors, MALWARE_TOP_K)
             p_matches = cosine_search(query_vec, self.policy_vectors, POLICY_TOP_K)
 
@@ -279,7 +299,7 @@ class RAGEngine:
                 malware_context=malware_context,
                 policy_top_k=POLICY_TOP_K,
                 policy_context=policy_context,
-                extra_context=extra_context,
+                extra_context=chain_extra,
             )
 
             results.append({

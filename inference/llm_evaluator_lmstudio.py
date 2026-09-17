@@ -20,7 +20,7 @@ from openai import OpenAI
 
 from query_rag import RAGEngine, PROMPT_VERSION
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/Users/giorgos/Documents/Thesis")
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
 TAGS_FILE = os.path.join(BASE_DIR, "attack_type_tags.json")
