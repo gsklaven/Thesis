@@ -251,6 +251,25 @@ class RAGEngine:
                 )
                 chain_extra = (extra_context + dep_summary) if extra_context else dep_summary
 
+            # Heuristic scanner calibration note: when CodeQL found 0 chains and
+            # the fallback regex scanner produced this chain, tell the LLM what
+            # that means for confidence. The matched code snippet IS direct textual
+            # evidence — it just lacks a full inter-procedural source→sink path.
+            if chain.get("heuristic_source"):
+                heuristic_note = (
+                    "\n[STATIC ANALYSIS NOTE — HEURISTIC SCAN]: This behavior chain "
+                    "was detected by a lightweight regex pattern scanner, NOT full "
+                    "CodeQL taint tracking. CodeQL found zero behavior chains for "
+                    "this package (common for obfuscated or install-hook malware). "
+                    f"The specific pattern matched: {chain.get('heuristic_description', '')} "
+                    "The matched code snippet in the 'Contributing data-flow nodes' "
+                    "section is direct textual evidence — weigh it heavily. Do NOT "
+                    "default to BENIGN solely because there is no full source→sink "
+                    "path; this is expected for the obfuscation/install-hook class "
+                    "of malware that evades static data-flow analysis.\n"
+                )
+                chain_extra = (chain_extra + heuristic_note) if chain_extra else heuristic_note
+
             m_matches = cosine_search(query_vec, self.malware_vectors, MALWARE_TOP_K)
             p_matches = cosine_search(query_vec, self.policy_vectors, POLICY_TOP_K)
 

@@ -21,6 +21,7 @@ STAGING_DIR = os.environ.get(
     "BATCH_STAGING_DIR", os.path.join(_THESIS_ROOT, "temp_malware_analysis")
 )
 PIPELINE_DIR = os.path.join(_THESIS_ROOT, "inference", "codeql_pipeline")
+SCANNER_SCRIPT = os.path.join(PIPELINE_DIR, "heuristic_scanner.py")
 PIPELINE_RESULTS_DIR = os.path.join(PIPELINE_DIR, "results")
 
 ANALYSIS_SCRIPT = os.path.join(PIPELINE_DIR, "analysis.py")
@@ -407,8 +408,18 @@ def main():
 
             shutil.copy2(RESULTS_JSON, final_dest)
             if n_chains == 0:
-                print(f"  [~] Επιτυχία, αλλά 0 behavior chains (πιθανό: 'no source code found').")
-                empty_result += 1
+                # ── Heuristic fallback ──────────────────────────────────────
+                # CodeQL found nothing. Run the lightweight regex scanner as a
+                # second chance before marking the package as empty. The scanner
+                # overwrites RESULTS_JSON in-place if it finds anything, so the
+                # subsequent copy picks up the heuristic result automatically.
+                n_chains = _try_heuristic_scanner(STAGING_DIR, RESULTS_JSON)
+                shutil.copy2(RESULTS_JSON, final_dest)   # re-copy (heuristic or original)
+                if n_chains == 0:
+                    print(f"  [~] Επιτυχία, αλλά 0 behavior chains (CodeQL + heuristic scanner).")
+                    empty_result += 1
+                else:
+                    print(f"  [✓] Επιτυχία! ({n_chains} heuristic chains)")
             else:
                 print(f"  [✓] Επιτυχία! ({n_chains} behavior chains)")
             success += 1
@@ -420,6 +431,48 @@ def main():
 
     print(f"\n[*] Ολοκληρώθηκε. Επιτυχείς: {success} (εκ των οποίων {empty_result} με 0 chains) | "
           f"Αποτυχίες: {failed} | Παραλείψεις: {skipped}")
+
+
+# ── Heuristic scanner fallback ───────────────────────────────────────────────
+
+def _try_heuristic_scanner(staging_dir: str, results_json: str) -> int:
+    """
+    Run heuristic_scanner.py on *staging_dir* when CodeQL found 0 chains.
+    If the scanner finds patterns it overwrites *results_json* in place.
+    Returns the number of heuristic chains found (0 on any error/empty).
+    """
+    if not os.path.exists(SCANNER_SCRIPT):
+        return 0
+
+    print("  [~] 0 CodeQL chains — εκτελώ heuristic scanner...")
+    try:
+        res = run_with_hard_timeout(
+            ["python3", SCANNER_SCRIPT, staging_dir],
+            timeout=30,
+            cwd=PIPELINE_DIR,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        print("  [!] Heuristic scanner timeout/error.")
+        return 0
+
+    if res.returncode != 0:
+        stderr_snippet = (res.stderr or "").strip()[:120]
+        print(f"  [!] Heuristic scanner απέτυχε: {stderr_snippet}")
+        return 0
+
+    # Scanner writes to its own RESULTS_DIR which IS the same pipeline results
+    # dir. Re-read results_json to see how many chains were found.
+    try:
+        with open(results_json, "r", encoding="utf-8") as rf:
+            scan_data = json.load(rf)
+        n = scan_data.get("summary", {}).get("total_behavior_chains", 0)
+        if n:
+            print(f"  [~] Heuristic scanner: {n} pattern(s) βρέθηκαν.")
+        return n
+    except Exception:
+        return 0
 
 
 if __name__ == "__main__":
