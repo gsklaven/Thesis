@@ -15,12 +15,22 @@ _HASH_PATTERN = re.compile(r"\b[0-9a-f]{16,}\b", re.IGNORECASE)
 _SOURCE_LINE_PATTERN = re.compile(
     r"##\s*Source:\s*\w+\s*\([0-9a-f]+\)", re.IGNORECASE
 )
+# ΝΕΟ FIX: αφαιρεί "Malicious code in {package_name} (PyPI)" - η ΠΡΩΤΗ
+# γραμμή σε reports νεότερης μορφής (π.χ. EsqueleSquad/checkmarx). Χωρίς
+# αυτό, το ΜΟΝΑΔΙΚΟ όνομα πακέτου έμενε στο κείμενο πριν τον υπολογισμό
+# του SHA-256, κάνοντας ΚΑΘΕ signature μοναδικό ακόμα κι όταν το
+# υπόλοιπο, πραγματικό campaign κείμενο ήταν πανομοιότυπο - 5.310
+# EsqueleSquad πακέτα εμφανίζονταν λανθασμένα σαν ~5.310 ξεχωριστές
+# καμπάνιες αντί για 1.
+_MALICIOUS_CODE_LINE_PATTERN = re.compile(
+    r"malicious code in \S+\s*\([^)]*\)", re.IGNORECASE
+)
 # Ορίζουμε κεντρικά όλους τους πιθανούς δίσκους
 CANDIDATE_SOURCES_DIRS = [
     "/media/sklavenitis/C09F-7FCB",
     "/media/sklavenitis/123 GB Volume",
     "/media/sklavenitis/Giorgos",
-    "/home/sklavenitis/thesis/dataset/sources",
+    os.path.join(os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis"), "dataset", "sources"),
 ]
 
 def campaign_signature(description):
@@ -41,6 +51,7 @@ def campaign_signature(description):
     if not description:
         return None
     text = _SOURCE_LINE_PATTERN.sub("", description)
+    text = _MALICIOUS_CODE_LINE_PATTERN.sub("", text)
     text = _HASH_PATTERN.sub("", text)
     text = re.sub(r"\s+", " ", text).strip().lower()
     if len(text) <= 20:
