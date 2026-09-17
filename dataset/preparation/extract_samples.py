@@ -13,7 +13,7 @@ MATCHED_OUTPUT = os.path.join(BASE_DIR, "malware_dataset_matched.json")
 UNMATCHED_OUTPUT = os.path.join(BASE_DIR, "malware_dataset_unmatched.json")
 
 # Ίδιο dual-name fallback με το collect_all_samples.py
-DATADOG_FOLDER_CANDIDATES = ["malicious-software-packages-dataset", "datadog-malware"]
+DATADOG_FOLDER_CANDIDATES = ["malicious-software-packages-dataset"]
 
 
 def resolve_output_dir():
@@ -53,7 +53,7 @@ def extract_samples():
         if target:
             SOURCE_DIRECTORIES.append(target)
 
-    datadog_extract = os.path.join(BASE_DIR, "malware_samples_datadog")
+    datadog_extract = os.path.join(BASE_DIR, "malicious-software-packages-dataset")
     if os.path.exists(datadog_extract):
         SOURCE_DIRECTORIES.append(datadog_extract)
 

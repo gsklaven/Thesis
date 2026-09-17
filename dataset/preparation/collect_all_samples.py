@@ -24,11 +24,14 @@ DATADOG_FILENAME_PATTERN = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})-(?P<pkg>.+)-v(?P<version>[^-]+)\.zip$"
 )
 
-# ΤΟ Datadog repo μπορεί να έχει clone-αριστεί με το πραγματικό upstream
-# όνομα ("malicious-software-packages-dataset") Η με ένα custom όνομα
-# ("datadog-malware", όπως έδειχναν οι αρχικές οδηγίες clone). Δοκιμάζουμε
-# ΚΑΙ ΤΑ ΔΥΟ, ώστε να δουλέψει όποιο έχεις πραγματικά στο δίσκο.
 DATADOG_FOLDER_CANDIDATES = ["malicious-software-packages-dataset", "datadog-malware"]
+
+# ΝΕΟ: το upstream repo άλλαξε δομή - δεν είναι πια .zip αρχεία με όνομα
+# "date-pkg-version.zip", είναι φάκελοι, χωρισμένοι σε δύο κατηγορίες.
+# "compromised_lib" = πραγματικό, νόμιμο πακέτο που παραβιάστηκε (π.χ.
+# "mistralai", "ultralytics" - γνωστά, υπαρκτά ονόματα). "malicious_intent"
+# = πακέτα σχεδιασμένα εξ αρχής κακόβουλα (typosquats, fake packages, κ.λπ.)
+DATADOG_PYPI_SUBCATEGORIES = ["compromised_lib", "malicious_intent"]
 
 MALOSS_RELEVANT_SUBDIRS = [
     "npmjs-samples", "pypi-samples", "python-samples",
@@ -119,15 +122,106 @@ def collect_maloss_samples():
     return entries
 
 def _find_datadog_base():
-    """Δοκιμάζει και τα δύο πιθανά ονόματα φακέλου - βλ. σχόλιο πάνω."""
     for name in DATADOG_FOLDER_CANDIDATES:
         base = find_target_dir(name)
         if base:
             return base
     return None
 
+
+def _load_datadog_manifest(pypi_root):
+    """
+    Φορτώνει το manifest.json (αν υπάρχει) - πιθανή πηγή σημασιολογικών
+    περιγραφών ανά πακέτο, πολύτιμο δεδομένου ότι τα bulk sources συνήθως
+    δεν έχουν καθόλου description (και ξέρουμε από το recall-by-tag
+    ανάλυση ότι αυτό συσχετίζεται με χειρότερο recall - p=0.0025).
+    Defensive: αν το schema δεν είναι αυτό που περιμένουμε, απλά αγνοείται.
+    """
+    manifest_path = os.path.join(pypi_root, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return {}
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"  [!] Δεν μπόρεσα να διαβάσω το manifest.json: {e}")
+        return {}
+
+    # Το manifest μπορεί να είναι είτε dict {pkg_name: {...}} είτε list [{...}]
+    by_name = {}
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if isinstance(v, dict):
+                by_name[k.lower()] = v
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                name = item.get("name") or item.get("package") or item.get("package_name")
+                if name:
+                    by_name[name.lower()] = item
+    return by_name
+
+
+def collect_datadog_pypi_v2():
+    """
+    ΝΕΟ collector για τη ΝΕΑ δομή του upstream repo: φάκελοι (όχι zips),
+    χωρισμένοι σε samples/pypi/compromised_lib/ και samples/pypi/malicious_intent/.
+    """
+    base = _find_datadog_base()
+    if not base:
+        return []
+
+    pypi_root = os.path.join(base, "samples", "pypi")
+    if not os.path.isdir(pypi_root):
+        return []
+
+    manifest = _load_datadog_manifest(pypi_root)
+    if manifest:
+        print(f"  [✓] manifest.json: {len(manifest)} εγγραφές φορτώθηκαν.")
+
+    entries = []
+    for subcat in DATADOG_PYPI_SUBCATEGORIES:
+        subcat_root = os.path.join(pypi_root, subcat)
+        if not os.path.isdir(subcat_root):
+            continue
+
+        sub_entries = walk_top_level_packages(subcat_root, f"datadog_pypi_{subcat}")
+
+        for e in sub_entries:
+            pkg_lower = e["package_name"].lower()
+            manifest_info = manifest.get(pkg_lower, {})
+            manifest_desc = (
+                manifest_info.get("description") or manifest_info.get("summary")
+                or manifest_info.get("details") or ""
+            )
+            # ΔΙΟΡΘΩΣΗ: το subcategory ΔΕΝ μπαίνει πια μέσα στο "description".
+            # Πριν, ΚΑΘΕ πακέτο μιας κατηγορίας έπαιρνε το ΙΔΙΟ, πανομοιότυπο
+            # κείμενο (αφού το manifest.json είναι όλο null) - το
+            # campaign_signature() στο utils.py χασάρει το description, οπότε
+            # 135 άσχετα πακέτα με το ΙΔΙΟ σταθερό string κατέληγαν να
+            # μοιράζονται ΤΟ ΙΔΙΟ campaign signature, δημιουργώντας μια
+            # ψεύτικη "μεγα-καμπάνια" 135 πακέτων.
+            e["description"] = manifest_desc
+            e["datadog_category"] = subcat
+
+        entries.extend(sub_entries)
+
+    return entries
+
+
 def collect_datadog_ecosystem(ecosystem):
-    """Γενική συνάρτηση για Datadog, μπορεί να τραβήξει pypi ή npm."""
+    """
+    Γενική συνάρτηση για Datadog. Δοκιμάζει ΠΡΩΤΑ τη ΝΕΑ δομή (φάκελοι
+    compromised_lib/malicious_intent) - αν δεν βρεθεί (π.χ. ίσως το npm
+    διατηρεί ακόμα την παλιά μορφή), κάνει fallback στην ΠΑΛΙΑ λογική
+    (.zip αρχεία με όνομα date-pkg-version.zip).
+    """
+    if ecosystem == "pypi":
+        new_style = collect_datadog_pypi_v2()
+        if new_style:
+            return new_style
+        print("  [*] Νέα δομή (compromised_lib/malicious_intent) δεν βρέθηκε για pypi - δοκιμή παλιάς μορφής (.zip)...")
+
     base = _find_datadog_base()
     entries = []
     if not base:
