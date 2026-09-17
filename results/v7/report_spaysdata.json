@@ -1,0 +1,1272 @@
+{
+  "package_name": "spaysdata",
+  "prompt_version": "v7",
+  "analysis_timestamp": "2026-09-17T07:06:54",
+  "final_verdict": "MALICIOUS",
+  "total_chains_analyzed": 12,
+  "malicious_chains": 10,
+  "suspicious_chains": 1,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "process_exec",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for __import__()",
+      "location": "vendor/requests/packages.py:9",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "pycripto",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "ctf_q21_empire_tmp_1337_thc",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "safepackage",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.6707
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_self_propagation",
+          "name": "threat_runtime_self_propagation",
+          "description": "Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatically publishes copies to a package registry to spread",
+          "similarity": 0.6499
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_process_injection_dll",
+          "name": "threat_process_injection_dll",
+          "description": "Detects DLL injection and process injection techniques",
+          "similarity": 0.588
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for __import__(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for package sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for package. Calls external/library functions: __import__, list, locals, mod.replace, mod.startswith.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for __import__(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for package sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for package. Calls external/library functions: __import__, list, locals, mod.replace, mod.startswith.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: pycripto | Tags: unclassified | Category: process_exec\n- [1.00] Package: ctf_q21_empire_tmp_1337_thc | Tags: unclassified | Category: process_exec\n- [1.00] Package: safepackage | Tags: unclassified | Category: process_exec\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.67] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.65] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_self_propagation]: threat_runtime_self_propagation — Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatic\n- [0.59] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_process_injection_dll]: threat_process_injection_dll — Detects DLL injection and process injection techniques\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "SUSPICIOUS",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK*",
+        "reasoning": {
+          "code_intent": "The package performs dynamic module imports using __import__() and string manipulations (mod.replace, mod.startswith) to construct and load module dependencies dynamically.",
+          "is_false_positive": false,
+          "false_positive_reason": "While dynamic importing can occasionally be used in plugin systems, using string manipulation with raw __import__() calls closely matches runtime obfuscation patterns without a documented standard usage context."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pycripto",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Exhibits identical structural execution flow using dynamic import primitives categorized under process_exec."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+            "policy_name": "threat_runtime_obfuscation_import_exec",
+            "violation_reason": "Detects dynamic import chains used to obfuscate runtime code execution."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Constructs module names dynamically to obscure imported dependencies."
+          },
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Leverages Python dynamic import primitives (__import__) to execute code."
+          }
+        ],
+        "summary": "Package spaysdata demonstrates runtime obfuscation characteristics through dynamic module Resolution using __import__() and string manipulation, violating GuardDog obfuscated import execution policies. Due to strong similarity with known unclassified samples using process_exec flows, the package is flagged as SUSPICIOUS with an SSVC decision of TRACK* for manual security review.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "process_exec",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/compat.py:43",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "malpkgv2.0",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "pycryptodomes",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "typosquatting"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "innostage-group",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "backdoor",
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "03c6a716aeb69a015558d2920854828a",
+          "description": "The package contains code to download and execute a reverse shell script.\n\n---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (9d0f2f6104de4772268a20f51e009797c0c4b0740d18d98d730417fdafdfb052)\nWhen imported, the package download and runs a remote stage - a reverse shell. To mask activity, the remote domain is made to mimic PyPI host: files[.]pythonhosted[.]ru\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2024-10-innostage\n\n\nReasons (based on the campaign):\n\n\n - The package contains code to create a reverse shell, allowing an attacker to execute any commands on the victim's machine."
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.6278
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_self_propagation",
+          "name": "threat_runtime_self_propagation",
+          "description": "Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatically publishes copies to a package registry to spread",
+          "similarity": 0.5671
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1036.009",
+          "name": "Break Process Trees",
+          "description": "An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent process ID (PPID). If endpoint protection software leverages the “parent-child\" relationship for de",
+          "similarity": 0.5582
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for lib sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for lib. Calls external/library functions: importlib.import_module, int, urllib3_version.split.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for lib sink. Execution is gated by a condition (Compare) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Tuple; ControlFlowNode for lib. Calls external/library functions: importlib.import_module, int, urllib3_version.split.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: malpkgv2.0 | Tags: unclassified | Category: process_exec\n- [1.00] Package: pycryptodomes | Tags: typosquatting | Category: process_exec\n- [1.00] Package: innostage-group | Tags: backdoor, spyware_infostealer, supply_chain_downloader | Category: process_exec | Analyst description: The package contains code to download and execute a reverse shell script.\n\n---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (9d0f2f6104de4772268a20f51e009797c0c4b0740d18d98d730417fdafdfb052)\nWhen imported, the package do\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.63] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.57] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_self_propagation]: threat_runtime_self_propagation — Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatic\n- [0.56] MITRE ATT&CK [T1036.009]: Break Process Trees — An adversary may attempt to evade process tree-based analysis by modifying executed malware's parent\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.92,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package executes arbitrary commands and dynamic module loads using importlib.import_module automatically upon being imported.",
+          "is_false_positive": false,
+          "false_positive_reason": "Executing arbitrary dynamic imports and process execution routines immediately upon package import is characteristic of malicious supply chain payloads and serves no legitimate purpose for this package."
+        },
+        "malware_similarity": {
+          "most_similar_package": "pycryptodomes",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Matches structural process execution patterns and import-time execution triggers found in known typosquatting and supply chain downloader malware samples."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+            "policy_name": "threat_runtime_obfuscation_import_exec",
+            "violation_reason": "Uses dynamic import chains via importlib to execute process calls and obscure control flow."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1059.006",
+            "technique_name": "Command and Scripting Interpreter: Python",
+            "relevance": "Executes malicious Python code dynamically via importlib during package import."
+          },
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Diverts standard static analysis by dynamically resolving and executing imports."
+          }
+        ],
+        "summary": "The package 'spaysdata' is determined to be malicious. Upon import, it executes dynamic imports and process execution mechanisms using Python's importlib without user intervention. This import-time execution pattern aligns directly with known supply chain threats and violates security policies against dynamic runtime obfuscation.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 2,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for b64encode()",
+      "location": "vendor/requests/auth.py:72",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "brokescolors3",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "tlibrium",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "innostage-group",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "backdoor",
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "03c6a716aeb69a015558d2920854828a",
+          "description": "The package contains code to download and execute a reverse shell script.\n\n---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (9d0f2f6104de4772268a20f51e009797c0c4b0740d18d98d730417fdafdfb052)\nWhen imported, the package download and runs a remote stage - a reverse shell. To mask activity, the remote domain is made to mimic PyPI host: files[.]pythonhosted[.]ru\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2024-10-innostage\n\n\nReasons (based on the campaign):\n\n\n - The package contains code to create a reverse shell, allowing an attacker to execute any commands on the victim's machine."
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1140",
+          "name": "Deobfuscate/Decode Files or Information",
+          "description": "Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to hide artifacts of an intrusion from analysis. They may require separate mechanisms to decode or deob",
+          "similarity": 0.5633
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation",
+          "name": "threat_runtime_obfuscation",
+          "description": "Detects heavy obfuscation techniques commonly used by malware",
+          "similarity": 0.5523
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_general",
+          "name": "threat_runtime_obfuscation_general",
+          "description": "Detects heavy code obfuscation techniques",
+          "similarity": 0.5434
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Contributing data-flow nodes: ControlFlowNode for proxy; ControlFlowNode for prepend_scheme_if_needed(); ControlFlowNode for prepend_scheme_if_needed(); ControlFlowNode for proxy; ControlFlowNode for get_auth_from_url(); ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for str(). Calls external/library functions: <complex_expr>, <complex_expr>.__init__, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.hexdigest, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.scheme.lower, <complex_expr>.split, <complex_expr>.startswith.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for b64encode(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Attribute() sink. Contributing data-flow nodes: ControlFlowNode for proxy; ControlFlowNode for prepend_scheme_if_needed(); ControlFlowNode for prepend_scheme_if_needed(); ControlFlowNode for proxy; ControlFlowNode for get_auth_from_url(); ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for username; ControlFlowNode for password; ControlFlowNode for str(). Calls external/library functions: <complex_expr>, <complex_expr>.__init__, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.hexdigest, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.scheme.lower, <complex_expr>.split, <complex_expr>.startswith.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: brokescolors3 | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: tlibrium | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: innostage-group | Tags: backdoor, spyware_infostealer, supply_chain_downloader | Category: crypto_obfuscation | Analyst description: The package contains code to download and execute a reverse shell script.\n\n---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (9d0f2f6104de4772268a20f51e009797c0c4b0740d18d98d730417fdafdfb052)\nWhen imported, the package do\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.56] MITRE ATT&CK [T1140]: Deobfuscate/Decode Files or Information — Adversaries may use [Obfuscated Files or Information](https://attack.mitre.org/techniques/T1027) to \n- [0.55] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation]: threat_runtime_obfuscation — Detects heavy obfuscation techniques commonly used by malware\n- [0.54] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_general]: threat_runtime_obfuscation_general — Detects heavy code obfuscation techniques\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.92,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package executes obfuscated code upon import, utilizing base64 encoding and credential/proxy manipulation functions to execute hidden payloads at runtime.",
+          "is_false_positive": false,
+          "false_positive_reason": "The behavior includes automatic execution upon import combined with runtime obfuscation, which is anomalous and unrelated to any documented legitimate functionality for this package."
+        },
+        "malware_similarity": {
+          "most_similar_package": "innostage-group",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Matches the obfuscation and execution pattern seen in supply chain malware such as innostage-group, tlibrium, and brokescolors3."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation",
+            "policy_name": "GuardDog Threat Runtime Obfuscation",
+            "violation_reason": "The package relies on runtime obfuscation using base64 decoding and string manipulation to hide payload logic."
+          },
+          {
+            "policy_id": "T1140",
+            "policy_name": "Deobfuscate/Decode Files or Information",
+            "violation_reason": "Payloads are decoded and processed dynamically during runtime execution."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Code employs base64 encoding and string transformations to evade static analysis."
+          },
+          {
+            "technique_id": "T1140",
+            "technique_name": "Deobfuscate/Decode Files or Information",
+            "relevance": "Decodes base64-encoded constructs dynamically upon package import."
+          }
+        ],
+        "summary": "The package 'spaysdata' contains malicious runtime code execution triggered upon package import. It utilizes base64 encoding and runtime obfuscation technique identical to known malicious supply chain packages. The package is flagged as malicious and recommended for immediate remediation.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 3,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/__init__.py:102",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "diaossama-test1",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "php-requests-complex",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "peloton-clients",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress",
+          "name": "threat_runtime_obfuscation_log_suppress",
+          "description": "Detects log/console suppression combined with obfuscated code, a common malware evasion pattern",
+          "similarity": 0.7072
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation",
+          "name": "threat_runtime_obfuscation",
+          "description": "Detects heavy obfuscation techniques commonly used by malware",
+          "similarity": 0.6824
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_general",
+          "name": "threat_runtime_obfuscation_general",
+          "description": "Detects heavy code obfuscation techniques",
+          "similarity": 0.658
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.addHandler, NullHandler, chardet_version.split, charset_normalizer_version.split, cryptography_version.split, getattr, int, len, list, logging.getLogger.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for StringLiteral sink. Contributing data-flow nodes: ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>.addHandler, NullHandler, chardet_version.split, charset_normalizer_version.split, cryptography_version.split, getattr, int, len, list, logging.getLogger.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: diaossama-test1 | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: php-requests-complex | Tags: unclassified | Category: crypto_obfuscation\n- [1.00] Package: peloton-clients | Tags: unclassified | Category: crypto_obfuscation\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.71] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress]: threat_runtime_obfuscation_log_suppress — Detects log/console suppression combined with obfuscated code, a common malware evasion pattern\n- [0.68] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation]: threat_runtime_obfuscation — Detects heavy obfuscation techniques commonly used by malware\n- [0.66] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_general]: threat_runtime_obfuscation_general — Detects heavy code obfuscation techniques\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.92,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package contains obfuscated string literals and cryptography/version manipulation coupled with logging suppression (NullHandler / logging controls) to conceal runtime execution.",
+          "is_false_positive": false,
+          "false_positive_reason": "The combination of heavy string/code obfuscation and deliberate suppression of security/logging handlers is not consistent with standard library functionality or benign package behavior."
+        },
+        "malware_similarity": {
+          "most_similar_package": "diaossama-test1",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The package shares identical obfuscation patterns and runtime evasion characteristics (crypto_obfuscation) with known malicious test/payload packages."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress",
+            "policy_name": "threat_runtime_obfuscation_log_suppress",
+            "violation_reason": "Detects log suppression techniques combined with obfuscated code constructs to evade monitoring."
+          },
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation",
+            "policy_name": "threat_runtime_obfuscation",
+            "violation_reason": "Detects heavy code and string obfuscation techniques within package modules."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Code relies on obfuscated strings and control flows to hide its true operational payload."
+          },
+          {
+            "technique_id": "T1562.001",
+            "technique_name": "Impair Defenses: Disable or Modify Tools",
+            "relevance": "Uses NullHandler and logging manipulation to suppress alerts and execution logs."
+          }
+        ],
+        "summary": "The package 'spaysdata' exhibits strong indicators of malicious intent, specifically heavy string and runtime obfuscation combined with log suppression tactics to hinder analysis and evasion detection. It shares a 1.0 similarity score with known obfuscated malware samples and violates GuardDog security policies regarding runtime obfuscation and log suppression. Consequently, this package is classified as MALICIOUS.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 4,
+      "category": "file_ops",
+      "flow_boundary": "Vendor-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:319",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "testdufou",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "coloramashowtemp",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "spyware_infostealer",
+            "supply_chain_downloader"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "53b46c6d623305e3e85fe2ed60d71e53",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (68b62d3c6ab90e6f581e390f03610916462b830f303532bd5528e2d5c37bb46e)\nImporting the module starts download and running a remote executable, identified as malware by AVs\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2025-05-coloramashowtemp \n\n\nReasons (based on the campaign):\n\n\n - Downloads and executes a remote executable.\n\n\n - malware"
+        },
+        {
+          "package": "kekovayalibka",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "8a1f7d488a160353bab5a534881b5366",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (62e5215c3a679298336a19cefc6971dc3ab4d26a68a1ee1b7fdafe97b7d2c8d0)\nPackage is prepared to exfiltrate sensitive files. Different packages use different places for the malicious code: it runs during importing the module, is placed in a native binary, or in the setup.py script\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2025-08-xenlib\n\n\nReasons (based on the campaign):\n\n\n - files-exfiltration"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1027.007",
+          "name": "Dynamic API Resolution",
+          "description": "Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to conceal malicious functionalities and impair defensive analysis. Malware commonly uses various [Nat",
+          "similarity": 0.5238
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1564.013",
+          "name": "Bind Mounts",
+          "description": "Adversaries may abuse bind mounts on file structures to hide their activity and artifacts from native utilities. A bind mount maps a directory or file from one location on the filesystem to another, s",
+          "similarity": 0.5144
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-01",
+          "name": "Dynamic Code Execution (Eval/Exec)",
+          "description": "Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated strings, a common zero-day evasion technique.",
+          "similarity": 0.5043
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for suffix sink. Execution is gated by a condition (Attribute()) which must evaluate to false. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for path; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for archive; ControlFlowNode for member; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for prefix; ControlFlowNode for archive; ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Vendor-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for suffix sink. Execution is gated by a condition (Attribute()) which must evaluate to false. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (Compare) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for path; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for archive; ControlFlowNode for member; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for prefix; ControlFlowNode for archive; ControlFlowNode for StringLiteral. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: testdufou | Tags: unclassified | Category: file_ops\n- [1.00] Package: coloramashowtemp | Tags: spyware_infostealer, supply_chain_downloader | Category: file_ops | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (68b62d3c6ab90e6f581e390f03610916462b830f303532bd5528e2d5c37bb46e)\nImporting the module starts download and running a remote executable, identified as malware by AVs\n\n\n---\n- [1.00] Package: kekovayalibka | Tags: data_exfiltration, spyware_infostealer | Category: file_ops | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (62e5215c3a679298336a19cefc6971dc3ab4d26a68a1ee1b7fdafe97b7d2c8d0)\nPackage is prepared to exfiltrate sensitive files. Different packages use different places for the malic\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.52] MITRE ATT&CK [T1027.007]: Dynamic API Resolution — Adversaries may obfuscate then dynamically resolve API functions called by their malware in order to\n- [0.51] MITRE ATT&CK [T1564.013]: Bind Mounts — Adversaries may abuse bind mounts on file structures to hide their activity and artifacts from nativ\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-01]: Dynamic Code Execution (Eval/Exec) — Detects the use of functions like eval(), exec(), or getattr() to execute dynamically generated stri\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.85,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code performs routine string and archive path manipulation using standard library utilities such as path split, join, replace, and data structures like OrderedDict.",
+          "is_false_positive": true,
+          "false_positive_reason": "The static analysis flagged standard path/archive handling functions (e.g., prefix, suffix, member, path processing) without any evidence of obfuscation, unauthorized dynamic execution, network communication, or credential harvesting."
+        },
+        "malware_similarity": {
+          "most_similar_package": "testdufou",
+          "similarity_score": 1.0,
+          "similarity_explanation": "The similarity is based purely on generic structural patterns associated with standard internal file operations and path manipulation routines."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "Analysis of the package 'spaysdata' indicates benign intent. The flagged static analysis patterns represent standard file and archive path processing utilities without any indicators of malicious activities such as command execution, data exfiltration, or installation hooks.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 5,
+      "category": "file_ops",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:331",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "importlib-metadate",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "001e3ee8b232040a1ced4303f4ef224a",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (b6db8994d6a78a5d0d95df2d0add2257ee6188f8c5419cbd7e2813426739d15d)\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: baidu-readver\n\n\nReasons (based on the campaign):\n\n\n - The package contains code to exfiltrate basic data from the system, like IP or username. It has a limited risk.\n\n## Source: ossf-package-analysis (540e9c9d054904f5342d684bd5cabf212fdbe7e4d20bac7407c937a6b8264cab)\nThe OpenSSF Package Analysis project identified 'importlib-metadate' @ 99.99 (pypi) as malicious.\n\nIt is considered malicious because:\n\n- The package executes one or more commands associated with malicious behavior."
+        },
+        {
+          "package": "vcdiff-py",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "pipcolouringskits",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.5742
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-07",
+          "name": "File Deletion & Cleanup (Defense Evasion)",
+          "description": "The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after execution to evade forensics.",
+          "similarity": 0.5652
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress",
+          "name": "threat_runtime_obfuscation_log_suppress",
+          "description": "Detects log/console suppression combined with obfuscated code, a common malware evasion pattern",
+          "similarity": 0.5521
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(). Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: importlib-metadate | Tags: data_exfiltration, spyware_infostealer | Category: file_ops | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (b6db8994d6a78a5d0d95df2d0add2257ee6188f8c5419cbd7e2813426739d15d)\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: bai\n- [1.00] Package: vcdiff-py | Tags: unclassified | Category: file_ops\n- [1.00] Package: pipcolouringskits | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.57] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.57] Threat Hunting Heuristics (custom) [HEUR-07]: File Deletion & Cleanup (Defense Evasion) — The malware attempts to delete its own files, wipe logs, or clear terminal history immediately after\n- [0.55] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress]: threat_runtime_obfuscation_log_suppress — Detects log/console suppression combined with obfuscated code, a common malware evasion pattern\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.85,
+        "ssvc_decision": "ATTEND",
+        "reasoning": {
+          "code_intent": "The package performs obfuscated file operations and dynamic attribute resolutions using encoding and string manipulations characteristic of local file harvesting.",
+          "is_false_positive": false,
+          "false_positive_reason": "The combination of attribute manipulation, string encoding, and file operations lacks a legitimate documented utility purpose and closely mirrors known infostealer payload structures."
+        },
+        "malware_similarity": {
+          "most_similar_package": "importlib-metadate",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Exhibits exact structural similarity (1.00 match) to 'importlib-metadate', a known malicious infostealer and typosquatting package from the 'bai' malware campaign."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+            "policy_name": "threat_runtime_obfuscation_import_exec",
+            "violation_reason": "Employs obfuscated encoding and dynamic control flow structures to hide runtime execution logic."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "Reads and processes local system files through complex attribute control flows."
+          },
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Encodes and manipulates execution paths to obscure payload logic from static analysis."
+          }
+        ],
+        "summary": "The Python package 'spaysdata' demonstrates file-handling operations combined with obfuscation techniques that match known malicious software supply chain components with high confidence. Static code analysis reveals file manipulation via dynamic attribute resolution and string encoding, identical in structure (1.00 similarity match) to the known infostealer malware 'importlib-metadate'. Given the high similarity to established infostealer patterns and policy violations regarding obfuscation, the package is classified as MALICIOUS.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 6,
+      "category": "file_ops",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:335",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "colouring",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "rbx1325",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "883c2715b04cde02db51902076c8edb3",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (7895e3c185d37126abdb72411a2b02b7d78325ca51e4cecd4303e282608b8966)\nDuring installation, package attempts to exfiltrate browser data\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2025-07-rbx1325\n\n\nReasons (based on the campaign):\n\n\n - infostealer\n\n\n - exfiltration-browser-data"
+        },
+        {
+          "package": "genomixhub-api",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.5473
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5342
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_self_propagation",
+          "name": "threat_runtime_self_propagation",
+          "description": "Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatically publishes copies to a package registry to spread",
+          "similarity": 0.5223
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: colouring | Tags: unclassified | Category: file_ops\n- [1.00] Package: rbx1325 | Tags: data_exfiltration, spyware_infostealer | Category: file_ops | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (7895e3c185d37126abdb72411a2b02b7d78325ca51e4cecd4303e282608b8966)\nDuring installation, package attempts to exfiltrate browser data\n\n\n---\n\nCategory: MALICIOUS - The campai\n- [1.00] Package: genomixhub-api | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.53] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.52] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_self_propagation]: threat_runtime_self_propagation — Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatic\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.85,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package extracts sensitive system and user authentication data (authenticators), manipulates temporary file names, and encodes data for exfiltration or storage.",
+          "is_false_positive": false,
+          "false_positive_reason": "Accessing authenticator data and performing file manipulation with encoding is not consistent with a standard utility package and aligns with infostealer behavior."
+        },
+        "malware_similarity": {
+          "most_similar_package": "rbx1325",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Exhibits identical structural behavior to known malware samples that perform file harvesting and credential/browser data exfiltration."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+            "policy_name": "threat_runtime_obfuscation_import_exec",
+            "violation_reason": "Uses dynamic encoding and string manipulation to process credentials and perform execution/exfiltration covertly."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1552",
+            "technique_name": "Unsecured Credentials",
+            "relevance": "Accesses authenticators and sensitive credential files on the local system."
+          },
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "Reads local system files and authenticators into temporary storage for processing."
+          }
+        ],
+        "summary": "The package 'spaysdata' exhibits clear malicious indicators by harvesting local authenticators and performing file operations with temporary files and data encoding. It shares strong structural similarities with known infostealer malware such as 'rbx1325'. Prompt remediation and removal are recommended.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 7,
+      "category": "file_ops",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "vendor/requests/utils.py:337",
+      "top_malware_similarity": 1.0,
+      "malware_matches": [
+        {
+          "package": "colouring",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "rbx1325",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "883c2715b04cde02db51902076c8edb3",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (7895e3c185d37126abdb72411a2b02b7d78325ca51e4cecd4303e282608b8966)\nDuring installation, package attempts to exfiltrate browser data\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2025-07-rbx1325\n\n\nReasons (based on the campaign):\n\n\n - infostealer\n\n\n - exfiltration-browser-data"
+        },
+        {
+          "package": "genomixhub-api",
+          "similarity": 1.0,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.5473
+        },
+        {
+          "source": "CAPEC Attack Patterns",
+          "id": "CAPEC-",
+          "name": "Overflow Binary Resource File",
+          "description": "An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources. Binary resources may include music files like MP3, image files like JPEG files, and any other binar",
+          "similarity": 0.5342
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_self_propagation",
+          "name": "threat_runtime_self_propagation",
+          "description": "Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatically publishes copies to a package registry to spread",
+          "similarity": 0.5223
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ControlFlowNode for filename; ControlFlowNode for Attribute(); ControlFlowNode for tmp_name. Calls external/library functions: <complex_expr>, <complex_expr>.authenticators, <complex_expr>.encode, <complex_expr>.join, <complex_expr>.replace, <complex_expr>.split, <complex_expr>.strip, OrderedDict, TypeVar, ValueError.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [1.00] Package: colouring | Tags: unclassified | Category: file_ops\n- [1.00] Package: rbx1325 | Tags: data_exfiltration, spyware_infostealer | Category: file_ops | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (7895e3c185d37126abdb72411a2b02b7d78325ca51e4cecd4303e282608b8966)\nDuring installation, package attempts to exfiltrate browser data\n\n\n---\n\nCategory: MALICIOUS - The campai\n- [1.00] Package: genomixhub-api | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.53] CAPEC Attack Patterns [CAPEC-]: Overflow Binary Resource File — An attack of this type exploits a buffer overflow vulnerability in the handling of binary resources.\n- [0.52] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_self_propagation]: threat_runtime_self_propagation — Detects worm/self-propagating behavior: package code that rewrites its own manifest and programmatic\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.88,
+        "ssvc_decision": "ATTEND",
+        "reasoning": {
+          "code_intent": "The package executes file operations involving temporary files, authenticator/credential attributes, and string manipulation/encoding operations commonly seen in credential harvesting.",
+          "is_false_positive": false,
+          "false_positive_reason": "The behavior includes operations on authenticators and temp files without explicit legitimate functional need or documentation consistent with a benign library."
+        },
+        "malware_similarity": {
+          "most_similar_package": "rbx1325",
+          "similarity_score": 1.0,
+          "similarity_explanation": "Identical structural data-flow pattern matching malicious packages that read local sensitive file/authentication structures and process them for exfiltration."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+            "policy_name": "threat_runtime_obfuscation_import_exec",
+            "violation_reason": "Constructs dynamic execution/data flows to process sensitive authenticators and system files."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "Reads local authenticators and temporary file data."
+          },
+          {
+            "technique_id": "T1083",
+            "technique_name": "File and Directory Discovery",
+            "relevance": "Iterates through paths and files to locate sensitive attributes and credentials."
+          }
+        ],
+        "summary": "The package 'spaysdata' exhibits suspicious file and credential manipulation operations, accessing local authenticators and encoding temporary file data. It shows a perfect structural match with known malicious packages that harvest sensitive local data during installation or execution.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 8,
+      "category": "file_ops",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.4.0/spaysdata-0.4.0/main.py:19",
+      "top_malware_similarity": 0.9107,
+      "malware_matches": [
+        {
+          "package": "aiogram-3",
+          "similarity": 0.9107,
+          "attack_type_tags": [
+            "backdoor",
+            "spyware_infostealer"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "6df6253cc77387b4073d7cfe44f7ef12",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (3d8dac0d1eb98dbfc0fe46cabeadb550699f5e41b5d033ded073f7572f450bf7)\nDuring installation or importing the module, the package starts a reverse shell to hardcoded locatiom\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: 2025-12-aiogram-sever-patch\n\n\nReasons (based on the campaign):\n\n\n - The package contains code to create a reverse shell, allowing an attacker to execute any commands on the victim's machine.\n\n\n - The package overrides the install command in setup.py to execute malicious code during installation.\n\n\n - dependency-confusion"
+        },
+        {
+          "package": "apache-flink-libraries",
+          "similarity": 0.9101,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "apache-superset",
+          "similarity": 0.9101,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1564.013",
+          "name": "Bind Mounts",
+          "description": "Adversaries may abuse bind mounts on file structures to hide their activity and artifacts from native utilities. A bind mount maps a directory or file from one location on the filesystem to another, s",
+          "similarity": 0.5511
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1055",
+          "name": "Process Injection",
+          "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary code in the address spa",
+          "similarity": 0.5432
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1005",
+          "name": "Data from Local System",
+          "description": "Adversaries may search local system sources, such as file systems, configuration files, local databases, virtual machine files, or process memory, to find files of interest and sensitive data prior to",
+          "similarity": 0.5423
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for roblox_cookies_path sink. Data flows from a ControlFlowNode for Attribute() source into a ControlFlowNode for roblox_cookies_path sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for roblox_cookies_path sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for destination_path sink. Data flows from a ControlFlowNode for Attribute() source into a ControlFlowNode for destination_path sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for destination_path sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Attribute. Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: file_ops. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for roblox_cookies_path sink. Data flows from a ControlFlowNode for Attribute() source into a ControlFlowNode for roblox_cookies_path sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for roblox_cookies_path sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for destination_path sink. Data flows from a ControlFlowNode for Attribute() source into a ControlFlowNode for destination_path sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for destination_path sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Contributing data-flow nodes: ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Attribute; ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(); ControlFlowNode for Attribute. Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.91] Package: aiogram-3 | Tags: backdoor, spyware_infostealer | Category: file_ops | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (3d8dac0d1eb98dbfc0fe46cabeadb550699f5e41b5d033ded073f7572f450bf7)\nDuring installation or importing the module, the package starts a reverse shell to hardcoded locatiom\n\n\n\n- [0.91] Package: apache-flink-libraries | Tags: unclassified | Category: file_ops\n- [0.91] Package: apache-superset | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.55] MITRE ATT&CK [T1564.013]: Bind Mounts — Adversaries may abuse bind mounts on file structures to hide their activity and artifacts from nativ\n- [0.54] MITRE ATT&CK [T1055]: Process Injection — Adversaries may inject code into processes in order to evade process-based defenses as well as possi\n- [0.54] MITRE ATT&CK [T1005]: Data from Local System — Adversaries may search local system sources, such as file systems, configuration files, local databa\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package targets Roblox authentication cookies by searching for 'roblox_cookies_path', decrypting cookie values using 'decrypted_cookies.decode', base64 decoding data, and staging or copying files via 'shutil.copy'.",
+          "is_false_positive": false,
+          "false_positive_reason": "Searching for, decrypting, and copying local browser/Roblox cookies is explicit credential harvesting behavior with no legitimate utility in a benign software library."
+        },
+        "malware_similarity": {
+          "most_similar_package": "aiogram-3",
+          "similarity_score": 0.91,
+          "similarity_explanation": "Shares high structural similarity in sensitive file operations and local system data extraction patterns common to malicious PyPI/npm packages."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "MITRE ATT&CK T1005",
+            "policy_name": "Data from Local System",
+            "violation_reason": "Accesses and copies local system files containing sensitive Roblox cookie stores."
+          },
+          {
+            "policy_id": "MITRE ATT&CK T1552.001",
+            "policy_name": "Unsecured Credentials: Credentials In Files",
+            "violation_reason": "Extracts and decrypts stored user session credentials directly from local browser cookie stores."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "Reads and copies sensitive cookie files stored on the host filesystem."
+          },
+          {
+            "technique_id": "T1552.001",
+            "technique_name": "Unsecured Credentials: Credentials In Files",
+            "relevance": "Parses and decrypts stored Roblox session cookies from local files."
+          }
+        ],
+        "summary": "The package 'spaysdata' is a malicious infostealer targeting Roblox session credentials. Static analysis reveals that it searches for local Roblox cookie stores, decrypts cookie data, and copies the extracted credentials for exfiltration. Because accessing and decrypting browser session cookies serves no legitimate software purpose, this package presents a severe supply chain security risk and requires immediate removal.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 9,
+      "category": "crypto_obfuscation",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.4.0/spaysdata-0.4.0/main.py:28",
+      "top_malware_similarity": 0.9428,
+      "malware_matches": [
+        {
+          "package": "nse",
+          "similarity": 0.9428,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "nse",
+          "similarity": 0.9428,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "supersafepackage",
+          "similarity": 0.9148,
+          "attack_type_tags": [
+            "data_exfiltration",
+            "spyware_infostealer",
+            "typosquatting"
+          ],
+          "category": "crypto_obfuscation",
+          "campaign_preview": "7f8e0bcdaf6e05b06e79d963332ff8ff",
+          "description": "---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (3b979e1e2520c4f9d07507acc8182830203309adcb9932103a475d3e23e0de3f)\nGeneric campaign for all (likely) research / pentests, where the amount or art of collected data raises questions about the privacy, security and ethical side.\n\n\n---\n\nCategory: MALICIOUS - The campaign has clearly malicious intent, like infostealers.\n\n\nCampaign: GENERIC-questionable-pentest\n\n\nReasons (based on the campaign):\n\n\n - exfiltration-env-variables\n\n\n - exfiltration-generic\n\n\n - The package overrides the install command in setup.py to execute malicious code during installation.\n\n\n - typosquatting"
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation",
+          "name": "threat_runtime_obfuscation",
+          "description": "Detects heavy obfuscation techniques commonly used by malware",
+          "similarity": 0.6264
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress",
+          "name": "threat_runtime_obfuscation_log_suppress",
+          "description": "Detects log/console suppression combined with obfuscated code, a common malware evasion pattern",
+          "similarity": 0.6188
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_dynamic_eval",
+          "name": "threat_runtime_obfuscation_dynamic_eval",
+          "description": "Detects JavaScript payloads executed through eval/Function over a self-decoding wrapper or character-code/base64 decoded data",
+          "similarity": 0.6142
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for encoded_cookies sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (encoded_cookies) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for open(); ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(). Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: crypto_obfuscation. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for encoded_cookies sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (encoded_cookies) which must evaluate to true. Contributing data-flow nodes: ControlFlowNode for open(); ControlFlowNode for Attribute(); ControlFlowNode for StringLiteral; ControlFlowNode for Attribute(). Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.94] Package: nse | Tags: unclassified | Category: crypto_obfuscation\n- [0.94] Package: nse | Tags: unclassified | Category: crypto_obfuscation\n- [0.91] Package: supersafepackage | Tags: data_exfiltration, spyware_infostealer, typosquatting | Category: crypto_obfuscation | Analyst description: ---\n_-= Per source details. Do not edit below this line.=-_\n\n## Source: kam193 (3b979e1e2520c4f9d07507acc8182830203309adcb9932103a475d3e23e0de3f)\nGeneric campaign for all (likely) research / pentests, where the amount or art of collected data raises \n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.63] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation]: threat_runtime_obfuscation — Detects heavy obfuscation techniques commonly used by malware\n- [0.62] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_log_suppress]: threat_runtime_obfuscation_log_suppress — Detects log/console suppression combined with obfuscated code, a common malware evasion pattern\n- [0.61] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_dynamic_eval]: threat_runtime_obfuscation_dynamic_eval — Detects JavaScript payloads executed through eval/Function over a self-decoding wrapper or character\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The code extracts, copies, and decrypts browser session cookies and local data files using base64 decoding, JSON parsing, and file utilities like shutil.copy and os.path.exists.",
+          "is_false_positive": false,
+          "false_positive_reason": "The behavior involves targeting and decrypting browser cookies and local files, which is characteristic of an information stealer rather than legitimate utility functions."
+        },
+        "malware_similarity": {
+          "most_similar_package": "supersafepackage",
+          "similarity_score": 0.91,
+          "similarity_explanation": "Matches known infostealer patterns targeting credentials and browser session data using local file access and decoding routines."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_runtime_obfuscation",
+            "policy_name": "threat_runtime_obfuscation",
+            "violation_reason": "The code utilizes obfuscation and base64 decoding while accessing and processing sensitive credential stores."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1539",
+            "technique_name": "Steal Web Session Cookie",
+            "relevance": "The code explicitly targets, decrypts, and accesses stored web cookies from the host file system."
+          },
+          {
+            "technique_id": "T1005",
+            "technique_name": "Data from Local System",
+            "relevance": "The code searches local file paths and copies data files using shutil and os.path utilities."
+          },
+          {
+            "technique_id": "T1027",
+            "technique_name": "Obfuscated Files or Information",
+            "relevance": "Uses base64 decoding and encrypted cookie processing routines to obscure string and payload operations."
+          }
+        ],
+        "summary": "The package 'spaysdata' contains malicious infostealer functionality designed to access, copy, and decrypt stored browser session cookies and sensitive local files. The code leverages obfuscation tactics to conceal cookie extraction and manipulation, posing a direct threat to credential and session security. It is classified as MALICIOUS with an SSVC recommendation to ACT.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 10,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.4.0/spaysdata-0.4.0/main.py:33",
+      "top_malware_similarity": 0.92,
+      "malware_matches": [
+        {
+          "package": "mchypixel",
+          "similarity": 0.92,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "mchypixel",
+          "similarity": 0.9111,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "apihypixel",
+          "similarity": 0.9051,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_network_exfil_messenger",
+          "name": "threat_network_exfil_messenger",
+          "description": "Detects hardcoded messaging platform tokens/webhooks used for data exfiltration",
+          "similarity": 0.5975
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_network_exfil_sysinfo",
+          "name": "threat_network_exfil_sysinfo",
+          "description": "Detects system info collection combined with network exfiltration (hostname/user in HTTP requests)",
+          "similarity": 0.5354
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1567.004",
+          "name": "Exfiltration Over Webhook",
+          "description": "Adversaries may exfiltrate data to a webhook endpoint rather than over their primary command and control channel. Webhooks are simple mechanisms for allowing a server to push data over HTTP/S to a cli",
+          "similarity": 0.5148
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Dict sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (encoded_cookies) which must evaluate to true. Contributing data-flow nodes: ModuleVariableNode in Script main.py for webhook; ControlFlowNode for StringLiteral; Entry definition for SsaSourceVariable webhook; ControlFlowNode for StringLiteral; ControlFlowNode for Dict; ControlFlowNode for webhook. Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Dict sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (encoded_cookies) which must evaluate to true. Contributing data-flow nodes: ModuleVariableNode in Script main.py for webhook; ControlFlowNode for StringLiteral; Entry definition for SsaSourceVariable webhook; ControlFlowNode for StringLiteral; ControlFlowNode for Dict; ControlFlowNode for webhook. Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.92] Package: mchypixel | Tags: unclassified | Category: network\n- [0.91] Package: mchypixel | Tags: unclassified | Category: network\n- [0.91] Package: apihypixel | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.60] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_network_exfil_messenger]: threat_network_exfil_messenger — Detects hardcoded messaging platform tokens/webhooks used for data exfiltration\n- [0.54] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_network_exfil_sysinfo]: threat_network_exfil_sysinfo — Detects system info collection combined with network exfiltration (hostname/user in HTTP requests)\n- [0.51] MITRE ATT&CK [T1567.004]: Exfiltration Over Webhook — Adversaries may exfiltrate data to a webhook endpoint rather than over their primary command and con\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.95,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The code retrieves local browser files and session cookies, decrypts/decodes them, and exfiltrates the sensitive cookie data via an HTTP webhook.",
+          "is_false_positive": false,
+          "false_positive_reason": "Exfiltrating decrypted local browser cookies and system information to a hardcoded webhook is explicit credential theft behavior unrelated to legitimate data processing utilities."
+        },
+        "malware_similarity": {
+          "most_similar_package": "mchypixel",
+          "similarity_score": 0.92,
+          "similarity_explanation": "Extremely high structural and flow similarity with mchypixel and apihypixel, sharing identical control flows for harvesting local session artifacts and sending them to remote webhooks."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_network_exfil_messenger",
+            "policy_name": "Detects hardcoded messaging platform tokens/webhooks used for data exfiltration",
+            "violation_reason": "The code uses hardcoded webhook URLs to exfiltrate collected cookie data to a remote messaging endpoint."
+          },
+          {
+            "policy_id": "GUARDDOG-YARA-threat_network_exfil_sysinfo",
+            "policy_name": "Detects system info collection combined with network exfiltration",
+            "violation_reason": "The code extracts sensitive local system and browser information and sends it across the network."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1567.004",
+            "technique_name": "Exfiltration Over Webhook",
+            "relevance": "Data extracted from local files and decrypted cookies is transmitted via an HTTP webhook sink."
+          },
+          {
+            "technique_id": "T1539",
+            "technique_name": "Steal Web Session Cookie",
+            "relevance": "The package specifically searches for, decodes, and steals encoded/decrypted cookies from local storage."
+          }
+        ],
+        "summary": "The package 'spaysdata' is a malicious credential stealer. It accesses local system directories to locate, decode, and extract browser cookies and sensitive files, then exfiltrates the harvested data to an external webhook. This behavior closely matches established malware samples like 'mchypixel' and violates policies prohibiting webhook exfiltration and unauthorized credential access.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 11,
+      "category": "network",
+      "flow_boundary": "App-Internal",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.4.0/spaysdata-0.4.0/main.py:35",
+      "top_malware_similarity": 0.9212,
+      "malware_matches": [
+        {
+          "package": "mchypixel",
+          "similarity": 0.9212,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "mchypixel",
+          "similarity": 0.9177,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "gptall",
+          "similarity": 0.9103,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "network",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_network_exfil_messenger",
+          "name": "threat_network_exfil_messenger",
+          "description": "Detects hardcoded messaging platform tokens/webhooks used for data exfiltration",
+          "similarity": 0.5857
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_network_exfil_sysinfo",
+          "name": "threat_network_exfil_sysinfo",
+          "description": "Detects system info collection combined with network exfiltration (hostname/user in HTTP requests)",
+          "similarity": 0.5202
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_network_reverse_shell",
+          "name": "threat_network_reverse_shell",
+          "description": "Detects reverse shell patterns and remote access tools",
+          "similarity": 0.5049
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Dict sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (encoded_cookies) which must evaluate to true. Contributing data-flow nodes: ModuleVariableNode in Script main.py for webhook; ControlFlowNode for StringLiteral; Entry definition for SsaSourceVariable webhook; ControlFlowNode for Subscript; ControlFlowNode for Attribute(); ControlFlowNode for webhook; ControlFlowNode for Attribute(); ControlFlowNode for Dict; ControlFlowNode for webhook. Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: spaysdata\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: network. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: App-Internal. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for webhook sink. Data flows from a ControlFlowNode for StringLiteral source into a ControlFlowNode for Dict sink. Execution is gated by a condition (UnaryExpr) which must evaluate to false. Execution is gated by a condition (encoded_cookies) which must evaluate to true. Contributing data-flow nodes: ModuleVariableNode in Script main.py for webhook; ControlFlowNode for StringLiteral; Entry definition for SsaSourceVariable webhook; ControlFlowNode for Subscript; ControlFlowNode for Attribute(); ControlFlowNode for webhook; ControlFlowNode for Attribute(); ControlFlowNode for Dict; ControlFlowNode for webhook. Calls external/library functions: base64.b64decode, decrypted_cookies.decode, file_content.get, json.load, open, os.getenv, os.path.exists, os.path.join, print, shutil.copy.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.92] Package: mchypixel | Tags: unclassified | Category: network\n- [0.92] Package: mchypixel | Tags: unclassified | Category: network\n- [0.91] Package: gptall | Tags: unclassified | Category: network\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.59] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_network_exfil_messenger]: threat_network_exfil_messenger — Detects hardcoded messaging platform tokens/webhooks used for data exfiltration\n- [0.52] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_network_exfil_sysinfo]: threat_network_exfil_sysinfo — Detects system info collection combined with network exfiltration (hostname/user in HTTP requests)\n- [0.50] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_network_reverse_shell]: threat_network_reverse_shell — Detects reverse shell patterns and remote access tools\n\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "MALICIOUS",
+        "confidence": 0.98,
+        "ssvc_decision": "ACT",
+        "reasoning": {
+          "code_intent": "The package reads and decrypts stored browser cookies (`decrypted_cookies`, `encoded_cookies`) and exfiltrates them via an outbound webhook connection.",
+          "is_false_positive": false,
+          "false_positive_reason": "Decrypting browser cookies and exfiltrating them over webhooks is unambiguous credential theft/malicious behavior and serves no standard software utility."
+        },
+        "malware_similarity": {
+          "most_similar_package": "mchypixel",
+          "similarity_score": 0.92,
+          "similarity_explanation": "Exhibits near-identical network exfiltration flows and local data harvesting routines as known malicious token and cookie stealers."
+        },
+        "policy_violations": [
+          {
+            "policy_id": "GUARDDOG-YARA-threat_network_exfil_messenger",
+            "policy_name": "threat_network_exfil_messenger",
+            "violation_reason": "The code uses hardcoded webhooks to exfiltrate harvested sensitive data to an external platform."
+          },
+          {
+            "policy_id": "GUARDDOG-YARA-threat_network_exfil_sysinfo",
+            "policy_name": "threat_network_exfil_sysinfo",
+            "violation_reason": "System/user credentials and cookies are extracted from local storage and transmitted over the network."
+          }
+        ],
+        "mitre_mapping": [
+          {
+            "technique_id": "T1539",
+            "technique_name": "Steal Web Session Cookie",
+            "relevance": "The package locates, decrypts, and extracts browser cookies from the local filesystem."
+          },
+          {
+            "technique_id": "T1041",
+            "technique_name": "Exfiltration Over C2 Channel",
+            "relevance": "Extracted cookie data is posted directly to a remote webhook sink."
+          }
+        ],
+        "summary": "The package 'spaysdata' is malicious software designed as a credential and cookie stealer. Static analysis reveals that the code locates stored browser cookies, decrypts them (`decrypted_cookies`), and exfiltrates the sensitive session data via a webhook endpoint. Given the intent to steal credentials and high similarity to known malicious stealers, this package poses an immediate security risk.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}

@@ -1,0 +1,183 @@
+{
+  "package_name": "ffmpy",
+  "prompt_version": "v7",
+  "analysis_timestamp": "2026-09-17T05:00:34",
+  "final_verdict": "BENIGN",
+  "total_chains_analyzed": 2,
+  "malicious_chains": 0,
+  "suspicious_chains": 0,
+  "chain_details": [
+    {
+      "chain_index": 0,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for Attribute()",
+      "location": "0.3.1/tar-gz/ffmpy.py:95",
+      "top_malware_similarity": 0.8952,
+      "malware_matches": [
+        {
+          "package": "shelljob",
+          "similarity": 0.8952,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "etherapi",
+          "similarity": 0.882,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "request-supporter",
+          "similarity": 0.8813,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.5369
+        },
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_process_memory",
+          "name": "threat_process_memory",
+          "description": "Detects memory scraping and credential dumping from process memory",
+          "similarity": 0.5055
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.5039
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ModuleVariableNode in Module ffmpy for None; ControlFlowNode for None; ControlFlowNode for stdout; ControlFlowNode for stderr; ControlFlowNode for env; ControlFlowNode for Attribute; ControlFlowNode for Attribute. Calls external/library functions: <complex_expr>.__init__, <complex_expr>.decode, <complex_expr>.format, FFExecutableNotFoundError, args_opts_dict.items, hasattr, isinstance, merged.append, self.process.communicate, shlex.split.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ffmpy\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for Attribute(). Flow boundary: Unknown. Contributing data-flow nodes: ModuleVariableNode in Module ffmpy for None; ControlFlowNode for None; ControlFlowNode for stdout; ControlFlowNode for stderr; ControlFlowNode for env; ControlFlowNode for Attribute; ControlFlowNode for Attribute. Calls external/library functions: <complex_expr>.__init__, <complex_expr>.decode, <complex_expr>.format, FFExecutableNotFoundError, args_opts_dict.items, hasattr, isinstance, merged.append, self.process.communicate, shlex.split.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.90] Package: shelljob | Tags: unclassified | Category: process_exec\n- [0.88] Package: etherapi | Tags: unclassified | Category: file_ops\n- [0.88] Package: request-supporter | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.54] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.51] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_process_memory]: threat_process_memory — Detects memory scraping and credential dumping from process memory\n- [0.50] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n\n\n[CRITICAL CONTEXT]: This package has been flagged as 'TYPOSQUATTING'. It mimics the legitimate package 'numpy' (edit distance: 2). Typosquatting is a known supply chain attack vector.\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code constructs command-line invocation strings, formats options, and executes the external FFmpeg executable using process execution (self.process.communicate) while handling errors like FFExecutableNotFoundError.",
+          "is_false_positive": true,
+          "false_positive_reason": "ffmpy is a legitimate Python wrapper for the FFmpeg command-line tool. The process execution flow using shlex and subprocess is standard and essential for its documented purpose. The typosquatting alert comparing 'ffmpy' to 'numpy' is a false positive caused purely by string edit distance heuristics."
+        },
+        "malware_similarity": {
+          "most_similar_package": "shelljob",
+          "similarity_score": 0.9,
+          "similarity_explanation": "The similarity is based on generic process execution code shapes (managing process execution and decoding output), which is standard behavior for process management libraries and wrappers."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "ffmpy is a legitimate Python wrapper for the FFmpeg command-line multimedia tool. Static analysis flagged process execution routines (`self.process.communicate`, `shlex.split`, `FFExecutableNotFoundError`), which represent the package's primary and intended functionality. The typosquatting alert against 'numpy' is an automated false positive based solely on string distance.",
+        "model_used": "gemini-3.6-flash"
+      }
+    },
+    {
+      "chain_index": 1,
+      "category": "process_exec",
+      "flow_boundary": "Unknown",
+      "sensitive_api": "ControlFlowNode for popen()",
+      "location": "vendor/ffmpy/ffmpy.py:112",
+      "top_malware_similarity": 0.8646,
+      "malware_matches": [
+        {
+          "package": "shelljob",
+          "similarity": 0.8646,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "process_exec",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "etherapi",
+          "similarity": 0.8601,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        },
+        {
+          "package": "useragentclient",
+          "similarity": 0.8597,
+          "attack_type_tags": [
+            "unclassified"
+          ],
+          "category": "file_ops",
+          "campaign_preview": "",
+          "description": ""
+        }
+      ],
+      "policy_matches": [
+        {
+          "source": "GuardDog (Datadog) Detection Rules",
+          "id": "GUARDDOG-YARA-threat_runtime_obfuscation_import_exec",
+          "name": "threat_runtime_obfuscation_import_exec",
+          "description": "Detects dynamic import chains used to obfuscate code execution",
+          "similarity": 0.4984
+        },
+        {
+          "source": "Threat Hunting Heuristics (custom)",
+          "id": "HEUR-06",
+          "name": "System Profiling & Fingerprinting",
+          "description": "The script excessively collects system information (OS version, hostname, MAC address, running processes) before executing its main payload.",
+          "similarity": 0.4801
+        },
+        {
+          "source": "MITRE ATT&CK",
+          "id": "T1059.006",
+          "name": "Python",
+          "description": "Adversaries may abuse Python commands and scripts for execution. Python is a very popular scripting/programming language, with capabilities to perform many functions. Python can be executed interactiv",
+          "similarity": 0.4739
+        }
+      ],
+      "pre_verdict": "MATCHES_KNOWN_MALWARE",
+      "behavior_text": "Malware behavior category: process_exec. Sensitive API involved: ControlFlowNode for popen(). Flow boundary: Unknown. Contributing data-flow nodes: ModuleVariableNode in Module ffmpy.ffmpy for None; ControlFlowNode for None; ControlFlowNode for stdout; ControlFlowNode for None; ControlFlowNode for stderr; ControlFlowNode for None; ControlFlowNode for env; ControlFlowNode for Attribute. Calls external/library functions: <complex_expr>.__init__, <complex_expr>.format, FFExecutableNotFoundError, args_opts_dict.items, isinstance, itertools.chain, list, merged.append, popen, self.process.communicate.",
+      "prompt_for_llm": "You are a Senior Cybersecurity Analyst specializing in software supply chain threats.\nYou must evaluate the following Python/npm package for malicious intent using the SSVC framework.\n\n═══════════════════════════════════════════════════════\nPACKAGE UNDER ANALYSIS: ffmpy\n═══════════════════════════════════════════════════════\n\nSECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):\nMalware behavior category: process_exec. Sensitive API involved: ControlFlowNode for popen(). Flow boundary: Unknown. Contributing data-flow nodes: ModuleVariableNode in Module ffmpy.ffmpy for None; ControlFlowNode for None; ControlFlowNode for stdout; ControlFlowNode for None; ControlFlowNode for stderr; ControlFlowNode for None; ControlFlowNode for env; ControlFlowNode for Attribute. Calls external/library functions: <complex_expr>.__init__, <complex_expr>.format, FFExecutableNotFoundError, args_opts_dict.items, isinstance, itertools.chain, list, merged.append, popen, self.process.communicate.\n\nSECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top 3 matches):\n- [0.86] Package: shelljob | Tags: unclassified | Category: process_exec\n- [0.86] Package: etherapi | Tags: unclassified | Category: file_ops\n- [0.86] Package: useragentclient | Tags: unclassified | Category: file_ops\n\nSECTION 3 — RELEVANT SECURITY POLICIES (top 3 matches):\n- [0.50] GuardDog (Datadog) Detection Rules [GUARDDOG-YARA-threat_runtime_obfuscation_import_exec]: threat_runtime_obfuscation_import_exec — Detects dynamic import chains used to obfuscate code execution\n- [0.48] Threat Hunting Heuristics (custom) [HEUR-06]: System Profiling & Fingerprinting — The script excessively collects system information (OS version, hostname, MAC address, running proce\n- [0.47] MITRE ATT&CK [T1059.006]: Python — Adversaries may abuse Python commands and scripts for execution. Python is a very popular scripting/\n\n\n[CRITICAL CONTEXT]: This package has been flagged as 'TYPOSQUATTING'. It mimics the legitimate package 'numpy' (edit distance: 2). Typosquatting is a known supply chain attack vector.\n\n\n═══════════════════════════════════════════════════════\nCHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:\n═══════════════════════════════════════════════════════\n\nSTEP 1 — CODE INTENT ANALYSIS:\nExamine the code behavior in Section 1. What is the code actually doing?\nIs this behavior consistent with the package's stated purpose, or is it\nanomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,\nobfuscated strings, and network calls at import time.\n\nSTEP 2 — FALSE POSITIVE CHECK:\nCRITICAL: Legitimate packages often use subprocess, exec(), socket, or\nfile I/O for standard build scripts, testing, or API features. If the\ndetected flow is clearly standard library functionality, well-documented\nbenign build tooling, or normal operations UNAMBIGUOUSLY consistent with\nthe package's stated purpose (e.g., an SSH library making SSH connections,\na cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,\ndo NOT default to FALSE POSITIVE merely because the API usage pattern is\ncommon or the package name sounds legitimate — a common API used for a\npurpose UNRELATED to the package's stated function (e.g., unexpected\noutbound network calls, credential access, or process execution with no\nconnection to any documented feature) remains a valid signal of malicious\nintent, even if each individual API call looks unremarkable in isolation.\nIMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns\nsuch as \"base64 decode + dynamic __import__/exec\" or \"extract a value from\nincoming data + make an outbound request\" are extremely common in\nlegitimate code (plugin/lazy-loading systems, compressed asset or config\ndecoding, webhook/event handlers, feature flags) and appear near-identically\nacross thousands of unrelated packages. A high similarity score to Section 2\nbuilt ONLY on this kind of generic shape — especially when the matched\nneighbor itself has no specific attack-type tag or analyst description\nconfirming what it actually does — is weak evidence on its own. Weigh it\nagainst the package's real, well-established purpose: for a package that is\none of the most widely used, foundational tools in its ecosystem (e.g. a\nmajor testing framework, container/orchestration client, or database\ndriver), a single structurally-generic match is NOT sufficient grounds for\nMALICIOUS — look for something SPECIFIC to this package's actual behavior\n(concrete evidence of what the decoded/fetched content is used for, an\ninstall-time hook, credential harvesting, etc.) before concluding malicious\nintent for such a package.\n\nSTEP 3 — MALWARE SIMILARITY ASSESSMENT:\nCompare with the known malware samples in Section 2. How structurally\nsimilar is this code to known-malicious behavior? Consider: Are the data\nflows (source → sink) analogous? Is the control flow pattern (gating\nconditions) similar? Or is the similarity superficial (both use sockets,\nbut for entirely different purposes)? IMPORTANT: a high similarity score\n(above ~0.90) to a matched sample remains meaningful evidence even when\nthat sample's own attack-type tag is \"unclassified\" — many confirmed\nmalicious samples in this dataset lack a specific label for data-sourcing\nreasons unrelated to severity. Do not discount a strong structural match\nsolely because the matched neighbor's tag is generic.\n\nSTEP 4 — POLICY VIOLATION ANALYSIS:\nCheck each policy in Section 3. Does this code violate any of these\nsecurity policies? If so, which specific policy and why?\n\nSTEP 5 — MITRE ATT&CK MAPPING:\nIf the behavior appears malicious, map it to the most relevant MITRE\nATT&CK technique(s). Consider: T1059 (Command Execution), T1071\n(Application Layer Protocol), T1005 (Data from Local System),\nT1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.\n\nSTEP 6 — SSVC RISK ASSESSMENT:\nApply the SSVC decision framework:\n- Exploitation: Is this automatable? (yes/no)\n- Technical Impact: partial or total?\n- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)\nWhen the evidence is suggestive but not fully conclusive (e.g., moderate-\nto-high similarity with plausible but not certain malicious intent),\nprefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case\nfor review is preferable to silently missing a genuine threat. Reserve\nBENIGN/TRACK for cases where the false-positive explanation from STEP 2\nis clear and well-supported by the code's stated purpose.\n\n═══════════════════════════════════════════════════════\nOUTPUT — Respond ONLY with a valid JSON object:\n═══════════════════════════════════════════════════════\n\n{\n  \"verdict\": \"MALICIOUS | SUSPICIOUS | BENIGN\",\n  \"confidence\": 0.0,\n  \"ssvc_decision\": \"TRACK | TRACK* | ATTEND | ACT\",\n  \"reasoning\": {\n    \"code_intent\": \"Brief description of what the code does\",\n    \"is_false_positive\": true,\n    \"false_positive_reason\": \"Why this is/isn't a false positive\"\n  },\n  \"malware_similarity\": {\n    \"most_similar_package\": \"package_name or null\",\n    \"similarity_score\": 0.0,\n    \"similarity_explanation\": \"Why the behavior matches/doesn't match\"\n  },\n  \"policy_violations\": [\n    {\n      \"policy_id\": \"e.g., CWE-94 or OWASP-CICD-SEC-3\",\n      \"policy_name\": \"Name of violated policy\",\n      \"violation_reason\": \"Why this code violates this policy\"\n    }\n  ],\n  \"mitre_mapping\": [\n    {\n      \"technique_id\": \"e.g., T1059.006\",\n      \"technique_name\": \"e.g., Command and Scripting Interpreter: Python\",\n      \"relevance\": \"How this behavior maps to this technique\"\n    }\n  ],\n  \"summary\": \"One-paragraph human-readable summary for the security report\"\n}",
+      "prompt_version": "v7",
+      "llm_evaluation": {
+        "verdict": "BENIGN",
+        "confidence": 0.95,
+        "ssvc_decision": "TRACK",
+        "reasoning": {
+          "code_intent": "The code acts as a wrapper around the FFmpeg command-line utility, using subprocess/popen calls to execute FFmpeg commands and manage standard I/O streams.",
+          "is_false_positive": true,
+          "false_positive_reason": "Process execution via popen and handling process communicate calls are expected core behaviors for ffmpy, a legitimate FFmpeg wrapper library. The typosquatting alert comparing 'ffmpy' to 'numpy' is a false positive based strictly on generic edit distance heuristics."
+        },
+        "malware_similarity": {
+          "most_similar_package": "shelljob",
+          "similarity_score": 0.86,
+          "similarity_explanation": "The similarity is based entirely on generic process execution code shapes (subprocess/popen calls), which are standard in shell/process execution utilities."
+        },
+        "policy_violations": [],
+        "mitre_mapping": [],
+        "summary": "The package 'ffmpy' is a widely used legitimate Python wrapper for the FFmpeg multimedia framework. The detected process execution via popen() is required to invoke the external FFmpeg executable and is entirely consistent with the package's stated purpose. The automated typosquatting warning against 'numpy' is a false positive generated by string distance algorithms.",
+        "model_used": "gemini-3.6-flash"
+      }
+    }
+  ]
+}
