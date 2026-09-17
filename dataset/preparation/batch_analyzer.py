@@ -6,16 +6,20 @@ import tarfile
 import zipfile
 import signal
 import glob
+import time
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
-_DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
-_DEDUPED_JSON = os.path.join(_DATASET_DIR, "malware_dataset_deduped.json")
-_MATCHED_JSON = os.path.join(_DATASET_DIR, "malware_dataset_matched.json")
+_DEDUPED_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_deduped.json"
+_MATCHED_JSON = "/home/sklavenitis/thesis/dataset/malware_dataset_matched.json"
 DATASET_JSON = _DEDUPED_JSON if os.path.exists(_DEDUPED_JSON) else _MATCHED_JSON
-FINAL_JSON_DIR = os.path.join(_DATASET_DIR, "analyzed_chains")
+FINAL_JSON_DIR = "/home/sklavenitis/thesis/dataset/analyzed_chains"
 
-STAGING_DIR = os.path.join(_THESIS_ROOT, "temp_malware_analysis")
-PIPELINE_DIR = os.path.join(_THESIS_ROOT, "inference", "codeql_pipeline")
+# ΝΕΟ: STAGING_DIR μπορεί τώρα να δείχνει οπουδήποτε (π.χ. σε στικάκι με
+# άφθονο ελεύθερο χώρο), μέσω env var - χρήσιμο όταν ο κύριος δίσκος δεν
+# έχει άλλο χώρο. Χωρίς να οριστεί, συνεχίζει να δουλεύει όπως πριν.
+STAGING_DIR = os.environ.get(
+    "BATCH_STAGING_DIR", "/home/sklavenitis/thesis/temp_malware_analysis"
+)
+PIPELINE_DIR = "/home/sklavenitis/thesis/inference/codeql_pipeline"
 PIPELINE_RESULTS_DIR = os.path.join(PIPELINE_DIR, "results")
 
 ANALYSIS_SCRIPT = os.path.join(PIPELINE_DIR, "analysis.py")
@@ -23,6 +27,12 @@ BUILD_SCRIPT = os.path.join(PIPELINE_DIR, "build_behavior_chain.py")
 RESULTS_JSON = os.path.join(PIPELINE_RESULTS_DIR, "sliced_behavior_chain.json")
 
 MAX_EXTRACT_PASSES = 3
+# ΝΕΟ: configurable μέσω env var, ώστε να μπορείς να τα μειώσεις άμεσα
+# (χωρίς αλλαγή κώδικα) όταν θες να "τρέξεις γρήγορα" το τελευταίο
+# κομμάτι ενός μεγάλου corpus - τα περισσότερα φυσιολογικά πακέτα
+# τελειώνουν σε δευτερόλεπτα, μόνο τα προβληματικά φτάνουν στο πλήρες όριο.
+ANALYSIS_TIMEOUT = int(os.environ.get("BATCH_ANALYSIS_TIMEOUT", "300"))
+BUILD_TIMEOUT = int(os.environ.get("BATCH_BUILD_TIMEOUT", "90"))
 MAX_STAGING_SIZE_MB = 50
 MAX_STAGING_SIZE_BYTES = MAX_STAGING_SIZE_MB * 1024 * 1024
 MAX_SINGLE_FILE_SIZE = 100 * 1024 * 1024
@@ -52,6 +62,27 @@ def get_dir_size(path):
             except OSError:
                 pass
     return total
+
+
+def get_dir_size_capped(path, cap_bytes):
+    """
+    ΝΕΟ: μετράει το μέγεθος ΠΡΙΝ οποιαδήποτε αντιγραφή, σταματώντας νωρίς
+    μόλις ξεπεραστεί το όριο - αποφεύγει να διαβάσει ΟΛΟΚΛΗΡΟ έναν τεράστιο
+    φάκελο μόνο και μόνο για να μετρήσει το μέγεθός του. Επιστρέφει το
+    μέγεθος (μπορεί να είναι ελαφρώς υποεκτιμημένο αν σταμάτησε νωρίς) και
+    True/False αν ξεπέρασε το cap.
+    """
+    total = 0
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            fp = os.path.join(root, f)
+            try:
+                total += os.path.getsize(fp)
+            except OSError:
+                pass
+            if total > cap_bytes:
+                return total, True
+    return total, False
 
 
 def run_with_hard_timeout(cmd, timeout, **kwargs):
@@ -86,9 +117,25 @@ def run_with_hard_timeout(cmd, timeout, **kwargs):
 def clean_staging():
     assert STAGING_DIR.endswith("temp_malware_analysis"), \
         f"Refusing to rmtree unexpected path: {STAGING_DIR}"
+
+    # ΝΕΟ FIX: σπάνιο race condition (πιθανό υπολειπόμενη διεργασία γράφει
+    # μέσα σε 'vendor/' ακριβώς τη στιγμή που γίνεται rmtree) μπορούσε να
+    # ρίξει ολόκληρο το batch_analyzer.py με OSError "Directory not empty".
+    # Retry με μικρή καθυστέρηση - αν επιμείνει, ignore_errors ώστε ΕΝΑ
+    # πεισματάρικο πακέτο να μη σταματήσει χιλιάδες υπόλοιπα.
     if os.path.exists(STAGING_DIR):
-        shutil.rmtree(STAGING_DIR)
-    os.makedirs(STAGING_DIR)
+        for attempt in range(3):
+            try:
+                shutil.rmtree(STAGING_DIR)
+                break
+            except OSError as e:
+                if attempt < 2:
+                    print(f"  [!] rmtree retry ({e}) - περιμένω 1s...")
+                    time.sleep(1)
+                else:
+                    print(f"  [!] rmtree απέτυχε 3 φορές, συνεχίζω με ignore_errors: {e}")
+                    shutil.rmtree(STAGING_DIR, ignore_errors=True)
+    os.makedirs(STAGING_DIR, exist_ok=True)
 
     if os.path.exists(RESULTS_JSON):
         os.remove(RESULTS_JSON)
@@ -99,6 +146,22 @@ def clean_staging():
     for pattern in CSV_GLOB_PATTERNS:
         for stale_csv in glob.glob(os.path.join(PIPELINE_RESULTS_DIR, pattern)):
             os.remove(stale_csv)
+
+    # ΝΕΟ: καθάρισε ΠΑΛΙΟΥΣ (30+ λεπτά) προσωρινούς φακέλους του ίδιου του
+    # pip (pip-unpack-*, pip-target-*) μέσα στο /tmp. Όταν το run_with_hard_
+    # timeout() στέλνει SIGKILL σε αργή εγκατάσταση εξάρτησης, το pip ΔΕΝ
+    # προλαβαίνει να καθαρίσει τους δικούς του temp φακέλους (SIGKILL δεν
+    # πιάνεται) - χωρίς αυτό εδώ, αυτό συσσωρεύεται σε δεκάδες GB μέσα σε
+    # χιλιάδες πακέτα. Το +30 λεπτά αφήνει ανέγγιχτο ό,τι πιθανό
+    # χρησιμοποιεί ΤΩΡΑ ένα ενεργό, τρέχον install.
+    cutoff = time.time() - 30 * 60
+    for prefix in ("pip-unpack-", "pip-target-"):
+        for stale_dir in glob.glob(f"/tmp/{prefix}*"):
+            try:
+                if os.path.getmtime(stale_dir) < cutoff:
+                    shutil.rmtree(stale_dir, ignore_errors=True)
+            except OSError:
+                pass
 
 
 def copy_recursive(src_dir, dest_dir):
@@ -140,6 +203,18 @@ def _safe_zip_extract(zf, dest_path):
         zf.extract(info, dest_path)
 
 
+def _try_extract_as_tar(fpath, root):
+    # "r:*" αυτόματα ανιχνεύει gzip/bz2/xz/χωρίς συμπίεση - πιο ανθεκτικό
+    # από το πριν "r:gz" (που απαιτούσε ΑΠΟΚΛΕΙΣΤΙΚΑ gzip).
+    with tarfile.open(fpath, "r:*") as tar:
+        _safe_tar_extract(tar, root)
+
+
+def _try_extract_as_zip(fpath, root):
+    with zipfile.ZipFile(fpath, "r") as z:
+        _safe_zip_extract(z, root)
+
+
 def extract_archives(directory):
     for _ in range(MAX_EXTRACT_PASSES):
         found_archive = False
@@ -147,24 +222,36 @@ def extract_archives(directory):
             for fname in files:
                 fpath = os.path.join(root, fname)
                 lower = fname.lower()
-                try:
-                    if lower.endswith((".tar.gz", ".tgz")):
-                        with tarfile.open(fpath, "r:gz") as tar:
-                            _safe_tar_extract(tar, root)
-                        os.remove(fpath)
-                        found_archive = True
-                    elif lower.endswith(".tar"):
-                        with tarfile.open(fpath, "r:") as tar:
-                            _safe_tar_extract(tar, root)
-                        os.remove(fpath)
-                        found_archive = True
-                    elif lower.endswith((".zip", ".whl")):
-                        with zipfile.ZipFile(fpath, "r") as z:
-                            _safe_zip_extract(z, root)
-                        os.remove(fpath)
-                        found_archive = True
-                except Exception as e:
-                    print(f"  [!] Αδυναμία αποσυμπίεσης {fname}: {e}")
+
+                if not lower.endswith((".tar.gz", ".tgz", ".tar", ".zip", ".whl")):
+                    continue
+
+                # ΝΕΟ FIX: μερικά αρχεία στο πηγαίο dataset έχουν ΛΑΘΟΣ
+                # επέκταση (π.χ. πραγματικό .whl αποθηκευμένο ως ".tar.gz" -
+                # δίνει "not a gzip file"). Δοκιμάζουμε ΠΡΩΤΑ τη μέθοδο που
+                # υποδεικνύει η επέκταση, και αν αποτύχει με σφάλμα ΜΟΡΦΗΣ,
+                # δοκιμάζουμε την ΑΛΛΗ πριν τα παρατήσουμε εντελώς.
+                prefers_tar = lower.endswith((".tar.gz", ".tgz", ".tar"))
+                strategies = (
+                    [_try_extract_as_tar, _try_extract_as_zip] if prefers_tar
+                    else [_try_extract_as_zip, _try_extract_as_tar]
+                )
+
+                extracted = False
+                last_error = None
+                for strategy in strategies:
+                    try:
+                        strategy(fpath, root)
+                        extracted = True
+                        break
+                    except Exception as e:
+                        last_error = e
+
+                if extracted:
+                    os.remove(fpath)
+                    found_archive = True
+                else:
+                    print(f"  [!] Αδυναμία αποσυμπίεσης {fname} (δοκιμάστηκαν tar ΚΑΙ zip): {last_error}")
         if not found_archive:
             break
 
@@ -187,14 +274,61 @@ def main():
         src_path = item["source_code_path"]
         final_dest = os.path.join(FINAL_JSON_DIR, f"{pkg_name}.json")
 
+        oversized_marker = os.path.join(FINAL_JSON_DIR, f"_oversized_{pkg_name}.marker")
+        # ΝΕΟ: ξεχωριστό marker για ΟΠΟΙΑΔΗΠΟΤΕ άλλη αποτυχία (timeout,
+        # σφάλμα CodeQL/Builder, κενό αποτέλεσμα) - πριν, ΚΑΝΕΝΑ από αυτά
+        # δεν άφηνε μόνιμο ίχνος, οπότε ΚΑΘΕ restart ξαναπερίμενε ολόκληρο
+        # το timeout (μέχρι 10 λεπτά) στα ΙΔΙΑ πακέτα, ξανά και ξανά.
+        failed_marker = os.path.join(FINAL_JSON_DIR, f"_failed_{pkg_name}.marker")
+
         if os.path.exists(final_dest):
             print(f"[{idx+1}/{total}] Παράλειψη (έχει ήδη αναλυθεί): {pkg_name}")
             skipped += 1
             continue
 
-        free_gb = shutil.disk_usage(FINAL_JSON_DIR).free / (1024 ** 3)
+        # ΝΕΟ: αν ήδη ξέρουμε από προηγούμενο run ότι είναι πολύ μεγάλο,
+        # μην το ξαναδοκιμάσεις καθόλου - ΧΩΡΙΣ αυτό, κάθε μελλοντικό run
+        # θα ξανααντέγραφε/ξαναμετρούσε το ίδιο τεράστιο πακέτο για πάντα.
+        if os.path.exists(oversized_marker):
+            print(f"[{idx+1}/{total}] Παράλειψη (γνωστό ως πολύ μεγάλο): {pkg_name}")
+            skipped += 1
+            continue
+
+        if os.path.exists(failed_marker):
+            print(f"[{idx+1}/{total}] Παράλειψη (γνωστή προηγούμενη αποτυχία): {pkg_name}")
+            skipped += 1
+            continue
+
+        # ΝΕΟ: γρήγορος έλεγχος μεγέθους ΤΗΣ ΠΗΓΗΣ πριν από ΟΠΟΙΑΔΗΠΟΤΕ
+        # αντιγραφή - αν είναι ήδη προφανώς τεράστιο, μην το αντιγράψεις
+        # καν (γλιτώνει χρόνο ΚΑΙ χώρο δίσκου). Δεν είναι 100% ακριβές
+        # (η αποσυμπίεση μπορεί να το μεγαλώσει/μικρύνει), αλλά πιάνει τις
+        # προφανείς περιπτώσεις φθηνά - ο μετά-αποσυμπίεσης έλεγχος παρακάτω
+        # παραμένει ως τελικό, ακριβές φίλτρο.
+        if os.path.exists(src_path):
+            src_size, src_over = get_dir_size_capped(src_path, MAX_STAGING_SIZE_BYTES)
+            if src_over:
+                print(f"[{idx+1}/{total}] Παράλειψη ΠΡΙΝ την αντιγραφή "
+                      f"(πηγή ήδη >{MAX_STAGING_SIZE_MB}MB): {pkg_name}")
+                with open(oversized_marker, "w", encoding="utf-8") as f:
+                    f.write(f"source_size_at_least={src_size}\n")
+                failed += 1
+                continue
+
+        # ΝΕΟ FIX: έλεγχος ΚΑΙ των δύο δίσκων (όχι μόνο του FINAL_JSON_DIR) -
+        # αν το STAGING_DIR έχει ανακατευθυνθεί (π.χ. σε στικάκι μέσω
+        # BATCH_STAGING_DIR), πρέπει να ελέγχουμε ΚΑΙ εκεί. Χωρίς αυτό, ένα
+        # redirect δεν βοηθάει καθόλου - ο έλεγχος έβλεπε ΠΑΝΤΑ μόνο τον
+        # κύριο δίσκο όπου ζει το FINAL_JSON_DIR, ανεξάρτητα από πού
+        # δείχνει πραγματικά το staging.
+        final_free_gb = shutil.disk_usage(FINAL_JSON_DIR).free / (1024 ** 3)
+        staging_disk_path = STAGING_DIR if os.path.exists(STAGING_DIR) else os.path.dirname(STAGING_DIR)
+        staging_free_gb = shutil.disk_usage(staging_disk_path).free / (1024 ** 3)
+        free_gb = min(final_free_gb, staging_free_gb)
         if free_gb < MIN_FREE_DISK_GB:
-            print(f"\n[!] ΣΤΑΜΑΤΑΩ: Μόνο {free_gb:.1f}GB ελεύθερα (< {MIN_FREE_DISK_GB}GB).")
+            print(f"\n[!] ΣΤΑΜΑΤΑΩ: Μόνο {free_gb:.1f}GB ελεύθερα "
+                  f"(output disk: {final_free_gb:.1f}GB, staging disk: {staging_free_gb:.1f}GB) "
+                  f"< {MIN_FREE_DISK_GB}GB.")
             break
 
         print(f"\n[{idx+1}/{total}] === Ανάλυση: {pkg_name} ===")
@@ -207,6 +341,8 @@ def main():
         staged_size = get_dir_size(STAGING_DIR)
         if staged_size > MAX_STAGING_SIZE_BYTES:
             print(f"  [!] Παράλειψη: {staged_size/1e6:.0f}MB > {MAX_STAGING_SIZE_MB}MB όριο.")
+            with open(oversized_marker, "w", encoding="utf-8") as f:
+                f.write(f"staged_size_after_extract={staged_size}\n")
             failed += 1
             continue
 
@@ -215,11 +351,13 @@ def main():
 
         try:
             res1 = run_with_hard_timeout(
-                ["python3", ANALYSIS_SCRIPT], timeout=600, env=env, cwd=PIPELINE_DIR,
+                ["python3", ANALYSIS_SCRIPT], timeout=ANALYSIS_TIMEOUT, env=env, cwd=PIPELINE_DIR,
                 capture_output=True, text=True,
             )
         except subprocess.TimeoutExpired:
             print(f"  [!] TIMEOUT (10 λεπτά). Προχωράμε...")
+            with open(failed_marker, "w", encoding="utf-8") as f:
+                f.write("reason=timeout_analysis_py\n")
             failed += 1
             continue
 
@@ -228,22 +366,28 @@ def main():
             with open(log_path, "w", encoding="utf-8") as f:
                 f.write(res1.stdout or "")
                 f.write(res1.stderr or "")
+            with open(failed_marker, "w", encoding="utf-8") as f:
+                f.write(f"reason=codeql_error, βλ. {log_path}\n")
             print(f"  [!] Σφάλμα CodeQL — πλήρες log στο: {log_path}")
             failed += 1
             continue
 
         try:
             res2 = run_with_hard_timeout(
-                ["python3", BUILD_SCRIPT], timeout=180, cwd=PIPELINE_DIR,
+                ["python3", BUILD_SCRIPT], timeout=BUILD_TIMEOUT, cwd=PIPELINE_DIR,
                 capture_output=True, text=True,
             )
         except subprocess.TimeoutExpired:
             print(f"  [!] TIMEOUT (3 λεπτά). Προχωράμε...")
+            with open(failed_marker, "w", encoding="utf-8") as f:
+                f.write("reason=timeout_build_behavior_chain\n")
             failed += 1
             continue
 
         if res2.returncode != 0:
             print(f"  [!] Σφάλμα Builder")
+            with open(failed_marker, "w", encoding="utf-8") as f:
+                f.write("reason=builder_error\n")
             failed += 1
             continue
 
@@ -269,6 +413,8 @@ def main():
             success += 1
         else:
             print(f"  [!] Δεν δημιουργήθηκε αποτέλεσμα (καμία εύρημα;)")
+            with open(failed_marker, "w", encoding="utf-8") as f:
+                f.write("reason=no_result_produced\n")
             failed += 1
 
     print(f"\n[*] Ολοκληρώθηκε. Επιτυχείς: {success} (εκ των οποίων {empty_result} με 0 chains) | "
