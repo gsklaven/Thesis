@@ -27,7 +27,7 @@ TAGS_FILE = os.path.join(BASE_DIR, "attack_type_tags.json")
 
 MAX_RETRIES = 3
 INITIAL_RETRY_DELAY = 3
-MAX_WORKERS = 2  # συντηρητικό - το τοπικό inference server έχει περιορισμένη παραλληλία
+MAX_WORKERS = 1  # συντηρητικό - το τοπικό inference server έχει περιορισμένη παραλληλία
 
 LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://localhost:1234/v1")
 LM_STUDIO_MODEL = os.environ.get("LM_STUDIO_MODEL", "local-model")  # LM Studio συνήθως αγνοεί/αυτο-επιλέγει
@@ -82,7 +82,6 @@ def evaluate_with_lm_studio(prompt_text, retries=MAX_RETRIES):
                 model=LM_STUDIO_MODEL,
                 messages=[{"role": "user", "content": prompt_text}],
                 temperature=0.1,
-                response_format={"type": "json_object"},
             )
             content = response.choices[0].message.content if response.choices else None
 

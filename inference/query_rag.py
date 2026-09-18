@@ -21,8 +21,8 @@ POLICY_VECTORS_FILE = os.path.join(POLICY_INDEX_DIR, "policy_vectors.npy")
 POLICY_METADATA_FILE = os.path.join(POLICY_INDEX_DIR, "policy_metadata.json")
 
 MODEL_NAME = "all-MiniLM-L6-v2"
-MALWARE_TOP_K = 3
-POLICY_TOP_K = 3
+MALWARE_TOP_K = 5
+POLICY_TOP_K = 4
 MALWARE_THRESHOLD = 0.55
 
 # ΝΕΟ: prompt version tracking. Αύξησε αυτό ΚΑΘΕ ΦΟΡΑ που αλλάζεις ουσιαστικά
@@ -49,136 +49,111 @@ MALWARE_THRESHOLD = 0.55
 # dynamic import, event-driven fetch) που ταιριάζουν με sim>0.9 σε ΟΠΟΙΟΔΗΠΟΤΕ
 # πακέτο έχει παρόμοια επιφανειακή δομή, ανεξάρτητα από πραγματική πρόθεση.
 # Το STEP 2 τώρα επαναφέρει ΚΑΙ ενισχύει αυτή την προστασία, στοχευμένα.
-PROMPT_VERSION = "v8"
+# v12: Ριζικά απλούστερο prompt. Αντί για 6 αντιφατικά steps, 3 σαφή
+# ερωτήματα με sim-based rules. Fixes: (a) LLM αθώωνε malicious squatted
+# packages λόγω name recognition, (b) αντιφατικές εντολές → LLM διάλεγε BENIGN.
+# Κύρια αλλαγή: sim≥0.90 → MALICIOUS default (εκτός explicit exception),
+# sim 0.70-0.90 → SUSPICIOUS default, sim<0.70 → BENIGN επιτρέπεται.
+PROMPT_VERSION = "v11"
 
 
-SSVC_COT_PROMPT = """You are a Senior Cybersecurity Analyst specializing in software supply chain threats.
-You must evaluate the following Python/npm package for malicious intent using the SSVC framework.
+SSVC_COT_PROMPT = """You are a cybersecurity analyst evaluating a Python/npm package for malicious intent.
 
-═══════════════════════════════════════════════════════
-PACKAGE UNDER ANALYSIS: {package_name}
-═══════════════════════════════════════════════════════
+PACKAGE: {package_name}
 
-SECTION 1 — CODE BEHAVIOR (CodeQL Static Analysis Output):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION A — CODE BEHAVIOR (Static Analysis):
 {behavior_text}
 
-SECTION 2 — SIMILAR KNOWN MALWARE (RAG Retrieval, top {malware_top_k} matches):
+SECTION B — RAG SIMILARITY (top {malware_top_k} known-malicious matches):
 {malware_context}
 
-SECTION 3 — RELEVANT SECURITY POLICIES (top {policy_top_k} matches):
+SECTION C — POLICY CONTEXT:
 {policy_context}
 
 {extra_context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-═══════════════════════════════════════════════════════
-CHAIN-OF-THOUGHT ANALYSIS — Follow these steps IN ORDER:
-═══════════════════════════════════════════════════════
+## CRITICAL RULES — READ BEFORE ANALYSIS
 
-STEP 1 — CODE INTENT ANALYSIS:
-Examine the code behavior in Section 1. What is the code actually doing?
-Is this behavior consistent with the package's stated purpose, or is it
-anomalous? Pay special attention to: setup.py hooks, __init__.py side-effects,
-obfuscated strings, and network calls at import time.
+**RULE 1 — PACKAGE NAME ≠ PACKAGE IDENTITY:**
+You are analyzing a file from PyPI/npm. A malicious package CAN have the exact
+same name as a famous legitimate library (name squatting / dependency confusion).
+"assertpy", "clearml", "beaker", "crayons" etc. could be malicious clones.
+Base your verdict ONLY on the CODE in Section A, never on the package name.
 
-STEP 2 — FALSE POSITIVE CHECK:
-CRITICAL: Legitimate packages often use subprocess, exec(), socket, or
-file I/O for standard build scripts, testing, or API features. If the
-detected flow is clearly standard library functionality, well-documented
-benign build tooling, or normal operations UNAMBIGUOUSLY consistent with
-the package's stated purpose (e.g., an SSH library making SSH connections,
-a cloud SDK reading cloud credentials) → mark as FALSE POSITIVE. However,
-do NOT default to FALSE POSITIVE merely because the API usage pattern is
-common or the package name sounds legitimate — a common API used for a
-purpose UNRELATED to the package's stated function (e.g., unexpected
-outbound network calls, credential access, or process execution with no
-connection to any documented feature) remains a valid signal of malicious
-intent, even if each individual API call looks unremarkable in isolation.
-IMPORTANT — GENERIC CODE SHAPES ARE NOT BY THEMSELVES EVIDENCE: patterns
-such as "base64 decode + dynamic __import__/exec" or "extract a value from
-incoming data + make an outbound request" are extremely common in
-legitimate code (plugin/lazy-loading systems, compressed asset or config
-decoding, webhook/event handlers, feature flags) and appear near-identically
-across thousands of unrelated packages. A high similarity score to Section 2
-built ONLY on this kind of generic shape — especially when the matched
-neighbor itself has no specific attack-type tag or analyst description
-confirming what it actually does — is weak evidence on its own. Weigh it
-against the package's real, well-established purpose: for a package that is
-one of the most widely used, foundational tools in its ecosystem (e.g. a
-major testing framework, container/orchestration client, or database
-driver), a single structurally-generic match is NOT sufficient grounds for
-MALICIOUS — look for something SPECIFIC to this package's actual behavior
-(concrete evidence of what the decoded/fetched content is used for, an
-install-time hook, credential harvesting, etc.) before concluding malicious
-intent for such a package.
+**RULE 2 — SIMILARITY IS STRUCTURAL EVIDENCE:**
+The similarity score in Section B means this code is structurally identical to
+confirmed-malicious code in our database.
+- sim ≥ 0.95: The code is nearly IDENTICAL to known malware. Default → MALICIOUS
+  unless Section A shows ONLY pure standard library calls with zero network/file
+  anomalies AND the matched samples have zero specific attack tags.
+- sim 0.75–0.95: Strong structural overlap with malware. Default → SUSPICIOUS
+  unless Section A shows behavior fully explained by a documented package API.
+- sim < 0.75: Weaker match. Analyze behavior independently.
 
-STEP 3 — MALWARE SIMILARITY ASSESSMENT:
-Compare with the known malware samples in Section 2. How structurally
-similar is this code to known-malicious behavior? Consider: Are the data
-flows (source → sink) analogous? Is the control flow pattern (gating
-conditions) similar? Or is the similarity superficial (both use sockets,
-but for entirely different purposes)? IMPORTANT: a high similarity score
-(above ~0.90) to a matched sample remains meaningful evidence even when
-that sample's own attack-type tag is "unclassified" — many confirmed
-malicious samples in this dataset lack a specific label for data-sourcing
-reasons unrelated to severity. Do not discount a strong structural match
-solely because the matched neighbor's tag is generic.
+**RULE 3 — "UNCLASSIFIED" TAG DOES NOT MEAN BENIGN:**
+If the top RAG match has tag "unclassified" but sim ≥ 0.90, the code IS
+structurally identical to a confirmed malicious sample — we just do not have
+its attack label yet. Treat it as strong malware evidence, not weak evidence.
 
-STEP 4 — POLICY VIOLATION ANALYSIS:
-Check each policy in Section 3. Does this code violate any of these
-security policies? If so, which specific policy and why?
+**RULE 4 — GENERIC CODE SHAPES ≠ AUTOMATIC FP:**
+base64+exec, subprocess, socket, dynamic import are common in malware AND
+legitimate code. Judge by WHAT the data flows TO (outbound call? credential
+read? install-time exec?) not just WHAT APIs are used.
 
-STEP 5 — MITRE ATT&CK MAPPING:
-If the behavior appears malicious, map it to the most relevant MITRE
-ATT&CK technique(s). Consider: T1059 (Command Execution), T1071
-(Application Layer Protocol), T1005 (Data from Local System),
-T1041 (Exfiltration Over C2), T1027 (Obfuscated Files), etc.
+**RULE 5 — FP EXCEPTION IS NARROW:**
+Only call BENIGN if ALL of the following are true:
+  (a) The code behavior is 100% explainable by the package's documented purpose
+  (b) There are zero anomalous data destinations (no unexpected outbound calls,
+      no credential harvesting, no install-time side effects)
+  (c) The similarity is either < 0.75, OR the high-sim matches have generic
+      shapes with no documented attack behavior in their descriptions
 
-STEP 6 — SSVC RISK ASSESSMENT:
-Apply the SSVC decision framework:
-- Exploitation: Is this automatable? (yes/no)
-- Technical Impact: partial or total?
-- Decision: TRACK (benign/FP) | TRACK* (suspicious, monitor) | ATTEND (likely malicious) | ACT (confirmed malicious)
-When the evidence is suggestive but not fully conclusive (e.g., moderate-
-to-high similarity with plausible but not certain malicious intent),
-prefer SUSPICIOUS/TRACK* over BENIGN/TRACK — flagging an ambiguous case
-for review is preferable to silently missing a genuine threat. Reserve
-BENIGN/TRACK for cases where the false-positive explanation from STEP 2
-is clear and well-supported by the code's stated purpose.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## ANALYSIS
 
-═══════════════════════════════════════════════════════
-OUTPUT — Respond ONLY with a valid JSON object:
-═══════════════════════════════════════════════════════
+**Q1 — What does the code do?**
+Describe ONLY what Section A shows (not what the package name implies).
+Focus on: data sources, data destinations, install-time hooks, network calls,
+credential access, obfuscation patterns.
+
+**Q2 — Apply the similarity rules (RULE 2 + 3).**
+State the top similarity score. Apply the threshold rule. Is there a strong FP
+exception (RULE 5)? If invoking the FP exception, cite SPECIFIC code evidence
+from Section A, not the package name.
+
+**Q3 — Final verdict.**
+Choose: MALICIOUS | SUSPICIOUS | BENIGN
+- MALICIOUS: clear malicious behavior or sim ≥ 0.95 without valid FP exception
+- SUSPICIOUS: sim 0.75–0.95 without clear FP, OR anomalous behavior without
+  strong malware match, OR ambiguous intent that warrants monitoring
+- BENIGN: ALL five conditions of RULE 5 are met
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT — Respond ONLY with this JSON:
 
 {{
   "verdict": "MALICIOUS | SUSPICIOUS | BENIGN",
   "confidence": 0.0,
   "ssvc_decision": "TRACK | TRACK* | ATTEND | ACT",
   "reasoning": {{
-    "code_intent": "Brief description of what the code does",
-    "is_false_positive": true,
-    "false_positive_reason": "Why this is/isn't a false positive"
+    "code_intent": "What Section A code actually does",
+    "similarity_rule_applied": "Which rule triggered (e.g. Rule2-sim>=0.95)",
+    "is_false_positive": false,
+    "false_positive_reason": "If FP: cite specific Section A evidence. If not FP: null"
   }},
   "malware_similarity": {{
     "most_similar_package": "package_name or null",
     "similarity_score": 0.0,
-    "similarity_explanation": "Why the behavior matches/doesn't match"
+    "similarity_explanation": "Structural overlap description"
   }},
-  "policy_violations": [
-    {{
-      "policy_id": "e.g., CWE-94 or OWASP-CICD-SEC-3",
-      "policy_name": "Name of violated policy",
-      "violation_reason": "Why this code violates this policy"
-    }}
-  ],
-  "mitre_mapping": [
-    {{
-      "technique_id": "e.g., T1059.006",
-      "technique_name": "e.g., Command and Scripting Interpreter: Python",
-      "relevance": "How this behavior maps to this technique"
-    }}
-  ],
-  "summary": "One-paragraph human-readable summary for the security report"
+  "policy_violations": [{{"policy_id": "...", "policy_name": "...", "violation_reason": "..."}}],
+  "mitre_mapping": [{{"technique_id": "...", "technique_name": "...", "relevance": "..."}}],
+  "summary": "One-paragraph summary"
 }}"""
+
+
 
 
 def cosine_search(query_vec, vectors, top_k=5):

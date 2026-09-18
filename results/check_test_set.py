@@ -46,7 +46,7 @@ DEFAULT_TEST_SET_DIR = os.path.join(_THESIS_ROOT, "test_set")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
 
 INFERENCE_DIR = os.path.join(_THESIS_ROOT, "inference")
-LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator_lmstudio.py")
+LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator_deepseek.py")
 LLM_RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
 
 

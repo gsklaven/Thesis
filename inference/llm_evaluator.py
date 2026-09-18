@@ -241,15 +241,16 @@ def evaluate_with_gemini(prompt_text, retries=MAX_RETRIES):
 
 def aggregate_verdicts(chain_results):
     """
-    I7: Συγκεντρωτικό verdict για ολόκληρο το πακέτο.
+    Συγκεντρωτικό verdict για ολόκληρο το πακέτο.
 
-    ΚΡΙΣΙΜΟ FIX: ελέγχουμε ΠΡΩΤΑ αν ΟΛΑ τα chains απέτυχαν (ERROR/PARSE_ERROR/
-    UNKNOWN) ΠΡΙΝ τον έλεγχο "όλα BENIGN". Χωρίς αυτή τη σειρά: αν ΟΛΑ τα
-    chains είναι ERROR (π.χ. εξαντλημένο API quota), το φιλτραρισμένο "μόνο
-    μη-αποτυχημένα" σύνολο είναι ΚΕΝΟ - και all() πάνω σε κενό iterable
-    επιστρέφει True στην Python, οδηγώντας σε ΛΑΝΘΑΣΜΕΝΟ "BENIGN" αντί για
-    το σωστό "EVALUATION_FAILED". Αυτό σιωπηλά μεταμφίεζε αποτυχίες API σε
-    "καθαρά" αποτελέσματα - ακριβώς το bug που βρήκαμε σε 17/19 reports.
+    ΛΟΓΙΚΗ: "any MALICIOUS chain = MALICIOUS package"
+    Αυτό διατηρεί πλήρη sensitivity — ένα malicious package με 1 μόνο
+    κακόβουλο chain θα εντοπιστεί. Το noise πρόβλημα (FPs σε μεγάλα
+    packages) λύνεται με chain deduplication (MAX_CHAINS_PER_PACKAGE)
+    και με ακριβέστερο per-chain verdict (v12 prompt), όχι με threshold.
+
+    ΚΡΙΣΙΜΟ: έλεγχος EVALUATION_FAILED ΠΡΙΝ το all(BENIGN) για ασφάλεια
+    από κενά iterables όταν ΟΛΑ τα chains αποτύχουν (API quota κτλ.).
     """
     verdicts = []
     for r in chain_results:
