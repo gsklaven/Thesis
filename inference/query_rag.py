@@ -9,7 +9,10 @@ from sentence_transformers import SentenceTransformer
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dataset", "preparation"))
 from utils import flatten_chain_to_text  # noqa: E402
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+)
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 
 INDEX_DIR = os.path.join(BASE_DIR, "indexes", "rag_index")
@@ -74,74 +77,145 @@ SECTION C — POLICY CONTEXT:
 {extra_context}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## CRITICAL RULES — READ BEFORE ANALYSIS
+## HOW TO WEIGH THE EVIDENCE — READ FIRST
+
+Section A (what the code actually does) and Section B (structural similarity
+to known malware) answer DIFFERENT questions. Section A tells you what is
+happening. Section B tells you that similar low-level code SHAPES appear in
+confirmed malware — but shape alone does not tell you intent, because
+legitimate code and malware both use eval(), file I/O, sockets, and dynamic
+imports. A HIGH similarity score is NOT a default verdict to be overturned —
+it is one piece of context you weigh alongside Section A.
+THE DECIDING QUESTION IS ALWAYS: does Section A, on its own, show a SPECIFIC
+action that is not explained by ordinary legitimate functionality — an
+unexpected outbound call, credential access, install-time side effect, or
+execution of dynamically-decoded content whose destination or purpose is not
+documented anywhere in the visible code? If Section A shows nothing like
+this, a high similarity score does not change that — you are looking at
+generic code shape overlap, not a match to malicious INTENT. Package names
+are not identity either way (RULE 1 below): do not assume "assertpy" or
+"clearml" is safe just because you recognize the name, and do not assume it
+is malicious just because a match looks alarming — in both directions, judge
+Section A's actual behavior.
 
 **RULE 1 — PACKAGE NAME ≠ PACKAGE IDENTITY:**
 You are analyzing a file from PyPI/npm. A malicious package CAN have the exact
-same name as a famous legitimate library (name squatting / dependency confusion).
-"assertpy", "clearml", "beaker", "crayons" etc. could be malicious clones.
-Base your verdict ONLY on the CODE in Section A, never on the package name.
+same name as a famous legitimate library (name squatting / dependency
+confusion) — "assertpy", "clearml", "beaker", "crayons" etc. could be
+malicious clones. Base your verdict ONLY on Section A, never on the name.
 
-**RULE 2 — SIMILARITY IS STRUCTURAL EVIDENCE:**
-The similarity score in Section B means this code is structurally identical to
-confirmed-malicious code in our database.
-- sim ≥ 0.95: The code is nearly IDENTICAL to known malware. Default → MALICIOUS
-  unless Section A shows ONLY pure standard library calls with zero network/file
-  anomalies AND the matched samples have zero specific attack tags.
-- sim 0.75–0.95: Strong structural overlap with malware. Default → SUSPICIOUS
-  unless Section A shows behavior fully explained by a documented package API.
-- sim < 0.75: Weaker match. Analyze behavior independently.
-
-**RULE 3 — "UNCLASSIFIED" TAG DOES NOT MEAN BENIGN:**
-If the top RAG match has tag "unclassified" but sim ≥ 0.90, the code IS
-structurally identical to a confirmed malicious sample — we just do not have
-its attack label yet. Treat it as strong malware evidence, not weak evidence.
-
-**RULE 4 — GENERIC CODE SHAPES ≠ AUTOMATIC FP:**
-base64+exec, subprocess, socket, dynamic import are common in malware AND
-legitimate code. Judge by WHAT the data flows TO (outbound call? credential
-read? install-time exec?) not just WHAT APIs are used.
-
-**RULE 5 — FP EXCEPTION IS NARROW:**
-Only call BENIGN if ALL of the following are true:
-  (a) The code behavior is 100% explainable by the package's documented purpose
-  (b) There are zero anomalous data destinations (no unexpected outbound calls,
-      no credential harvesting, no install-time side effects)
-  (c) The similarity is either < 0.75, OR the high-sim matches have generic
-      shapes with no documented attack behavior in their descriptions
+**RULE 2 — GENERIC CODE SHAPES ARE NOT INTENT, UNLESS A MATCH IS TAG-CONFIRMED:**
+base64+exec, subprocess, socket, dynamic import, crypto/IV handling are
+common in malware AND in legitimate code (compression, plugin loading,
+encryption libraries, protocol handlers). A high similarity score built on
+this kind of shape, WHEN THE MATCHED NEIGHBOR IS ITSELF UNCLASSIFIED OR
+UNTAGGED, tells you the SHAPE recurs — not that this code shares that
+neighbor's intent. BUT when a matched sample carries a SPECIFIC, non-generic
+attack tag (credential-harvesting, data-exfiltration, backdoor, C2,
+typosquatting, etc.) at meaningfully high similarity, that tag reflects a
+human analyst's CONFIRMED classification of that exact pattern as malicious
+— this is real evidence, and it is NOT cancelled out by the fact that the
+underlying shape is also common elsewhere. "The shape is common" and "this
+specific instance of the shape was confirmed malicious" are compatible facts,
+not contradictory ones — do not use the former to dismiss the latter. Judge
+by what the data flows TO: an outbound call to an undocumented destination,
+a credential read with no connection to the package's stated purpose, or an
+install-time side effect are real signals. A crypto library performing
+crypto, a logger writing log files, or a serialization library using dynamic
+imports for its own documented plugin system are not.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ## ANALYSIS
 
-**Q1 — What does the code do?**
-Describe ONLY what Section A shows (not what the package name implies).
-Focus on: data sources, data destinations, install-time hooks, network calls,
+**Q1 — What does the code do, and is anything about it unexplained?**
+Describe ONLY what Section A shows (not what the package name implies):
+data sources, data destinations, install-time hooks, network calls,
 credential access, obfuscation patterns.
+Then answer directly: is there a SPECIFIC action here that is NOT fully
+accounted for by ordinary, documented functionality? Name it precisely if
+so (e.g., "writes to a path outside any documented config/cache location",
+"makes an outbound call to a destination with no connection to the
+package's stated purpose", "decodes and executes content whose purpose is
+never referenced elsewhere in the visible code"). If every action has a
+clear, specific, legitimate explanation, say so explicitly: "no
+independently anomalous behavior — [state the specific legitimate
+explanation, e.g. 'this is the package's own documented crypto IV handling'
+or 'standard logging file-path setup']."
 
-**Q2 — Apply the similarity rules (RULE 2 + 3).**
-State the top similarity score. Apply the threshold rule. Is there a strong FP
-exception (RULE 5)? If invoking the FP exception, cite SPECIFIC code evidence
-from Section A, not the package name.
+**Q2 — Does Section B change this assessment?**
+State the top similarity score and the matched neighbor's tag.
+- If Q1 found NO independent anomaly: Section B's score, however high, is
+  evidence of generic shape overlap (RULE 2), not of intent. It does not
+  override a clean Q1 finding. Say so explicitly rather than defaulting to
+  suspicion because the number is high.
+- If Q1 DID find a specific anomaly: does Section B corroborate it? Check
+  EVERY match listed in Section B, not only the highest-ranked one — a
+  SPECIFIC, non-generic attack tag (e.g., "credential-harvesting",
+  "data-exfiltration", "backdoor", "C2", "typosquatting") on ANY match at
+  meaningfully high similarity (≥ 0.85) IS corroboration, regardless of
+  whether it happens to be ranked #1 or lower among the matches shown. A
+  specific tag means a human analyst already confirmed that exact pattern
+  in a different sample — this counts as corroboration EVEN WHEN the
+  underlying code pattern (dynamic import, encoding, process execution) is
+  itself common. RULE 2's caution about "generic shapes" applies to
+  matches that are THEMSELVES unclassified/untagged — where you cannot
+  tell whether the shape correlates with confirmed intent — not to matches
+  that already carry a specific attack tag. Do not use RULE 2 to discount
+  a specific tag just because the shape is common; that is what the tag
+  is for. Only if EVERY match in Section B is unclassified/untagged does
+  the similarity reduce to generic-shape overlap, in which case Q1's own
+  finding stands on its own merits.
 
 **Q3 — Final verdict.**
-Choose: MALICIOUS | SUSPICIOUS | BENIGN
-- MALICIOUS: clear malicious behavior or sim ≥ 0.95 without valid FP exception
-- SUSPICIOUS: sim 0.75–0.95 without clear FP, OR anomalous behavior without
-  strong malware match, OR ambiguous intent that warrants monitoring
-- BENIGN: ALL five conditions of RULE 5 are met
+Choose: MALICIOUS | BENIGN. This is a BINARY decision — there is no
+"monitor for now, not sure yet" middle option. Every case must resolve to
+one or the other.
+- BENIGN: Q1 found no independently anomalous behavior — every action is
+  fully and specifically explained by ordinary, documented functionality.
+  This holds REGARDLESS of the Section B similarity score — a clean,
+  specifically-explained Q1 finding is not overridden by a high similarity
+  number alone.
+- MALICIOUS: everything else. Q1 found something not FULLY and
+  SPECIFICALLY explained by ordinary legitimate functionality — this
+  includes cases where Q1 itself is uncertain ("could be legitimate X, but
+  could also be Y") as well as cases where Q1 is fully confident nothing
+  legitimate accounts for it, and regardless of whether Section B
+  corroborates with a specific tag or not. Do NOT hedge into a soft middle
+  verdict: if you cannot fully and specifically explain the behavior via
+  BENIGN's criteria above, the verdict is MALICIOUS. A specific attack tag
+  in Section B (per Q2) or an unambiguous anomaly on its own both justify a
+  HIGHER ssvc_decision (ATTEND/ACT rather than TRACK*, see below) but are
+  not required to reach the MALICIOUS verdict itself once Q1 has identified
+  something genuinely unexplained.
+SSVC_DECISION GRANULARITY: use ssvc_decision to express your confidence
+WITHIN the binary verdict, for downstream triage — it does not change the
+verdict itself.
+  - verdict BENIGN → ssvc_decision TRACK.
+  - verdict MALICIOUS, but Q1's anomaly is genuinely tentative and Section B
+    gives no specific-tag corroboration → ssvc_decision TRACK* (flag for
+    human review, lower confidence).
+  - verdict MALICIOUS, with either a specific-tag corroboration (Q2) or a
+    clearly-identified anomaly → ssvc_decision ATTEND.
+  - verdict MALICIOUS, with an unambiguous, confirmed malicious pattern
+    (confirmed credential exfiltration, confirmed C2, confirmed execution
+    of an undocumented decoded payload) → ssvc_decision ACT.
+CONSISTENCY REQUIREMENT: is_false_positive in your JSON output must directly
+reflect your Q1 finding and must agree with verdict: true only when verdict
+is BENIGN, false whenever verdict is MALICIOUS. Do not let these fields
+disagree with each other or with Q1.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT — Respond ONLY with this JSON:
 
 {{
-  "verdict": "MALICIOUS | SUSPICIOUS | BENIGN",
+  "verdict": "MALICIOUS | BENIGN",
   "confidence": 0.0,
   "ssvc_decision": "TRACK | TRACK* | ATTEND | ACT",
   "reasoning": {{
     "code_intent": "What Section A code actually does",
-    "similarity_rule_applied": "Which rule triggered (e.g. Rule2-sim>=0.95)",
+    "similarity_rule_applied": "How Section B was weighed given the Q1 finding",
     "is_false_positive": false,
-    "false_positive_reason": "If FP: cite specific Section A evidence. If not FP: null"
+    "false_positive_reason": "If FP: the specific legitimate explanation from Q1. If not FP: the specific anomaly from Q1"
   }},
   "malware_similarity": {{
     "most_similar_package": "package_name or null",
@@ -152,9 +226,6 @@ OUTPUT — Respond ONLY with this JSON:
   "mitre_mapping": [{{"technique_id": "...", "technique_name": "...", "relevance": "..."}}],
   "summary": "One-paragraph summary"
 }}"""
-
-
-
 
 def cosine_search(query_vec, vectors, top_k=5):
     similarities = np.dot(vectors, query_vec)

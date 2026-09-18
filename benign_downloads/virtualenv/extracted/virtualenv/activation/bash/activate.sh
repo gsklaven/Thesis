@@ -22,19 +22,31 @@ deactivate () {
         unset _OLD_VIRTUAL_PYTHONHOME
     fi
 
-    if [ -n "${_OLD_VIRTUAL_TCL_LIBRARY:-}" ]; then
-        TCL_LIBRARY="$_OLD_VIRTUAL_TCL_LIBRARY"
-        export TCL_LIBRARY
+    if [ -n "${_OLD_VIRTUAL_TCL_LIBRARY+x}" ]; then
+        if [ -n "$_OLD_VIRTUAL_TCL_LIBRARY" ]; then
+            TCL_LIBRARY="$_OLD_VIRTUAL_TCL_LIBRARY"
+            export TCL_LIBRARY
+        else
+            unset TCL_LIBRARY
+        fi
         unset _OLD_VIRTUAL_TCL_LIBRARY
     fi
-    if [ -n "${_OLD_VIRTUAL_TK_LIBRARY:-}" ]; then
-        TK_LIBRARY="$_OLD_VIRTUAL_TK_LIBRARY"
-        export TK_LIBRARY
+    if [ -n "${_OLD_VIRTUAL_TK_LIBRARY+x}" ]; then
+        if [ -n "$_OLD_VIRTUAL_TK_LIBRARY" ]; then
+            TK_LIBRARY="$_OLD_VIRTUAL_TK_LIBRARY"
+            export TK_LIBRARY
+        else
+            unset TK_LIBRARY
+        fi
         unset _OLD_VIRTUAL_TK_LIBRARY
     fi
-    if [ -n "${_OLD_PKG_CONFIG_PATH:-}" ]; then
-        PKG_CONFIG_PATH="$_OLD_PKG_CONFIG_PATH"
-        export PKG_CONFIG_PATH
+    if [ -n "${_OLD_PKG_CONFIG_PATH+x}" ]; then
+        if [ -n "$_OLD_PKG_CONFIG_PATH" ]; then
+            PKG_CONFIG_PATH="$_OLD_PKG_CONFIG_PATH"
+            export PKG_CONFIG_PATH
+        else
+            unset PKG_CONFIG_PATH
+        fi
         unset _OLD_PKG_CONFIG_PATH
     fi
 
@@ -60,7 +72,7 @@ deactivate () {
 deactivate nondestructive
 
 if [ ! -d __VIRTUAL_ENV__ ]; then
-    echo "Virtual environment directory __VIRTUAL_ENV__ does not exist!" >&2
+    echo "Virtual environment directory" __VIRTUAL_ENV__ "does not exist!" >&2
     CURRENT_PATH=$(realpath "${BASH_SOURCE[0]}")
     CURRENT_DIR=$(dirname "${CURRENT_PATH}")
     VIRTUAL_ENV="$(realpath "${CURRENT_DIR}/../")"
@@ -96,18 +108,15 @@ if [ -n "${PYTHONHOME:-}" ] ; then
     unset PYTHONHOME
 fi
 
+# an empty saved value tells deactivate to unset the variable
 if [ __TCL_LIBRARY__ != "" ]; then
-    if [ -n "${TCL_LIBRARY:-}" ] ; then
-        _OLD_VIRTUAL_TCL_LIBRARY="$TCL_LIBRARY"
-    fi
+    _OLD_VIRTUAL_TCL_LIBRARY="${TCL_LIBRARY:-}"
     TCL_LIBRARY=__TCL_LIBRARY__
     export TCL_LIBRARY
 fi
 
 if [ __TK_LIBRARY__ != "" ]; then
-    if [ -n "${TK_LIBRARY:-}" ] ; then
-        _OLD_VIRTUAL_TK_LIBRARY="$TK_LIBRARY"
-    fi
+    _OLD_VIRTUAL_TK_LIBRARY="${TK_LIBRARY:-}"
     TK_LIBRARY=__TK_LIBRARY__
     export TK_LIBRARY
 fi

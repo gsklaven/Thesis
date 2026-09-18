@@ -16,7 +16,10 @@ import os
 import re
 import shutil
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 _DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
 ANALYZED_DIR = os.path.join(_DATASET_DIR, "analyzed_chains")
 ATTACK_TAGS_JSON = os.path.join(_DATASET_DIR, "attack_type_tags.json")

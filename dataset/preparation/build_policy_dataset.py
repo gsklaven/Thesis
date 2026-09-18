@@ -5,7 +5,10 @@ import csv
 import zipfile
 import requests
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 OUTPUT_JSON = os.path.join(BASE_DIR, "policy_rules.json")
 POLICY_SOURCES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy_sources")

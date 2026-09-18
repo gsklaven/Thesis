@@ -20,6 +20,22 @@ import semmle.python.dataflow.new.DataFlow
 import semmle.python.ApiGraphs
 import SensitiveAPIsPy
 
+/**
+ * ΝΕΟ FIX: ίδιο πρόβλημα με το backward_slice_py.ql - το .toString() σε
+ * μια σύνθετη έκφραση (π.χ. Attribute, "self.something") επιστρέφει
+ * μόνο το όνομα κλάσης του κόμβου ("Attribute()"), όχι το πραγματικό
+ * κείμενο - σημαντικό εδώ αφού πολλές συνθήκες (π.χ. hasattr-gated
+ * κλάδοι) εμπλέκουν ακριβώς τέτοιες εκφράσεις.
+ */
+string getReadableCondText(AstNode n) {
+  exists(Attribute attr | attr = n |
+    result = attr.getObject().toString() + "." + attr.getName()
+  )
+  or
+  not exists(Attribute attr | attr = n) and
+  result = n.toString()
+}
+
 from
   DataFlow::CallCfgNode call, string category, ConditionBlock guard, boolean branch,
   BasicBlock sinkBlock
@@ -32,4 +48,4 @@ select call.getLocation().getFile().getRelativePath() as anchor_file,
   call.toString() as anchor_api,
   guard.getLastNode().getLocation().getFile().getRelativePath() as condition_file,
   guard.getLastNode().getLocation().getStartLine() as condition_line,
-  guard.getLastNode().getNode().toString() as condition_text, branch as branch_must_be
+  getReadableCondText(guard.getLastNode().getNode()) as condition_text, branch as branch_must_be

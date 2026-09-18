@@ -20,7 +20,10 @@ CODEQL_BIN = (
         "codeql",  # fallback: hope it's on PATH at runtime
     )
 )
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 TARGET_DIR = os.environ.get("CODEQL_TARGET_DIR", os.path.join(_THESIS_ROOT, "behavior_chain"))
 LANGUAGE = "python"
 VENDOR_FOLDER = "vendor"

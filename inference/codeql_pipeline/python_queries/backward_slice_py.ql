@@ -58,6 +58,25 @@ module BackwardSliceConfig implements DataFlow::ConfigSig {
 
 module BackwardSlice = TaintTracking::Global<BackwardSliceConfig>;
 
+/**
+ * ΝΕΟ FIX: το CodeQL's προεπιλεγμένο .toString() σε ένα DataFlow::Node
+ * επιστρέφει πραγματικό κείμενο πηγαίου κώδικα ΜΟΝΟ για απλούς τύπους
+ * (string/αριθμητικά literals). Για σύνθετες εκφράσεις όπως Attribute
+ * (π.χ. "self.something", "module.function"), δεν ξέρει πώς να το
+ * σεριαλιάρει, και επιστρέφει απλά το όνομα κλάσης του κόμβου
+ * ("Attribute()") - αδιαφοροποίητο, ανεξάρτητα από το τι πραγματικά
+ * είναι. Αυτό ανακατασκευάζει "obj.attr" ρητά για Attribute κόμβους,
+ * πέφτοντας πίσω στο κανονικό toString() για όλους τους άλλους τύπους.
+ */
+string getReadableText(DataFlow::Node n) {
+  exists(Attribute attr | attr = n.asExpr() |
+    result = attr.getObject().toString() + "." + attr.getName()
+  )
+  or
+  not exists(Attribute attr | attr = n.asExpr()) and
+  result = n.toString()
+}
+
 from
   DataFlow::Node contrib, DataFlow::Node sink, DataFlow::CallCfgNode call, string category
 where
@@ -66,4 +85,4 @@ where
 select call.getLocation().getFile().getRelativePath() as anchor_file,
   call.getLocation().getStartLine() as anchor_line, category as anchor_category,
   call.toString() as anchor_api, contrib.getLocation().getFile().getRelativePath() as contrib_file,
-  contrib.getLocation().getStartLine() as contrib_line, contrib.toString() as contrib_text
+  contrib.getLocation().getStartLine() as contrib_line, getReadableText(contrib) as contrib_text

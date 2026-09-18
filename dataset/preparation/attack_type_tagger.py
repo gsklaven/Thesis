@@ -24,7 +24,10 @@ from utils import campaign_signature  # noqa: E402
 
 # Χρησιμοποιούμε malware_dataset_matched.json (μετά την extract_samples.py)
 # ώστε να μην χρησιμοποιούμε χρόνο σε πακέτα χωρίς κώδικα (unmatched).
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 _DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
 DATASET_JSON = os.path.join(_DATASET_DIR, "malware_dataset_matched.json")
 OUTPUT_JSON = os.path.join(_DATASET_DIR, "attack_type_tags.json")

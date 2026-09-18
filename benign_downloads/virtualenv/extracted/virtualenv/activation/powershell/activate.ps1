@@ -97,19 +97,11 @@ function global:deactivate([switch] $NonDestructive) {
     if (Test-Path variable:_OLD_VIRTUAL_TCL_LIBRARY) {
         $env:TCL_LIBRARY = $variable:_OLD_VIRTUAL_TCL_LIBRARY
         Remove-Variable "_OLD_VIRTUAL_TCL_LIBRARY" -Scope global
-    } else {
-        if (Test-Path env:TCL_LIBRARY) {
-            Remove-Item env:TCL_LIBRARY -ErrorAction SilentlyContinue
-        }
     }
 
     if (Test-Path variable:_OLD_VIRTUAL_TK_LIBRARY) {
         $env:TK_LIBRARY = $variable:_OLD_VIRTUAL_TK_LIBRARY
         Remove-Variable "_OLD_VIRTUAL_TK_LIBRARY" -Scope global
-    } else {
-        if (Test-Path env:TK_LIBRARY) {
-            Remove-Item env:TK_LIBRARY -ErrorAction SilentlyContinue
-        }
     }
 
     if (Test-Path variable:_OLD_PKG_CONFIG_PATH) {
@@ -176,26 +168,24 @@ deactivate -nondestructive
 $env:VIRTUAL_ENV = $VenvDir
 $env:VIRTUAL_ENV_PROMPT = $Prompt
 
+# a $null saved value tells deactivate to remove the variable
 if (__TCL_LIBRARY__ -ne "") {
-    if (Test-Path env:TCL_LIBRARY) {
-        New-Variable -Scope global -Name _OLD_VIRTUAL_TCL_LIBRARY -Value $env:TCL_LIBRARY
-    }
+    New-Variable -Scope global -Name _OLD_VIRTUAL_TCL_LIBRARY -Value $env:TCL_LIBRARY
     $env:TCL_LIBRARY = __TCL_LIBRARY__
 }
 
 if (__TK_LIBRARY__ -ne "") {
-    if (Test-Path env:TK_LIBRARY) {
-        New-Variable -Scope global -Name _OLD_VIRTUAL_TK_LIBRARY -Value $env:TK_LIBRARY
-    }
+    New-Variable -Scope global -Name _OLD_VIRTUAL_TK_LIBRARY -Value $env:TK_LIBRARY
     $env:TK_LIBRARY = __TK_LIBRARY__
 }
 
 New-Variable -Scope global -Name _OLD_VIRTUAL_PATH -Value $env:PATH
 
-if (Test-Path env:PKG_CONFIG_PATH) {
-    New-Variable -Scope global -Name _OLD_PKG_CONFIG_PATH -Value $env:PKG_CONFIG_PATH
+New-Variable -Scope global -Name _OLD_PKG_CONFIG_PATH -Value $env:PKG_CONFIG_PATH
+$env:PKG_CONFIG_PATH = [IO.Path]::Combine($env:VIRTUAL_ENV, "lib", "pkgconfig")
+if ($_OLD_PKG_CONFIG_PATH) {
+    $env:PKG_CONFIG_PATH += __PATH_SEP__ + $_OLD_PKG_CONFIG_PATH
 }
-$env:PKG_CONFIG_PATH = "$env:VIRTUAL_ENV\lib\pkgconfig;$env:PKG_CONFIG_PATH"
 
 $env:PATH = "$env:VIRTUAL_ENV/" + __BIN_NAME__ + __PATH_SEP__ + $env:PATH
 

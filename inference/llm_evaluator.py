@@ -24,7 +24,10 @@ except ImportError:
 
 from query_rag import RAGEngine, PROMPT_VERSION
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+)
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 
 # ΝΕΟ: ο φάκελος αποτελεσμάτων είναι πλέον ΑΝΑ prompt version, αυτόματα.

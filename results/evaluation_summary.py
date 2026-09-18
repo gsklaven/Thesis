@@ -25,7 +25,10 @@ import json
 import os
 
 import sys
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+)
 sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
 from query_rag import PROMPT_VERSION  # noqa: E402
 

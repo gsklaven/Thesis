@@ -8,7 +8,10 @@ import signal
 import glob
 import time
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 _DEDUPED_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_deduped.json")
 _MATCHED_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_matched.json")
 DATASET_JSON = _DEDUPED_JSON if os.path.exists(_DEDUPED_JSON) else _MATCHED_JSON

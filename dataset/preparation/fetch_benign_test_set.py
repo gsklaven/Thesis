@@ -48,7 +48,10 @@ BENIGN_PACKAGES = [
     "watchdog", "websockets", "gunicorn", "paho-mqtt",
 ]
 
-BASE_DIR = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+BASE_DIR = os.environ.get(
+    "THESIS_BASE_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+)
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "benign_downloads")
 TEST_SET_DIR = os.path.join(BASE_DIR, "test_set")
 EXPECTED_LABELS_FILE = os.path.join(BASE_DIR, "expected_labels.json")
