@@ -17,6 +17,18 @@
 import javascript
 import SensitiveAPIsJs
 
+/**
+ * Readable text for a JS ControlFlowNode (condition expression).
+ * For constant string conditions, show the actual string.
+ * For all others, toString() gives readable output in JS CodeQL.
+ */
+string getReadableCondTextJs(DataFlow::Node n) {
+  result = n.getStringValue()
+  or
+  not exists(n.getStringValue()) and
+  result = n.toString()
+}
+
 from
   DataFlow::InvokeNode call, string category, ConditionGuardNode guard, BasicBlock sinkBlock
 where

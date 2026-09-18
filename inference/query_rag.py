@@ -57,7 +57,7 @@ MALWARE_THRESHOLD = 0.55
 # packages λόγω name recognition, (b) αντιφατικές εντολές → LLM διάλεγε BENIGN.
 # Κύρια αλλαγή: sim≥0.90 → MALICIOUS default (εκτός explicit exception),
 # sim 0.70-0.90 → SUSPICIOUS default, sim<0.70 → BENIGN επιτρέπεται.
-PROMPT_VERSION = "v11"
+PROMPT_VERSION = "v12"
 
 
 SSVC_COT_PROMPT = """You are a cybersecurity analyst evaluating a Python/npm package for malicious intent.

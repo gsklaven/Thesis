@@ -53,7 +53,7 @@ BASE_DIR = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 )
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "benign_downloads")
-TEST_SET_DIR = os.path.join(BASE_DIR, "test_set")
+TEST_SET_DIR = os.path.join(BASE_DIR, "benign_test_set")
 EXPECTED_LABELS_FILE = os.path.join(BASE_DIR, "expected_labels.json")
 
 PIPELINE_DIR = os.path.join(BASE_DIR, "inference", "codeql_pipeline")

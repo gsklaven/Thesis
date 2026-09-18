@@ -21,19 +21,34 @@ import semmle.python.ApiGraphs
 import SensitiveAPIsPy
 
 /**
- * ΝΕΟ FIX: ίδιο πρόβλημα με το backward_slice_py.ql - το .toString() σε
- * μια σύνθετη έκφραση (π.χ. Attribute, "self.something") επιστρέφει
- * μόνο το όνομα κλάσης του κόμβου ("Attribute()"), όχι το πραγματικό
- * κείμενο - σημαντικό εδώ αφού πολλές συνθήκες (π.χ. hasattr-gated
- * κλάδοι) εμπλέκουν ακριβώς τέτοιες εκφράσεις.
+ * Ανακατασκευάζει ανθρώπινα-αναγνώσιμο κείμενο για AstNode συνθήκης
+ * (guard nodes). Καλύπτει Attribute, Name, StringLiteral.
  */
-string getReadableCondText(AstNode n) {
-  exists(Attribute attr | attr = n |
-    result = attr.getObject().toString() + "." + attr.getName()
+
+/** Recursive helper για Expr nodes. */
+private string readableCondExpr(Expr e) {
+  // Attribute (recursive): self.flag, os.environ.get, κλπ.
+  exists(Attribute attr | attr = e |
+    result = readableCondExpr(attr.getObject()) + "." + attr.getName()
   )
   or
-  not exists(Attribute attr | attr = n) and
-  result = n.toString()
+  // Name: αναγνωριστικό μεταβλητής
+  exists(Name nm | nm = e | result = nm.getId())
+  or
+  // StringLiteral: πραγματική τιμή literal
+  exists(StringLiteral lit | lit = e | result = lit.getS())
+  or
+  // Fallback
+  not e instanceof Attribute and
+  not e instanceof Name and
+  not e instanceof StringLiteral and
+  result = e.toString()
+}
+
+string getReadableCondText(AstNode n) {
+  result = readableCondExpr(n.(Expr))
+  or
+  not n instanceof Expr and result = n.toString()
 }
 
 from

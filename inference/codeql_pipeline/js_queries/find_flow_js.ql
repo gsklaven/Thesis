@@ -42,9 +42,23 @@ module SensitiveFlowConfig implements DataFlow::ConfigSig {
 
 module SensitiveFlow = TaintTracking::Global<SensitiveFlowConfig>;
 
+/**
+ * Readable text for JS DataFlow::Node source/sink.
+ * Mirrors the Python getReadableText() approach: show the actual string value
+ * for string literals, fall back to toString() for everything else.
+ * In JS CodeQL, toString() already gives readable output ("event.data.url",
+ * "fetch()", etc.) so this mainly helps for string literal sources.
+ */
+string getReadableTextJs(DataFlow::Node n) {
+  result = n.getStringValue()
+  or
+  not exists(n.getStringValue()) and
+  result = n.toString()
+}
+
 from DataFlow::Node source, DataFlow::Node sink
 where SensitiveFlow::flow(source, sink)
 select source.getFile().getRelativePath() as source_file,
-  source.getLocation().getStartLine() as source_line, source.toString() as source_node,
+  source.getLocation().getStartLine() as source_line, getReadableTextJs(source) as source_node,
   sink.getFile().getRelativePath() as sink_file,
-  sink.getLocation().getStartLine() as sink_line, sink.toString() as sink_node
+  sink.getLocation().getStartLine() as sink_line, getReadableTextJs(sink) as sink_node

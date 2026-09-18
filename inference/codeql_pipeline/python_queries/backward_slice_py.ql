@@ -59,22 +59,42 @@ module BackwardSliceConfig implements DataFlow::ConfigSig {
 module BackwardSlice = TaintTracking::Global<BackwardSliceConfig>;
 
 /**
- * ΝΕΟ FIX: το CodeQL's προεπιλεγμένο .toString() σε ένα DataFlow::Node
- * επιστρέφει πραγματικό κείμενο πηγαίου κώδικα ΜΟΝΟ για απλούς τύπους
- * (string/αριθμητικά literals). Για σύνθετες εκφράσεις όπως Attribute
- * (π.χ. "self.something", "module.function"), δεν ξέρει πώς να το
- * σεριαλιάρει, και επιστρέφει απλά το όνομα κλάσης του κόμβου
- * ("Attribute()") - αδιαφοροποίητο, ανεξάρτητα από το τι πραγματικά
- * είναι. Αυτό ανακατασκευάζει "obj.attr" ρητά για Attribute κόμβους,
- * πέφτοντας πίσω στο κανονικό toString() για όλους τους άλλους τύπους.
+ * Ανακατασκευάζει ανθρώπινα-αναγνώσιμο κείμενο για κόμβους DataFlow που
+ * διαφορετικά θα εμφανίζονταν ως "ControlFlowNode for X".
+ *
+ * Καλύπτει τους τέσσερις πιο συχνούς τύπους:
+ *   - Attribute  : "obj.attr" (recursive, fixes nested π.χ. os.path.join)
+ *   - Name       : επιστρέφει το αναγνωριστικό μεταβλητής (π.χ. "data")
+ *   - StringLiteral: επιστρέφει την τιμή του literal (π.χ. "https://...")
+ *   - Fallback   : n.toString() για οτιδήποτε άλλο (BinaryExpr, Subscript...)
  */
-string getReadableText(DataFlow::Node n) {
-  exists(Attribute attr | attr = n.asExpr() |
-    result = attr.getObject().toString() + "." + attr.getName()
+
+/** Recursive helper — δουλεύει πάνω σε Expr, όχι DataFlow::Node. */
+private string readableExpr(Expr e) {
+  // Attribute (recursive): os.path.join, self.foo, κλπ.
+  exists(Attribute attr | attr = e |
+    result = readableExpr(attr.getObject()) + "." + attr.getName()
   )
   or
-  not exists(Attribute attr | attr = n.asExpr()) and
-  result = n.toString()
+  // Name: απλή αναφορά μεταβλητής (data, key, meta_dir, κλπ.)
+  exists(Name nm | nm = e | result = nm.getId())
+  or
+  // StringLiteral: δείχνει την πραγματική τιμή αντί για "StringLiteral"
+  exists(StringLiteral lit | lit = e | result = lit.getS())
+  or
+  // Fallback για List, Dict, Tuple, BinaryExpr, Subscript, Fstring, κλπ.
+  not e instanceof Attribute and
+  not e instanceof Name and
+  not e instanceof StringLiteral and
+  result = e.toString()
+}
+
+string getReadableText(DataFlow::Node n) {
+  // Αν ο κόμβος αντιστοιχεί σε expression, χρήση του recursive helper
+  result = readableExpr(n.asExpr())
+  or
+  // Fallback αν δεν υπάρχει asExpr() (π.χ. parameter nodes)
+  not exists(n.asExpr()) and result = n.toString()
 }
 
 from

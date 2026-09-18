@@ -74,6 +74,40 @@ module SensitiveFlowConfig implements DataFlow::ConfigSig {
 
 module SensitiveFlow = TaintTracking::Global<SensitiveFlowConfig>;
 
+/**
+ * Ανακατασκευάζει ανθρώπινα-αναγνώσιμο κείμενο για DataFlow::Node source/sink.
+ * Κρίσιμο αφού η πρόταση "Data flows from X into Y" εμφανίζεται
+ * σε κάθε chain με επιβεβαιωμένη ροή, νωρίς μέσα στο prompt.
+ *
+ * Καλύπτει:
+ *   - Attribute  : "obj.attr" (recursive, fixes nested π.χ. os.path.join)
+ *   - Name       : αναγνωριστικό μεταβλητής
+ *   - StringLiteral: πραγματική τιμή literal
+ *   - Fallback   : n.toString() για όλα τα άλλα (BinaryExpr, Subscript...)
+ */
+
+/** Recursive helper — δουλεύει πάνω σε Expr, όχι DataFlow::Node. */
+private string readableExpr(Expr e) {
+  exists(Attribute attr | attr = e |
+    result = readableExpr(attr.getObject()) + "." + attr.getName()
+  )
+  or
+  exists(Name nm | nm = e | result = nm.getId())
+  or
+  exists(StringLiteral lit | lit = e | result = lit.getS())
+  or
+  not e instanceof Attribute and
+  not e instanceof Name and
+  not e instanceof StringLiteral and
+  result = e.toString()
+}
+
+string getReadableText(DataFlow::Node n) {
+  result = readableExpr(n.asExpr())
+  or
+  not exists(n.asExpr()) and result = n.toString()
+}
+
 // ---------------------------------------------------------------------------
 // The 6-column result. Relative paths keep the output portable and make the
 // file:line matching against Joern (cross_validation.py) reliable.
@@ -81,9 +115,9 @@ module SensitiveFlow = TaintTracking::Global<SensitiveFlowConfig>;
 from DataFlow::Node source, DataFlow::Node sink
 where SensitiveFlow::flow(source, sink)
 select source.getLocation().getFile().getRelativePath() as source_file,
-  source.getLocation().getStartLine() as source_line, source.toString() as source_node,
+  source.getLocation().getStartLine() as source_line, getReadableText(source) as source_node,
   sink.getLocation().getFile().getRelativePath() as sink_file,
-  sink.getLocation().getStartLine() as sink_line, sink.toString() as sink_node
+  sink.getLocation().getStartLine() as sink_line, getReadableText(sink) as sink_node
 
 /*
  * ----------------------------------------------------------------------------

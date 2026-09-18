@@ -31,6 +31,21 @@ module BackwardSliceConfig implements DataFlow::ConfigSig {
 
 module BackwardSlice = TaintTracking::Global<BackwardSliceConfig>;
 
+/**
+ * Readable text for a JS DataFlow::Node.
+ * In JS CodeQL, toString() already gives useful output ("event.data.url",
+ * "fetch", etc.) unlike Python. But for string literal nodes, getStringValue()
+ * returns the actual string value, which is more informative.
+ */
+string getReadableTextJs(DataFlow::Node n) {
+  // Constant string value (e.g. "https://example.com")
+  result = n.getStringValue()
+  or
+  // For all other node types, toString() is already readable in JS CodeQL
+  not exists(n.getStringValue()) and
+  result = n.toString()
+}
+
 from DataFlow::Node contrib, DataFlow::Node sink, DataFlow::InvokeNode call, string category
 where
   isSensitiveArg(sink, call, category) and
@@ -38,4 +53,4 @@ where
 select call.getFile().getRelativePath() as anchor_file,
   call.getLocation().getStartLine() as anchor_line, category as anchor_category,
   call.toString() as anchor_api, contrib.getFile().getRelativePath() as contrib_file,
-  contrib.getLocation().getStartLine() as contrib_line, contrib.toString() as contrib_text
+  contrib.getLocation().getStartLine() as contrib_line, getReadableTextJs(contrib) as contrib_text

@@ -226,6 +226,30 @@ def fix_chain(chain, mode, source_root=None, pkg=None, pkg_dir=None):
             cond["condition"] = new
             stats["fixed" if ok else "unfixable"] += 1
 
+    # confirmed_source_flows — τρίτη πηγή pollution (βλ. find_flow.ql)
+    # Κάθε entry: {"source": {"file":..., "line":..., "node": ...}, "sink_node": ...}
+    # source.node: έχει file+line → απευθείας fix
+    # sink_node: δεν έχει δικό του file/line → fallback στο anchor location
+    anchor_loc = chain.get("location", "")
+    anchor_file, anchor_line = ("", "0")
+    if ":" in anchor_loc:
+        anchor_file, anchor_line = anchor_loc.rsplit(":", 1)
+
+    for flow in chain.get("confirmed_source_flows", []):
+        src = flow.get("source", {})
+        src_node = src.get("node", "")
+        if IS_CFN.match(src_node):
+            new, ok = try_fix(src_node, src.get("file", ""), src.get("line", 0))
+            src["node"] = new
+            stats["fixed" if ok else "unfixable"] += 1
+
+        sink_node = flow.get("sink_node", "")
+        if IS_CFN.match(sink_node):
+            # Χρησιμοποιεί anchor location (η sink είναι κοντά στο call site)
+            new, ok = try_fix(sink_node, anchor_file, anchor_line)
+            flow["sink_node"] = new
+            stats["fixed" if ok else "unfixable"] += 1
+
     return stats
 
 
