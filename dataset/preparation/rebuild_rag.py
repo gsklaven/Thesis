@@ -4,9 +4,8 @@ rebuild_rag.py
 One driver for the whole malware-RAG rebuild, in the right order, with backups and a
 sanity report. Run after the static analysis (dataset/analyzed_chains/ must hold the chains).
 
-  0. backup: small json files are copied to _backup_rag_rebuild/<stamp>/ ; the old
-     directories are RENAMED (instant) to *_old : final_diverse_subset, rag_train,
-     rag_test, indexes/rag_index
+  0. backup: the previous version (small json files + final_diverse_subset, rag_train, rag_test,
+     indexes/rag_index) is moved to old/rag_rebuild_<stamp>/ (same volume: instant)
   1. backfill_osv_descriptions.py   (PEP 503 name normalisation, fills empty descriptions)
   2. attack_type_tagger.py          (tags + campaign signatures come from the descriptions)
   3. build_final_dataset.py         (balanced subset from analyzed_chains)
@@ -38,7 +37,8 @@ STEPS = [
     ("RAG index", VENV_PY, "build_rag_index.py"),
 ]
 SMALL_FILES = ["malware_dataset_matched.json", "attack_type_tags.json", "final_dataset_report.json",
-               "final_diverse_subset_packages.json", "skipped_oversized_packages.json"]
+               "final_diverse_subset_packages.json", "final_diverse_subset_meta.json", "skipped_oversized_packages.json",
+               "excluded_no_payload_packages.json", "excluded_malwarebench_false_positive.json"]
 RENAME = ["final_diverse_subset", "rag_train", "rag_test", os.path.join("indexes", "rag_index")]
 
 
@@ -49,21 +49,23 @@ def busy():
 
 
 def backup(dry):
+    """Η προηγούμενη έκδοση (μικρά JSON + φάκελοι) μεταφέρεται στο old/rag_rebuild_<stamp>/,
+    ώστε το dataset/ να περιέχει μόνο την τρέχουσα και οι επαναλήψεις να μη συγκρούονται."""
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    bdir = os.path.join(DS, "_backup_rag_rebuild", stamp)
-    for d in RENAME:
-        if os.path.exists(os.path.join(DS, d + "_old")):
-            sys.exit(f"refusing: {d}_old already exists (a previous rebuild's backup) - move it away first")
-    print(f"[0] backup -> {bdir} ; rename {', '.join(d + ' -> ' + d + '_old' for d in RENAME)}")
+    bdir = os.path.join(ROOT, "old", f"rag_rebuild_{stamp}")
+    print(f"[0] backup της προηγούμενης έκδοσης -> {bdir}")
     if dry:
         return
     os.makedirs(bdir)
     for f in SMALL_FILES:
         if os.path.exists(os.path.join(DS, f)):
             shutil.copy2(os.path.join(DS, f), bdir)
+    if os.path.exists(os.path.join(ROOT, "expected_labels.json")):
+        shutil.copy2(os.path.join(ROOT, "expected_labels.json"), bdir)
     for d in RENAME:
         if os.path.exists(os.path.join(DS, d)):
-            os.rename(os.path.join(DS, d), os.path.join(DS, d + "_old"))
+            os.makedirs(os.path.dirname(os.path.join(bdir, d)), exist_ok=True)
+            shutil.move(os.path.join(DS, d), os.path.join(bdir, d))
 
 
 def sync_expected_labels(dry):

@@ -7,6 +7,10 @@ import zipfile
 import signal
 import glob
 import time
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from utils import resolve_source_path  # noqa: E402
 
 _THESIS_ROOT = os.environ.get(
     "THESIS_BASE_DIR",
@@ -309,7 +313,7 @@ def main():
 
     for idx, item in enumerate(dataset):
         pkg_name = item["package_name"]
-        src_path = item["source_code_path"]
+        src_path = resolve_source_path(item["source_code_path"])   # βλ. utils.resolve_source_path
         final_dest = os.path.join(FINAL_JSON_DIR, f"{pkg_name}.json")
 
         oversized_marker = os.path.join(FINAL_JSON_DIR, f"_oversized_{pkg_name}.marker")

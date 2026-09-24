@@ -11,14 +11,15 @@ import zipfile
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from utils import find_target_dir
+from utils import SOURCES_DIR, find_target_dir
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/home/sklavenitis/thesis")
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 EXISTING_COMBINED = os.path.join(BASE_DIR, "malware_dataset.json")
 OUTPUT_JSON = os.path.join(BASE_DIR, "malware_dataset_all_sources.json")
 
-DATADOG_EXTRACT_DIR = os.path.join(BASE_DIR, "malware_samples_datadog")
+# Αποσυμπίεση των κρυπτογραφημένων zip της Datadog ΣΤΟΝ ΦΑΚΕΛΟ ΠΗΓΩΝ, όχι μέσα στο έργο
+DATADOG_EXTRACT_DIR = os.path.join(SOURCES_DIR, "malware_samples_datadog")
 DATADOG_ZIP_PASSWORD = b"infected"
 DATADOG_FILENAME_PATTERN = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})-(?P<pkg>.+)-v(?P<version>[^-]+)\.zip$"

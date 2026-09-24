@@ -32,12 +32,11 @@ _ROOT = os.environ.get("THESIS_BASE_DIR",
                        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import batch_analyzer as ba  # noqa: E402
+from utils import resolve_source_path  # noqa: E402
 
 DATASET_JSON = os.path.join(_ROOT, "dataset", "malware_dataset_matched.json")
 LOG_PATH = os.path.join(_ROOT, "dataset", "preparation", "rerun_chains.log")
 DEFER_FILE = os.path.join(_ROOT, "dataset", "preparation", "deferred_packages.json")
-OLD_MOUNT = "/media/sklavenitis/C09F-7FCB"
-NEW_MOUNT = os.environ.get("THESIS_USB_MOUNT", "/Volumes/GIORGOS_128")
 SKIP_MARK = "Παράλειψη γλώσσας 'python'"
 
 
@@ -197,7 +196,7 @@ def main():
         if p in deferred:
             continue
         src = pm.get(p)
-        src = src.replace(OLD_MOUNT, NEW_MOUNT) if src and src.startswith(OLD_MOUNT) else src
+        src = resolve_source_path(src)   # διαδρομή άλλου μηχανήματος -> THESIS_SOURCES_DIR
         if not src or not os.path.isdir(src):
             unmappable.append(p)
         elif not os.path.exists(os.path.join(args.out_dir, f"{p}.json")):

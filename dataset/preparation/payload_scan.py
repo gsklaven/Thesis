@@ -29,7 +29,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import batch_analyzer as ba  # noqa: E402
-from rerun_chains import pick_analysis_root, OLD_MOUNT, NEW_MOUNT, DATASET_JSON  # noqa: E402
+from rerun_chains import pick_analysis_root, DATASET_JSON  # noqa: E402
+from utils import resolve_source_path, source_name  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PY_SIGNALS = re.compile(
@@ -97,7 +98,7 @@ def main():
     for n, p in enumerate(pkgs, 1):
         if p in out:
             continue
-        src = (ds.get(p, {}).get("source_code_path") or "").replace(OLD_MOUNT, NEW_MOUNT)
+        src = resolve_source_path(ds.get(p, {}).get("source_code_path") or "")
         if not os.path.isdir(src):
             out[p] = {"has_payload": None, "signals": [], "note": "source_missing"}
             continue
@@ -119,7 +120,7 @@ def main():
             json.dump({"packages": out}, open(args.out, "w"))
             print(f"  {n}/{len(pkgs)} ({(time.time() - t0) / 60:.0f} min)", flush=True)
     shutil.rmtree(work, ignore_errors=True)
-    src_of = lambda p: (ds.get(p, {}).get("source_code_path") or "").replace(OLD_MOUNT + "/", "").split("/")[0]
+    src_of = lambda p: source_name(ds.get(p, {}).get("source_code_path"))
     per = {}
     for p, v in out.items():
         s = per.setdefault(src_of(p), {"total": 0, "no_payload": 0})

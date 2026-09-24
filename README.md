@@ -35,20 +35,38 @@ results/
   evaluation_summaries/      evaluation_summary_<έκδοση>.json
   check_test_set.py, evaluation_summary.py, confusion_matrix_by_category.py
 expected_labels.json         ετικέτες αξιολόγησης (malicious για το rag_test, benign για το benign_test_set)
+run_pipeline.sh              αυτοματοποιημένη εκτέλεση όλων των σταδίων (οδηγός: PIPELINE.md)
+requirements.txt             εκδόσεις των πακέτων Python
+pipeline.env.example         υπόδειγμα τοπικών ρυθμίσεων (θέση πηγών, κλειδί LLM) -> pipeline.env
 old/                         ό,τι δεν χρησιμοποιεί πλέον το pipeline (εκτός git)
 ```
 
+## Γρήγορη εκκίνηση
+
+```bash
+./run_pipeline.sh setup      # θέση πηγών -> pipeline.env, venv, πακέτα CodeQL
+./run_pipeline.sh check
+./run_pipeline.sh status     # τι έχει γίνει και τι λείπει
+./run_pipeline.sh all        # ή μεμονωμένα στάδια: sources, collect, analyze, benign, rag, evaluate
+```
+
+Αναλυτικά σενάρια (νέο μηχάνημα, αναπαραγωγή από GitHub Release χωρίς ξανά CodeQL, ενημέρωση με νέα
+πακέτα, δημοσίευση των Behavior Chains): **[PIPELINE.md](PIPELINE.md)**. Οι ενότητες παρακάτω
+περιγράφουν τι κάνει κάθε στάδιο και ποιο script καλεί.
+
 ## Προαπαιτούμενα
 
-- Python 3.14 και `venv/` (`source venv/bin/activate`): sentence-transformers, numpy, scikit-learn, openai.
-- CodeQL CLI 2.27.0 στο `PATH`.
-- Τα ακατέργαστα δείγματα malware σε εξωτερικό δίσκο (`THESIS_USB_MOUNT`, προεπιλογή `/Volumes/GIORGOS_128`)
-  και κλώνος του OSV malicious-packages (`THESIS_OSV_DIR`).
+- Python 3.14 και `venv/` με τα πακέτα του `requirements.txt` (το `./run_pipeline.sh setup` τα εγκαθιστά).
+- CodeQL CLI 2.27.0 στο `PATH` και τα πακέτα των queries (`codeql pack install`, επίσης από το `setup`).
+- Οι κλώνοι των πηγών malware σε έναν φάκελο ή δίσκο, δηλωμένο ως `THESIS_SOURCES_DIR` στο `pipeline.env`
+  (`./run_pipeline.sh sources` τους κατεβάζει). Οι αποθηκευμένες διαδρομές των δειγμάτων μεταφράζονται
+  αυτόματα σε αυτόν τον φάκελο (`utils.resolve_source_path`).
 - `DEEPSEEK_API_KEY` για το στάδιο του LLM.
 
 ## Ροή εκτέλεσης
 
-Όλες οι εντολές τρέχουν από τη ρίζα του έργου, με ενεργό το `venv`.
+Αυτό κάνει το `run_pipeline.sh`, στάδιο προς στάδιο. Οι εντολές τρέχουν από τη ρίζα του έργου, με
+ενεργό το `venv` και φορτωμένο το `pipeline.env` (`set -a; . ./pipeline.env; set +a`).
 
 ### 1. Συλλογή δειγμάτων malware
 
@@ -137,7 +155,8 @@ python3 results/confusion_matrix_by_category.py
 | `CODEQL_NO_VENDOR=1` | οι εξαρτήσεις καταγράφονται κατ' όνομα και δεν εγκαθίστανται |
 | `CODEQL_QUERY_TIMEOUT`, `CODEQL_DB_TIMEOUT`, `BATCH_ANALYSIS_TIMEOUT`, `BENIGN_ANALYSIS_TIMEOUT` | χρονικά όρια (δευτερόλεπτα) |
 | `BATCH_STAGING_DIR` | προσωρινός φάκελος ανάλυσης (ένας ανά παράλληλη διεργασία) |
-| `THESIS_USB_MOUNT`, `THESIS_OSV_DIR`, `THESIS_BASE_DIR` | θέσεις δεδομένων |
+| `THESIS_SOURCES_DIR` | φάκελος με τους κλώνους των πηγών (στο `pipeline.env`) |
+| `THESIS_OSV_DIR`, `THESIS_BASE_DIR` | προαιρετικά: άλλη θέση για το OSV / τη ρίζα του έργου |
 | `RAG_MODE` | `sum` \| `samples` \| `policy` \| `llm` |
 | `RESULTS_SUFFIX` | επίθημα του φακέλου αποτελεσμάτων (π.χ. `_smoke`) |
 | `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | πρόσβαση στο LLM (προεπιλογή `deepseek-flash`) |

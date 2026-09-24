@@ -25,13 +25,45 @@ _SOURCE_LINE_PATTERN = re.compile(
 _MALICIOUS_CODE_LINE_PATTERN = re.compile(
     r"malicious code in \S+\s*\([^)]*\)", re.IGNORECASE
 )
-# Ορίζουμε κεντρικά όλους τους πιθανούς δίσκους
+# Θέση των ακατέργαστων πηγών (κλώνοι pypi_malregistry, MalwareBench pypi, OSV malicious-packages,
+# Datadog, maloss): THESIS_SOURCES_DIR (ή THESIS_USB_MOUNT), προεπιλογή ο εξωτερικός δίσκος.
+SOURCES_DIR = (os.environ.get("THESIS_SOURCES_DIR") or os.environ.get("THESIS_USB_MOUNT")
+               or "/Volumes/GIORGOS_128")
+# Όλοι οι πιθανοί δίσκοι (οι /media/... είναι του αρχικού Linux μηχανήματος)
 CANDIDATE_SOURCES_DIRS = [
+    SOURCES_DIR,
     "/media/sklavenitis/C09F-7FCB",
     "/media/sklavenitis/123 GB Volume",
     "/media/sklavenitis/Giorgos",
     os.path.join(os.environ.get("THESIS_BASE_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))), "dataset", "sources"),
 ]
+
+# Οι φάκελοι-ρίζες των πηγών μέσα στο SOURCES_DIR (κλώνοι/αποσυμπιέσεις).
+SOURCE_ROOTS = ("pypi_malregistry", "pypi", "malicious-software-packages-dataset", "malware_samples",
+                "malware_samples_datadog", "maloss-samples", "malicious-packages", "npm")
+
+
+def resolve_source_path(path):
+    """
+    Διαδρομή πηγαίου κώδικα όπως αποθηκεύτηκε στο malware_dataset*.json (από ΟΠΟΙΟΔΗΠΟΤΕ
+    μηχάνημα, π.χ. /media/sklavenitis/C09F-7FCB/pypi_malregistry/x/1.0) -> η αντίστοιχη
+    διαδρομή κάτω από το SOURCES_DIR αυτού του μηχανήματος. Ο χρήστης δίνει ΜΟΝΟ τη θέση
+    των πηγών (THESIS_SOURCES_DIR)· όλα τα scripts λύνουν τις διαδρομές μέσω αυτής.
+    """
+    if not path or os.path.exists(path):
+        return path
+    parts = path.replace("\\", "/").split("/")
+    for i, part in enumerate(parts):
+        if part in SOURCE_ROOTS:
+            return os.path.join(SOURCES_DIR, *parts[i:])
+    return path
+
+
+def source_name(path):
+    """Η πηγή (φάκελος-ρίζα) ενός δείγματος, π.χ. 'pypi_malregistry' - για στατιστικά ανά πηγή."""
+    parts = (path or "").replace("\\", "/").split("/")
+    return next((p for p in parts if p in SOURCE_ROOTS), "unknown")
+
 
 def campaign_signature(description):
     """
