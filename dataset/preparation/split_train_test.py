@@ -2,13 +2,17 @@
 Χωρίζει το final_diverse_subset/ σε train/ (για το RAG index) και test/
 (κρατιέται ΕΞΩ από το RAG, για evaluation).
 
-ΚΡΙΣΙΜΟ: το split γίνεται ανά campaign_signature, ΟΧΙ ανά μεμονωμένο πακέτο.
-Αν χωρίζαμε τυχαία ανά πακέτο, ένα test δείγμα θα μπορούσε να είναι σχεδόν
-πανομοιότυπο με κάτι που το RAG ήδη "είδε" από την ίδια καμπάνια στο train -
-αυτό θα έδειχνε τεχνητά τέλεια απόδοση χωρίς να σημαίνει τίποτα για
-πραγματική γενίκευση σε πρωτότυπο malware.
+ΚΡΙΣΙΜΟ: το split γίνεται ανά ΟΙΚΟΓΕΝΕΙΑ, ΟΧΙ ανά μεμονωμένο πακέτο. Οικογένεια = πακέτα που
+συνδέονται (μεταβατικά) είτε με την ίδια πραγματική καμπάνια είτε με τον ίδιο κώδικα
+(payload_signature). Αν χωρίζαμε ανά πακέτο, ή μόνο ανά καμπάνια (hash του κειμένου της
+αναφοράς - ο ίδιος κώδικας είχε συχνά διαφορετικό κείμενο), ένα test δείγμα θα μπορούσε να
+είναι πανομοιότυπο με κάτι που το RAG ήδη "είδε" στο train - αυτό θα έδειχνε τεχνητά καλή
+απόδοση χωρίς να σημαίνει τίποτα για γενίκευση σε νέο malware.
+
+Διαβάζει το final_diverse_subset_meta.json που γράφει το build_final_dataset.py.
 """
 
+import collections
 import json
 import os
 import random
@@ -20,44 +24,74 @@ _THESIS_ROOT = os.environ.get(
 )
 BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 SOURCE_DIR = os.path.join(BASE_DIR, "final_diverse_subset")
-ATTACK_TAGS_JSON = os.path.join(BASE_DIR, "attack_type_tags.json")
+META_JSON = os.path.join(BASE_DIR, "final_diverse_subset_meta.json")
+# Αποτελέσματα και ετικέτες αντιστοιχίζονται ανά ΟΝΟΜΑ: ένα malware του test με το ίδιο όνομα
+# με benign του test θα "συγκρουόταν" (π.χ. requests). Τέτοιες οικογένειες πάνε στο train.
+BENIGN_DIR = os.path.join(BASE_DIR, "benign_test_set")
 
 TRAIN_DIR = os.path.join(BASE_DIR, "rag_train")
 TEST_DIR = os.path.join(BASE_DIR, "rag_test")
 
-TEST_FRACTION = 0.2   # ~20% των campaigns πάει σε test
+TEST_FRACTION = 0.2   # ~20% των ΠΑΚΕΤΩΝ πάει σε test (ολόκληρες οικογένειες)
 SEED = 42              # deterministic split - αναπαραγώγιμο για το thesis
 
 
-def main():
-    with open(ATTACK_TAGS_JSON, "r", encoding="utf-8") as f:
-        attack_tags = json.load(f)
+def families(meta):
+    parent = {}
 
-    pkgs = [f[:-5] for f in os.listdir(SOURCE_DIR) if f.endswith(".json")]
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    for pkg, m in meta.items():
+        find(("pkg", pkg))
+        if m.get("campaign"):
+            union(("pkg", pkg), ("campaign", m["campaign"]))
+        if m.get("n_chains", 0) > 0:   # ο κενός κώδικας (0 chains) δεν συνδέει πακέτα
+            union(("pkg", pkg), ("payload", m["payload_signature"]))
+    fam = collections.defaultdict(list)
+    for pkg in meta:
+        fam[find(("pkg", pkg))].append(pkg)
+    return [sorted(f) for f in fam.values()]
+
+
+def main():
+    with open(META_JSON, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    pkgs = {f[:-5] for f in os.listdir(SOURCE_DIR) if f.endswith(".json")}
+    missing = pkgs - set(meta)
+    if missing:
+        raise SystemExit(f"[!] {len(missing)} πακέτα του final_diverse_subset/ λείπουν από το "
+                         f"{META_JSON} (π.χ. {sorted(missing)[:3]}) - ξανάτρεξε το build_final_dataset.py")
+    meta = {p: m for p, m in meta.items() if p in pkgs}
     print(f"[*] {len(pkgs)} πακέτα στο final_diverse_subset/")
 
-    # Ομαδοποίηση ανά campaign_signature (ή, αν δεν υπάρχει, το ίδιο το
-    # όνομα πακέτου λειτουργεί ως δική του "καμπάνια" ενός μέλους)
-    campaign_to_pkgs = {}
-    for pkg in pkgs:
-        sig = attack_tags.get(pkg, {}).get("campaign_signature") or f"__unique__:{pkg}"
-        campaign_to_pkgs.setdefault(sig, []).append(pkg)
-
-    # M3 FIX: sorted() πριν shuffle — χωρίς αυτό, η σειρά των dict keys
-    # εξαρτάται από τη σειρά εισαγωγής. Αν προστεθούν νέα πακέτα, ολόκληρο
-    # το split αλλάζει απρόβλεπτα. Με sorted, μόνο νέες campaigns
-    # μπαίνουν στο τέλος χωρίς να ανακατεύουν τις υπάρχουσες.
-    campaigns = sorted(campaign_to_pkgs.keys())
-    random.Random(SEED).shuffle(campaigns)
-
-    n_test = max(1, int(len(campaigns) * TEST_FRACTION))
-    test_campaigns = set(campaigns[:n_test])
-    train_campaigns = set(campaigns[n_test:])
-
+    # sorted() πριν το shuffle: η σειρά δεν εξαρτάται από τη σειρά εισαγωγής.
+    fams = sorted(families(meta))
+    random.Random(SEED).shuffle(fams)
+    target = TEST_FRACTION * len(meta)
+    benign_names = {f[:-5] for f in os.listdir(BENIGN_DIR) if f.endswith(".json")} if os.path.isdir(BENIGN_DIR) else set()
     train_pkgs, test_pkgs = [], []
-    for sig, pkg_list in campaign_to_pkgs.items():
-        target = test_pkgs if sig in test_campaigns else train_pkgs
-        target.extend(pkg_list)
+    n_test_fams = 0
+    for f in fams:
+        if len(test_pkgs) + len(f) <= target and not (set(f) & benign_names):
+            test_pkgs.extend(f)
+            n_test_fams += 1
+        else:
+            train_pkgs.extend(f)
+
+    # Επαλήθευση: καμία καμπάνια και κανένας (μη κενός) κώδικας και στα δύο σύνολα.
+    key_sets = lambda P, k: {meta[p][k] for p in P if meta[p].get(k) and (k != "payload_signature" or meta[p]["n_chains"] > 0)}
+    shared_c = key_sets(train_pkgs, "campaign") & key_sets(test_pkgs, "campaign")
+    shared_p = key_sets(train_pkgs, "payload_signature") & key_sets(test_pkgs, "payload_signature")
+    assert not shared_c and not shared_p, f"leakage: {len(shared_c)} campaigns, {len(shared_p)} payloads"
+    assert not (set(test_pkgs) & benign_names), "όνομα malware του test ίδιο με benign του test"
 
     for d in (TRAIN_DIR, TEST_DIR):
         if os.path.exists(d):
@@ -69,9 +103,11 @@ def main():
     for pkg in test_pkgs:
         shutil.copy2(os.path.join(SOURCE_DIR, f"{pkg}.json"), os.path.join(TEST_DIR, f"{pkg}.json"))
 
-    print(f"[*] {len(train_campaigns)} campaigns / {len(train_pkgs)} πακέτα -> {TRAIN_DIR}")
-    print(f"[*] {len(test_campaigns)} campaigns / {len(test_pkgs)} πακέτα -> {TEST_DIR}")
-    print("[*] ΚΑΝΕΝΑ campaign δεν εμφανίζεται και στα δύο σύνολα (no leakage).")
+    zero = lambda P: sum(1 for p in P if meta[p]["n_chains"] == 0)
+    print(f"[*] {len(fams) - n_test_fams} οικογένειες / {len(train_pkgs)} πακέτα ({zero(train_pkgs)} χωρίς chains) -> {TRAIN_DIR}")
+    print(f"[*] {n_test_fams} οικογένειες / {len(test_pkgs)} πακέτα ({zero(test_pkgs)} χωρίς chains) -> {TEST_DIR}")
+    print(f"[*] Μεγαλύτερη οικογένεια: {max(len(f) for f in fams)} πακέτα.")
+    print("[*] ΚΑΜΙΑ καμπάνια και ΚΑΝΕΝΑΣ κοινός κώδικας δεν εμφανίζεται και στα δύο σύνολα (no leakage).")
 
 
 if __name__ == "__main__":

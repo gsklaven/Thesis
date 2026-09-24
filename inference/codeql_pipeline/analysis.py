@@ -37,6 +37,17 @@ VENDOR_FOLDER = "vendor"
 # αρκετό περιθώριο για OS/desktop/browser.
 CODEQL_MAX_RAM_MB = 4096
 
+# Χρονικά όρια ανά βήμα (δευτερόλεπτα) - ρυθμιζόμενα μέσω env, ώστε μεγάλα
+# πακέτα να μη χάνουν σιωπηλά το backward slice λόγω timeout (defaults = όπως πριν).
+DB_CREATE_TIMEOUT = int(os.environ.get("CODEQL_DB_TIMEOUT", "600"))
+QUERY_TIMEOUT = int(os.environ.get("CODEQL_QUERY_TIMEOUT", "300"))
+
+# CODEQL_NO_VENDOR=1: οι εξαρτήσεις εντοπίζονται αλλά ΔΕΝ εγκαθίστανται στο vendor/ - το
+# CodeQL αναλύει μόνο τον κώδικα του πακέτου (οι ευαίσθητες κλήσεις προς βιβλιοθήκες
+# αναγνωρίζονται από τα imports μέσω API graphs, χωρίς τον κώδικα της βιβλιοθήκης). Τα
+# ονόματα των εξαρτήσεων γράφονται στο dependency_tree.json (χωρίς υπο-εξαρτήσεις).
+NO_VENDOR = os.environ.get("CODEQL_NO_VENDOR") == "1"
+
 # Φάκελος για την αποθήκευση των αποτελεσμάτων
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(PROJECT_DIR, "results")
@@ -105,15 +116,22 @@ def run_with_hard_timeout(cmd, timeout, check=False, **kwargs):
 
 def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
     vendor_path = os.path.join(source_directory, vendor_folder)
-    if not os.path.exists(vendor_path):
+    if not NO_VENDOR and not os.path.exists(vendor_path):
         os.makedirs(vendor_path)
 
     print("\nΑυτόματη Ανάλυση Εξαρτήσεων")
 
     found_imports = []
+    # Ονόματα modules/packages που υπάρχουν ΜΕΣΑ στον ίδιο τον κώδικα: ένα `import boto3`
+    # μέσα στο boto3 δεν είναι εξάρτηση - χωρίς αυτό, το pip κατέβαζε το ίδιο το πακέτο
+    # (ή τον νόμιμο συνονόματό του, για malware) στο vendor/ και το αναλύαμε δύο φορές.
+    local_names = set()
     for root, dirs, files in os.walk(source_directory):
-        if vendor_folder in root or ".venv" in root:
+        rel_parts = os.path.relpath(root, source_directory).split(os.sep)
+        if rel_parts[0] == vendor_folder or ".venv" in rel_parts:
             continue
+        local_names.update(dirs)
+        local_names.update(f[:-3] for f in files if f.endswith(".py"))
 
         for file in files:
             if file.endswith(".py"):
@@ -137,7 +155,7 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
 
     external_packages = []
     for pkg in found_imports:
-        if pkg in BUILD_TOOLING_EXCLUDE:
+        if pkg in BUILD_TOOLING_EXCLUDE or pkg in local_names:
             continue
         if pkg not in sys.stdlib_module_names:
             if pkg not in external_packages:
@@ -145,6 +163,11 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
 
     if len(external_packages) == 0:
         return []
+
+    if NO_VENDOR:
+        deps = sorted({IMPORT_TO_PACKAGE.get(p, p) for p in external_packages})
+        print(f"CODEQL_NO_VENDOR=1: {len(deps)} εξαρτήσεις καταγράφονται χωρίς εγκατάσταση: {deps[:15]}")
+        return deps
 
     installed_packages = []
     for pkg in external_packages:
@@ -266,7 +289,7 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
         f"--source-root={target_dir}",
         f"--ram={CODEQL_MAX_RAM_MB}",
     ]
-    run_with_hard_timeout(create_cmd, timeout=600, check=True)
+    run_with_hard_timeout(create_cmd, timeout=DB_CREATE_TIMEOUT, check=True)
 
     for query_file, csv_output in queries_list:
         print(f"Εκτέλεση ερωτήματος: {os.path.basename(query_file)}")
@@ -276,7 +299,7 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
             CODEQL_BIN, "query", "run", query_file, f"--database={db_name}",
             f"--output={raw_bqrs}", f"--ram={CODEQL_MAX_RAM_MB}",
         ]
-        run_with_hard_timeout(run_cmd, timeout=300, check=True)
+        run_with_hard_timeout(run_cmd, timeout=QUERY_TIMEOUT, check=True)
 
         decode_cmd = [CODEQL_BIN, "bqrs", "decode", raw_bqrs, "--format=csv", f"--output={csv_output}"]
         run_with_hard_timeout(decode_cmd, timeout=120, check=True)
@@ -287,8 +310,12 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
 
 if __name__ == "__main__":
 
-    auto_fetch_dependencies(TARGET_DIR)
-    generate_dependency_tree(TARGET_DIR)
+    deps = auto_fetch_dependencies(TARGET_DIR)
+    if NO_VENDOR:
+        with open(os.path.join(RESULTS_DIR, "dependency_tree.json"), "w", encoding="utf-8") as f:
+            json.dump({d: [] for d in deps}, f, indent=4)
+    else:
+        generate_dependency_tree(TARGET_DIR)
 
     QUERY_FOLDERS = {
         "python": "python_queries",

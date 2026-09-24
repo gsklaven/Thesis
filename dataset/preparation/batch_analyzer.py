@@ -195,7 +195,18 @@ def _safe_tar_extract(tar, dest_path):
         tar.extract(member, dest_path)
 
 
-def _safe_zip_extract(zf, dest_path):
+# ΝΕΟ FIX: τα malware samples αυτού του dataset (pypi_malregistry κλπ.) είναι
+# σχεδόν πάντα zip-αρισμένα με τον καθιερωμένο κωδικό "infected" (σύμβαση
+# malware-research corpora, ώστε να μην τα ανοίγει/σαρώνει κατά λάθος AV).
+# Το zipfile.ZipFile.extract() ΑΓΝΟΕΙ σιωπηλά το pwd για μη-κρυπτογραφημένα
+# entries, οπότε είναι ασφαλές να το περνάμε ΠΑΝΤΑ - χωρίς αυτό, ΚΑΘΕ
+# κρυπτογραφημένο πακέτο έριχνε RuntimeError στο ΠΡΩΤΟ του entry, η
+# εξαγωγή θεωρούνταν αποτυχημένη, το staging έμενε άδειο (μόνο το ίδιο το
+# .zip), και το CodeQL έβλεπε "0 modules" -> ψευδές "0 behavior chains".
+ZIP_MALWARE_PASSWORD = b"infected"
+
+
+def _safe_zip_extract(zf, dest_path, pwd=None):
     dest_real = os.path.realpath(dest_path)
     for info in zf.infolist():
         target = os.path.join(dest_path, info.filename)
@@ -205,7 +216,7 @@ def _safe_zip_extract(zf, dest_path):
         if info.file_size > MAX_SINGLE_FILE_SIZE:
             print(f"  [!] BLOCKED oversized ({info.file_size/1e6:.0f}MB): {info.filename}")
             continue
-        zf.extract(info, dest_path)
+        zf.extract(info, dest_path, pwd=pwd)
 
 
 def _try_extract_as_tar(fpath, root):
@@ -217,7 +228,12 @@ def _try_extract_as_tar(fpath, root):
 
 def _try_extract_as_zip(fpath, root):
     with zipfile.ZipFile(fpath, "r") as z:
-        _safe_zip_extract(z, root)
+        try:
+            _safe_zip_extract(z, root)
+        except RuntimeError as e:
+            if "password" not in str(e).lower() and "encrypted" not in str(e).lower():
+                raise
+            _safe_zip_extract(z, root, pwd=ZIP_MALWARE_PASSWORD)
 
 
 def extract_archives(directory):
@@ -251,6 +267,23 @@ def extract_archives(directory):
                         break
                     except Exception as e:
                         last_error = e
+
+                # ΝΕΟ FIX: αρχεία της μορφής <pkg>/<hash>/<pkg>-<hash>.tar.gz περιέχουν
+                # φάκελο με ΙΔΙΟ όνομα με το ίδιο το αρχείο -> η εξαγωγή στον ίδιο
+                # φάκελο συγκρούεται με το αρχείο, αποτυγχάνει, και το CodeQL βλέπει
+                # 0 modules (ψευδές "0 chains"). Δεύτερη προσπάθεια σε ξεχωριστό φάκελο.
+                if not extracted:
+                    alt_root = fpath + ".x"
+                    os.makedirs(alt_root, exist_ok=True)
+                    for strategy in strategies:
+                        try:
+                            strategy(fpath, alt_root)
+                            extracted = True
+                            break
+                        except Exception as e:
+                            last_error = e
+                    if not extracted:
+                        shutil.rmtree(alt_root, ignore_errors=True)
 
                 if extracted:
                     os.remove(fpath)
@@ -410,12 +443,14 @@ def main():
                 n_chains = -1
 
             shutil.copy2(RESULTS_JSON, final_dest)
-            if n_chains == 0:
-                # ── Heuristic fallback ──────────────────────────────────────
+            if n_chains == 0 and os.environ.get("BATCH_ENABLE_HEURISTIC_FALLBACK") == "1":
+                # ── Heuristic fallback (OPT-IN, off by default) ─────────────
                 # CodeQL found nothing. Run the lightweight regex scanner as a
                 # second chance before marking the package as empty. The scanner
                 # overwrites RESULTS_JSON in-place if it finds anything, so the
                 # subsequent copy picks up the heuristic result automatically.
+                # Off by default: these are pattern-matched, not CodeQL-verified,
+                # results and should not silently masquerade as real findings.
                 n_chains = _try_heuristic_scanner(STAGING_DIR, RESULTS_JSON)
                 shutil.copy2(RESULTS_JSON, final_dest)   # re-copy (heuristic or original)
                 if n_chains == 0:
@@ -423,6 +458,9 @@ def main():
                     empty_result += 1
                 else:
                     print(f"  [✓] Επιτυχία! ({n_chains} heuristic chains)")
+            elif n_chains == 0:
+                print(f"  [~] Επιτυχία, αλλά 0 behavior chains (CodeQL).")
+                empty_result += 1
             else:
                 print(f"  [✓] Επιτυχία! ({n_chains} behavior chains)")
             success += 1

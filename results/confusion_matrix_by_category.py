@@ -12,7 +12,7 @@ samples έχει η κάθε κατηγορία (υπόθεση: υποεκπρ�
 import json
 import os
 
-_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/Users/giorgos/Documents/Thesis")
+_THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 DATASET_DIR = os.path.join(_THESIS_ROOT, "dataset")
 RESULTS_ROOT = os.path.join(_THESIS_ROOT, "results")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
@@ -53,7 +53,7 @@ def analyze_version(version, expected_labels, tags):
         except Exception:
             continue
         verdict = r.get("final_verdict")
-        if verdict in ("EVALUATION_FAILED", "UNKNOWN", None, "NO_CHAINS_FOUND"):
+        if verdict in ("EVALUATION_FAILED", "INCOMPLETE", "UNKNOWN", None, "NO_CHAINS_FOUND"):
             continue
 
         flagged = verdict in ("MALICIOUS", "SUSPICIOUS")
@@ -80,7 +80,9 @@ def main():
         print(f"[!] Δεν βρέθηκε: {RESULTS_ROOT}")
         return
 
-    versions = sorted(d for d in os.listdir(RESULTS_ROOT) if os.path.isdir(os.path.join(RESULTS_ROOT, d)))
+    # μόνο οι φάκελοι εκδόσεων (v1, v11, v12_sum, ...), όχι evaluation_summaries/ test_set_summaries/ __pycache__/
+    versions = sorted(d for d in os.listdir(RESULTS_ROOT)
+                      if os.path.isdir(os.path.join(RESULTS_ROOT, d)) and d.startswith("v"))
     print(f"[*] Βρέθηκαν versions: {versions}\n")
 
     for version in versions:

@@ -87,6 +87,43 @@ module SensitiveFlow = TaintTracking::Global<SensitiveFlowConfig>;
  */
 
 /** Recursive helper — δουλεύει πάνω σε Expr, όχι DataFlow::Node. */
+/** Σύμβολο τελεστή για αναγνώσιμο κείμενο (binary / unary expressions). */
+private string opSym(Operator o) {
+  o instanceof Add and result = "+"
+  or
+  o instanceof Sub and result = "-"
+  or
+  o instanceof Mult and result = "*"
+  or
+  o instanceof Div and result = "/"
+  or
+  o instanceof Mod and result = "%"
+  or
+  o instanceof Pow and result = "**"
+  or
+  o instanceof FloorDiv and result = "//"
+  or
+  o instanceof BitOr and result = "|"
+  or
+  o instanceof BitAnd and result = "&"
+  or
+  o instanceof BitXor and result = "^"
+  or
+  o instanceof LShift and result = "<<"
+  or
+  o instanceof RShift and result = ">>"
+}
+
+private string unarySym(Unaryop o) {
+  o instanceof Not and result = "not"
+  or
+  o instanceof USub and result = "-"
+  or
+  o instanceof UAdd and result = "+"
+  or
+  o instanceof Invert and result = "~"
+}
+
 private string readableExpr(Expr e) {
   exists(Attribute attr | attr = e |
     result = readableExpr(attr.getObject()) + "." + attr.getName()
@@ -96,9 +133,33 @@ private string readableExpr(Expr e) {
   or
   exists(StringLiteral lit | lit = e | result = lit.getS())
   or
+  exists(IntegerLiteral i | i = e | result = i.getN())
+  or
+  exists(Call c | c = e | result = readableExpr(c.getFunc()) + "(...)")
+  or
+  exists(Subscript s | s = e | result = readableExpr(s.getObject()) + "[" + readableExpr(s.getIndex()) + "]")
+  or
+  exists(BinaryExpr b | b = e and exists(opSym(b.getOp())) |
+    result = readableExpr(b.getLeft()) + " " + opSym(b.getOp()) + " " + readableExpr(b.getRight())
+  )
+  or
+  exists(UnaryExpr u | u = e and exists(unarySym(u.getOp())) |
+    result = unarySym(u.getOp()) + " " + readableExpr(u.getOperand())
+  )
+  or
+  exists(Compare c | c = e and not exists(c.getComparator(1)) |
+    result = readableExpr(c.getLeft()) + " " + c.getOp(0).getSymbol() + " " + readableExpr(c.getComparator(0))
+  )
+  or
   not e instanceof Attribute and
   not e instanceof Name and
   not e instanceof StringLiteral and
+  not e instanceof IntegerLiteral and
+  not e instanceof Call and
+  not e instanceof Subscript and
+  not (e instanceof BinaryExpr and exists(opSym(e.(BinaryExpr).getOp()))) and
+  not (e instanceof UnaryExpr and exists(unarySym(e.(UnaryExpr).getOp()))) and
+  not (e instanceof Compare and not exists(e.(Compare).getComparator(1))) and
   result = e.toString()
 }
 

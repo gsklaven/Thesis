@@ -38,6 +38,7 @@ BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
 TAGS_FILE = os.path.join(BASE_DIR, "attack_type_tags.json")
 
+
 MAX_RETRIES = 3
 INITIAL_RETRY_DELAY = 3
 
@@ -288,22 +289,9 @@ def main(json_path):
     package_name = os.path.basename(json_path).replace(".json", "")
     print(f"[*] Εκτέλεση RAG Pipeline για: {package_name}")
 
+    # Ο LLM κρίνει ΜΟΝΟ από το behavior chain και την ομοιότητα με γνωστά πακέτα: καμία
+    # προ-υπολογισμένη ένδειξη (π.χ. typosquatting) δεν περνάει στο prompt.
     extra_context = ""
-    if os.path.exists(TAGS_FILE):
-        with open(TAGS_FILE, "r", encoding="utf-8") as f:
-            tags_data = json.load(f)
-        if package_name in tags_data:
-            pkg_tags = tags_data[package_name].get("attack_type_tags", [])
-            typosquat_info = tags_data[package_name].get("typosquat_details")
-
-            if "typosquatting" in pkg_tags and typosquat_info:
-                extra_context = (
-                    f"\n[CRITICAL CONTEXT]: This package has been flagged as "
-                    f"'TYPOSQUATTING'. It mimics the legitimate package "
-                    f"'{typosquat_info.get('typosquat_of', 'unknown')}' "
-                    f"(edit distance: {typosquat_info.get('edit_distance', '?')}). "
-                    f"Typosquatting is a known supply chain attack vector.\n"
-                )
 
     engine = RAGEngine()
     results = engine.analyze_package(json_path, extra_context=extra_context)

@@ -8,10 +8,19 @@ pypi_malregistry) εναντίον του OSV directory (11.678 ονόματα, 
 
 import json
 import os
+import re
 
 _THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", "/Users/giorgos/Documents/Thesis")
 DATASET_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_matched.json")
-OSV_DIR = os.path.expanduser("~/Downloads/malicious-packages/osv/malicious/pypi")
+OSV_DIR = os.environ.get("THESIS_OSV_DIR") or next(
+    (d for d in (os.path.expanduser("~/Downloads/malicious-packages/osv/malicious/pypi"),
+                 "/Volumes/GIORGOS_128/malicious-packages/osv/malicious/pypi") if os.path.isdir(d)),
+    os.path.expanduser("~/Downloads/malicious-packages/osv/malicious/pypi"))
+
+
+def norm(name):
+    """PEP 503 normalisation: Ailynitro == ailynitro, a_b == a-b."""
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def extract_description(pkg_folder):
@@ -46,17 +55,18 @@ def main():
         print(f"[!] Δεν βρέθηκε OSV φάκελος: {OSV_DIR}")
         return
 
-    osv_names = set(os.listdir(OSV_DIR))
+    osv_map = {norm(n): n for n in os.listdir(OSV_DIR)}
+    osv_names = set(osv_map)
     print(f"    {len(osv_names)} πακέτα διαθέσιμα στο OSV directory.\n")
 
     enriched, still_empty, lengths = 0, 0, []
 
     for item in zero_desc_items:
         pkg = item["package_name"]
-        if pkg not in osv_names:
+        if norm(pkg) not in osv_names:
             still_empty += 1
             continue
-        description = extract_description(os.path.join(OSV_DIR, pkg))
+        description = extract_description(os.path.join(OSV_DIR, osv_map[norm(pkg)]))
         if description:
             item["description"] = description
             item["description_backfilled_from"] = "osv_cross_reference"

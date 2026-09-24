@@ -43,14 +43,17 @@ _THESIS_ROOT = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 )
 sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
-from query_rag import PROMPT_VERSION  # noqa: E402
+from query_rag import PROMPT_VERSION, RESULTS_TAG  # noqa: E402
 
-DEFAULT_TEST_SET_DIR = os.path.join(_THESIS_ROOT, "test_set")
+DEFAULT_TEST_SET_DIR = os.path.join(_THESIS_ROOT, "dataset", "rag_test")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
 
 INFERENCE_DIR = os.path.join(_THESIS_ROOT, "inference")
 LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator_deepseek.py")
-LLM_RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
+LLM_RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", RESULTS_TAG)
+# Verdicts που σημαίνουν ότι ΔΕΝ υπάρχει πλήρης αξιολόγηση: ξαναδοκιμάζονται στο
+# επόμενο run και δεν βαθμολογούνται (ούτε ως σωστά ούτε ως λάθος).
+RETRY_VERDICTS = ("EVALUATION_FAILED", "INCOMPLETE", "UNKNOWN")
 
 
 def main():
@@ -88,8 +91,8 @@ def main():
             try:
                 with open(report_path, "r", encoding="utf-8") as f:
                     existing = json.load(f)
-                if existing.get("final_verdict") == "EVALUATION_FAILED":
-                    print(f"[*] Ξαναπροσπάθεια (προηγούμενο ήταν EVALUATION_FAILED): {pkg_name}")
+                if existing.get("final_verdict") in RETRY_VERDICTS:
+                    print(f"[*] Ξαναπροσπάθεια (προηγούμενο ήταν {existing.get('final_verdict')}): {pkg_name}")
                 else:
                     reports[pkg_name] = existing
                     print(f"[{len(reports)}/{len(packages)}] Παράλειψη (ήδη αξιολογημένο): {pkg_name}")
@@ -101,7 +104,9 @@ def main():
         json_path = os.path.join(test_set_dir, fname)
         print(f"\n{'=' * 70}\n=== {pkg_name} ===\n{'=' * 70}")
 
-        res = subprocess.run(["python3", LLM_EVALUATOR, json_path], cwd=INFERENCE_DIR)
+        # sys.executable: ίδιος Python (venv) με το check_test_set - ένα σκέτο "python3" εκτός venv
+        # αποτύγχανε σε κάθε πακέτο (χωρίς numpy/sentence_transformers) και το run συνέχιζε χωρίς αξιολόγηση.
+        res = subprocess.run([sys.executable, LLM_EVALUATOR, json_path], cwd=INFERENCE_DIR)
         if res.returncode != 0:
             print(f"  [!] Σφάλμα LLM evaluator για {pkg_name} - παράλειψη.")
             continue
@@ -127,6 +132,7 @@ def main():
     false_positives = []
     false_negatives = []          # Πραγματικά αξιολογήθηκε, το LLM είπε BENIGN
     static_analysis_misses = []   # NO_CHAINS_FOUND σε γνωστό malicious - το CodeQL δεν βρήκε τίποτα να αξιολογήσει
+    benign_no_chains = []         # NO_CHAINS_FOUND σε benign: σωστό end-to-end, αλλά ΟΧΙ απόφαση του LLM
     inconclusive = []
 
     for pkg_name in packages:
@@ -135,7 +141,7 @@ def main():
         n_chains = r.get("total_chains_analyzed", "-") if r else "-"
         expected = expected_labels.get(pkg_name, "")
 
-        if verdict in ("EVALUATION_FAILED", "ΔΕΝ ΤΡΕΞΕ"):
+        if verdict in RETRY_VERDICTS or verdict == "ΔΕΝ ΤΡΕΞΕ":
             inconclusive.append(pkg_name)
             print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'? ασαφές':10s}")
             continue
@@ -150,6 +156,7 @@ def main():
             scored += 1
             if expected == "benign":
                 correct += 1
+                benign_no_chains.append(pkg_name)
                 print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'✓':8s}")
             elif expected == "malicious":
                 static_analysis_misses.append(pkg_name)
@@ -178,10 +185,14 @@ def main():
     if scored:
         print("-" * 90)
         print(f"\n[*] Σκορ END-TO-END (μαζί με static-analysis misses): {correct}/{scored} ({correct/scored*100:.0f}%)")
-        llm_stage_scored = scored - len(static_analysis_misses)
+        # Συμμετρικά: εξαιρούνται τα NO_CHAINS_FOUND ΚΑΙ των δύο κλάσεων
+        llm_stage_scored = scored - len(static_analysis_misses) - len(benign_no_chains)
+        llm_stage_correct = correct - len(benign_no_chains)
         if llm_stage_scored:
-            print(f"[*] Σκορ ΜΟΝΟ LLM-stage (εξαιρεί static-analysis misses): "
-                  f"{correct}/{llm_stage_scored} ({correct/llm_stage_scored*100:.0f}%)")
+            print(f"[*] Σκορ ΜΟΝΟ LLM-stage (χωρίς NO_CHAINS_FOUND σε καμία κλάση): "
+                  f"{llm_stage_correct}/{llm_stage_scored} ({llm_stage_correct/llm_stage_scored*100:.0f}%)")
+        if benign_no_chains:
+            print(f"[*] Benign χωρίς chains (TN μόνο end-to-end): {len(benign_no_chains)}")
         if false_positives:
             print(f"[!] False Positives ({len(false_positives)}): {false_positives}")
         if false_negatives:
@@ -195,16 +206,19 @@ def main():
               f"{inconclusive[:10]}{'...' if len(inconclusive) > 10 else ''}")
         print(f"    Ξανατρέξε το ίδιο script - αυτά θα ξαναπροσπαθήσουν αυτόματα.")
 
-    summary_out = os.path.join(_THESIS_ROOT, f"test_set_summary_{PROMPT_VERSION}.json")
-    llm_stage_scored = scored - len(static_analysis_misses)
+    summary_out = os.path.join(_THESIS_ROOT, "results", "test_set_summaries", f"test_set_summary_{RESULTS_TAG}.json")
+    os.makedirs(os.path.dirname(summary_out), exist_ok=True)
+    llm_stage_scored = scored - len(static_analysis_misses) - len(benign_no_chains)
     with open(summary_out, "w", encoding="utf-8") as f:
         json.dump({
             "results": {pkg: reports.get(pkg, {}).get("final_verdict", "ΔΕΝ ΤΡΕΞΕ") for pkg in packages},
             "false_positives": false_positives,
             "false_negatives": false_negatives,
             "static_analysis_misses": static_analysis_misses,
+            "benign_no_chains": benign_no_chains,
             "inconclusive": inconclusive,
             "correct": correct,
+            "correct_llm_stage_only": correct - len(benign_no_chains),
             "scored_end_to_end": scored,
             "scored_llm_stage_only": llm_stage_scored,
         }, f, indent=2, ensure_ascii=False)

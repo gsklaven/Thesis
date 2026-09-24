@@ -27,14 +27,19 @@ chain.py), και αποθηκεύει το αποτέλεσμα στο test_set
   netmiko (βαρύ subprocess/SSH usage), κ.λπ.
 """
 
+import argparse
 import glob
 import json
 import os
 import shutil
 import subprocess
 import sys
-import tarfile
-import zipfile
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import batch_analyzer as ba  # noqa: E402
+
+PY_SKIP_MARK = "Παράλειψη γλώσσας 'python'"
 
 BENIGN_PACKAGES = [
     "paramiko", "fabric", "psutil", "cryptography",
@@ -48,12 +53,19 @@ BENIGN_PACKAGES = [
     "watchdog", "websockets", "gunicorn", "paho-mqtt",
 ]
 
+# Επιπλέον, τυπικά μικρά benign πακέτα - βλ. select_extra_benign.py (seeded, αναπαραγώγιμο).
+_EXTRA_SELECTION = os.path.join(os.path.dirname(os.path.abspath(__file__)), "benign_extra_selection.json")
+if os.path.exists(_EXTRA_SELECTION):
+    with open(_EXTRA_SELECTION, "r", encoding="utf-8") as _f:
+        BENIGN_PACKAGES += [p["package"] for p in json.load(_f)["packages"] if p["package"] not in BENIGN_PACKAGES]
+
 BASE_DIR = os.environ.get(
     "THESIS_BASE_DIR",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 )
+# benign_downloads/: προσωρινός φάκελος εργασίας (λήψη + αποσυμπίεση sdist), ξαναδημιουργείται όταν χρειαστεί.
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "benign_downloads")
-TEST_SET_DIR = os.path.join(BASE_DIR, "benign_test_set")
+TEST_SET_DIR = os.path.join(BASE_DIR, "dataset", "benign_test_set")
 EXPECTED_LABELS_FILE = os.path.join(BASE_DIR, "expected_labels.json")
 
 PIPELINE_DIR = os.path.join(BASE_DIR, "inference", "codeql_pipeline")
@@ -76,55 +88,62 @@ def clean_pipeline_results():
             os.remove(f)
 
 
+def pick_distribution(pkg_name):
+    """
+    Επιλέγει ΠΟΙΟ αρχείο της τελευταίας έκδοσης θα αναλυθεί, από το PyPI JSON API.
+    Προτιμάται το sdist (πηγαίος κώδικας ΜΑΖΙ με setup.py), όπως τα malware δείγματα
+    (68% έχουν chains στο setup.py): με wheels, το benign set δεν είχε ΚΑΝΕΝΑ setup.py
+    (0/168), άρα κανέναν νόμιμο κώδικα εγκατάστασης για να κριθεί. Wheel μόνο αν δεν
+    υπάρχει sdist. Επιστρέφει (url, filename, version, dist_type) ή None.
+    """
+    with urllib.request.urlopen(f"https://pypi.org/pypi/{pkg_name}/json", timeout=60) as r:
+        meta = json.load(r)
+    version = meta["info"]["version"]
+    files = [u for u in meta.get("urls", []) if not u.get("yanked")]
+    sdists = [u for u in files if u.get("packagetype") == "sdist"]
+    wheels = [u for u in files if u.get("packagetype") == "bdist_wheel"]
+    wheels.sort(key=lambda u: ("none-any" not in u["filename"], u["filename"]))
+    choice = (sdists or wheels or [None])[0]
+    if not choice:
+        return None
+    return choice["url"], choice["filename"], version, ("sdist" if sdists else "wheel")
+
+
 def download_and_extract(pkg_name):
+    """
+    Κατεβάζει το αρχείο ΑΠΕΥΘΕΙΑΣ (χωρίς pip - το `pip download` ενός sdist τρέχει το
+    setup.py του για να βγάλει metadata) και το αποσυμπιέζει με τις ίδιες ασφαλείς
+    συναρτήσεις που χρησιμοποιεί το malware pipeline (batch_analyzer.extract_archives).
+    Επιστρέφει (extract_dir, provenance) ή (None, None).
+    """
     pkg_download_dir = os.path.join(DOWNLOAD_DIR, pkg_name)
     if os.path.exists(pkg_download_dir):
         shutil.rmtree(pkg_download_dir)
-    os.makedirs(pkg_download_dir)
-
-    print(f"  [-] Κατέβασμα {pkg_name}...")
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "download", pkg_name, "--no-deps",
-             "-d", pkg_download_dir, "--no-cache-dir"],
-            capture_output=True, text=True, timeout=120,
-        )
-    except subprocess.TimeoutExpired:
-        print(f"  [!] Timeout στη λήψη {pkg_name}")
-        return None
-
-    if result.returncode != 0:
-        print(f"  [!] Αποτυχία λήψης {pkg_name}: {result.stderr[-300:]}")
-        return None
-
-    downloaded_files = [f for f in os.listdir(pkg_download_dir) if not f.startswith(".")]
-    if not downloaded_files:
-        print(f"  [!] Δεν κατέβηκε τίποτα για {pkg_name}")
-        return None
-
-    archive_path = os.path.join(pkg_download_dir, downloaded_files[0])
     extract_dir = os.path.join(pkg_download_dir, "extracted")
     os.makedirs(extract_dir)
 
-    print(f"  [-] Αποσυμπίεση {downloaded_files[0]}...")
+    print(f"  [-] Κατέβασμα {pkg_name}...")
     try:
-        if archive_path.endswith((".tar.gz", ".tgz")):
-            with tarfile.open(archive_path, "r:gz") as tar:
-                tar.extractall(extract_dir)
-        elif archive_path.endswith((".whl", ".zip")):
-            with zipfile.ZipFile(archive_path, "r") as z:
-                z.extractall(extract_dir)
-        else:
-            print(f"  [!] Άγνωστη μορφή αρχείου: {downloaded_files[0]}")
-            return None
+        picked = pick_distribution(pkg_name)
+        if not picked:
+            print(f"  [!] Κανένα αρχείο διανομής στο PyPI για {pkg_name}")
+            return None, None
+        url, filename, version, dist = picked
+        with urllib.request.urlopen(url, timeout=300) as r, open(os.path.join(extract_dir, filename), "wb") as out:
+            shutil.copyfileobj(r, out)
     except Exception as e:
-        print(f"  [!] Αποτυχία αποσυμπίεσης: {e}")
-        return None
+        print(f"  [!] Αποτυχία λήψης {pkg_name}: {e}")
+        return None, None
 
-    return extract_dir
+    print(f"  [-] Αποσυμπίεση {filename} ({dist})...")
+    ba.extract_archives(extract_dir)
+    if not any(os.scandir(extract_dir)) or os.path.exists(os.path.join(extract_dir, filename)):
+        print(f"  [!] Αποτυχία αποσυμπίεσης {filename}")
+        return None, None
+    return extract_dir, {"version": version, "dist": dist, "filename": filename}
 
 
-def run_codeql_pipeline(pkg_name, src_dir):
+def run_codeql_pipeline(pkg_name, src_dir, provenance=None):
     clean_pipeline_results()
 
     env = os.environ.copy()
@@ -132,17 +151,29 @@ def run_codeql_pipeline(pkg_name, src_dir):
 
     print(f"  [-] CodeQL ανάλυση...")
     try:
-        res1 = subprocess.run(["python3", ANALYSIS_SCRIPT], cwd=PIPELINE_DIR, env=env, timeout=600)
+        # hard timeout: σκοτώνει ΟΛΟ το process group (και τα Java παιδιά του CodeQL)
+        res1 = ba.run_with_hard_timeout(["python3", ANALYSIS_SCRIPT], cwd=PIPELINE_DIR, env=env,
+                                        timeout=int(os.environ.get("BENIGN_ANALYSIS_TIMEOUT", "600")),
+                                        capture_output=True, text=True)
     except subprocess.TimeoutExpired:
-        print(f"  [!] Timeout (10 λεπτά) στο analysis.py για {pkg_name}")
+        print(f"  [!] Timeout στο analysis.py για {pkg_name}")
         return False
+    print(res1.stdout or "", end="")
     if res1.returncode != 0:
         print(f"  [!] Σφάλμα CodeQL για {pkg_name}")
+        return False
+    # Ίδιος έλεγχος με το rerun_chains.py (malware): αν το Python pass παραλείφθηκε
+    # (timeout/σφάλμα ερωτήματος) ενώ υπάρχουν .py αρχεία, το αποτέλεσμα είναι μερικό ή
+    # κενό - ΔΕΝ το αποθηκεύουμε, αλλιώς μετράει ψευδώς ως "σωστό" benign (0 chains).
+    if PY_SKIP_MARK in (res1.stdout or "") and any(
+            f.endswith(".py") for _, _, fs in os.walk(src_dir) for f in fs):
+        print(f"  [!] Το Python pass του CodeQL παραλείφθηκε για {pkg_name} - δεν αποθηκεύεται")
         return False
 
     print(f"  [-] Σύνθεση behavior chains...")
     try:
-        res2 = subprocess.run(["python3", BUILD_SCRIPT], cwd=PIPELINE_DIR, timeout=180)
+        res2 = ba.run_with_hard_timeout(["python3", BUILD_SCRIPT], cwd=PIPELINE_DIR,
+                                        timeout=int(os.environ.get("BENIGN_BUILD_TIMEOUT", "180")))
     except subprocess.TimeoutExpired:
         print(f"  [!] Timeout (3 λεπτά) στο build_behavior_chain.py για {pkg_name}")
         return False
@@ -157,6 +188,12 @@ def run_codeql_pipeline(pkg_name, src_dir):
     os.makedirs(TEST_SET_DIR, exist_ok=True)
     dest = os.path.join(TEST_SET_DIR, f"{pkg_name}.json")
     shutil.copy2(RESULTS_JSON, dest)
+    if provenance:  # ποια έκδοση/τύπος διανομής αναλύθηκε (αναπαραγωγιμότητα)
+        with open(dest, encoding="utf-8") as f:
+            data = json.load(f)
+        data["benign_source"] = provenance
+        with open(dest, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
     print(f"  [✓] {dest}")
     return True
 
@@ -177,10 +214,32 @@ def update_expected_labels():
 
 
 def main():
-    print(f"[*] {len(BENIGN_PACKAGES)} νόμιμα πακέτα προς ανάλυση: {BENIGN_PACKAGES}")
+    global PIPELINE_DIR, PIPELINE_RESULTS_DIR, ANALYSIS_SCRIPT, BUILD_SCRIPT, RESULTS_JSON
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--shard", help="I/N: επεξεργασία μόνο κάθε N-οστού πακέτου, ξεκινώντας από το I (0-based) "
+                    "- για παράλληλους workers πάνω στην ίδια λίστα.")
+    ap.add_argument("--pipeline-dir", help="ιδιωτικό αντίγραφο του inference/codeql_pipeline/ (δικό του results/), "
+                    "ώστε παράλληλοι workers να μην αλληλεπιδρούν.")
+    args = ap.parse_args()
+
+    if args.pipeline_dir:
+        PIPELINE_DIR = args.pipeline_dir
+        PIPELINE_RESULTS_DIR = os.path.join(PIPELINE_DIR, "results")
+        ANALYSIS_SCRIPT = os.path.join(PIPELINE_DIR, "analysis.py")
+        BUILD_SCRIPT = os.path.join(PIPELINE_DIR, "build_behavior_chain.py")
+        RESULTS_JSON = os.path.join(PIPELINE_RESULTS_DIR, "sliced_behavior_chain.json")
+        os.makedirs(PIPELINE_RESULTS_DIR, exist_ok=True)
+
+    packages = BENIGN_PACKAGES
+    if args.shard:
+        i, n = map(int, args.shard.split("/"))
+        packages = packages[i::n]
+
+    print(f"[*] {len(packages)} νόμιμα πακέτα προς ανάλυση: {packages}")
 
     succeeded, failed = [], []
-    for pkg in BENIGN_PACKAGES:
+    for pkg in packages:
         print(f"\n{'=' * 60}\n=== {pkg} ===\n{'=' * 60}")
 
         dest = os.path.join(TEST_SET_DIR, f"{pkg}.json")
@@ -189,20 +248,35 @@ def main():
             succeeded.append(pkg)
             continue
 
-        src_dir = download_and_extract(pkg)
-        if not src_dir:
-            failed.append(pkg)
-            continue
+        try:
+            src_dir, prov = download_and_extract(pkg)
+            if not src_dir:
+                failed.append(pkg)
+                continue
 
-        if run_codeql_pipeline(pkg, src_dir):
-            succeeded.append(pkg)
-        else:
+            if run_codeql_pipeline(pkg, src_dir, prov):
+                succeeded.append(pkg)
+            else:
+                failed.append(pkg)
+        except Exception as e:
+            # ΚΡΙΣΙΜΟ: ένα απρόβλεπτο σφάλμα σε ΕΝΑ πακέτο (π.χ. race condition σε
+            # παράλληλη εκτέλεση, ασυνήθιστο μορφότυπο αρχείου) δεν πρέπει να
+            # σταματήσει ολόκληρο το shard - καταγράφεται ως failed και συνεχίζει.
+            print(f"  [!] Απρόσμενο σφάλμα στο {pkg}: {e}")
             failed.append(pkg)
 
-    update_expected_labels()
+    if args.shard:
+        # Παράλληλοι workers πάνω στην ίδια λίστα: η ενημέρωση του
+        # expected_labels.json (read-modify-write) ΔΕΝ είναι ασφαλής υπό
+        # ταυτόχρονη εκτέλεση - γίνεται μία φορά, χειροκίνητα, αφού
+        # τελειώσουν όλοι οι workers.
+        print(f"\n[*] --shard: παραλείπεται η ενημέρωση expected_labels.json "
+              f"(τρέξε το script χωρίς --shard μία φορά στο τέλος).")
+    else:
+        update_expected_labels()
 
     print(f"\n{'=' * 60}")
-    print(f"[✓] Επιτυχή: {len(succeeded)}/{len(BENIGN_PACKAGES)} -> {succeeded}")
+    print(f"[✓] Επιτυχή: {len(succeeded)}/{len(packages)} -> {succeeded}")
     if failed:
         print(f"[!] Απέτυχαν: {failed}")
     print(f"\nΤώρα τρέξε: python3 check_test_set.py {TEST_SET_DIR}")

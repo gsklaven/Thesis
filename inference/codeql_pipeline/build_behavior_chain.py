@@ -10,6 +10,14 @@ LANGUAGES = ["python", "javascript"]
 # put the sink's *argument* a line or two away from the call's own line).
 LINE_TOLERANCE = 2
 
+# Ανώτατο πλήθος ακμών call graph που αποθηκεύεται ανά Behavior Chain, ΜΕΤΑ το
+# dedup των external ονομάτων (βλ. σχόλιο στο build_for_language). Γενναιόδωρο
+# επίτηδες - η ρίζα του GB-bug (bundled πολλαπλές εκδόσεις) λύνεται αλλού
+# (pick_analysis_root), οπότε αυτό είναι μόνο δίχτυ ασφαλείας, όχι το κύριο
+# όριο· ένα μικρό όριο εδώ αποδείχθηκε ότι έκοβε γνήσια διαφορετικά ονόματα
+# external κλήσεων (βλ. python-aliyun-sdk-core: 64 μοναδικά ονόματα).
+MAX_RELEVANT_EDGES_PER_ANCHOR = 300
+
 
 def read_csv_rows(path):
     """Returns the data rows (header stripped) of a CSV, or [] if missing."""
@@ -155,9 +163,36 @@ def build_for_language(language):
     behavior_chains = []
     for anchor in anchors.values():
         touched = anchor["touched_files"]
-        relevant_edges = [
-            e for e in full_call_graph if e["caller_file"] in touched or e["callee_file"] in touched
-        ]
+        # Bug fix (2026-09-23): χωρίς όριο, πακέτα με μεγάλο call graph (π.χ.
+        # πολλές bundled εκδόσεις κώδικα στο ίδιο "πακέτο", βλ. automslc,
+        # s3transfer-sl) παρήγαγαν αρχεία πολλών GB. Η ρίζα του προβλήματος
+        # (bundled πολλαπλές εκδόσεις) λύθηκε ήδη στο rerun_chains.py
+        # (pick_analysis_root) - το όριο εδώ είναι πλέον ένα δίχτυ ασφαλείας.
+        #
+        # Bug fix #2 (2026-09-23, verified on python-aliyun-sdk-core /
+        # securetransport.py: 64 ΔΙΑΦΟΡΕΤΙΚΑ external ονόματα σε μόλις 98 raw
+        # edges): ένα απλό cap στα RAW edges (πριν το dedup) μπορεί να κόψει
+        # anchors με γνήσια ποικιλομορφία κλήσεων ΠΡΙΝ φτάσει σε όλα τα
+        # διαφορετικά ονόματα - το flatten_chain_to_text() (utils.py) διαβάζει
+        # μόνο τα πρώτα 10 ΜΟΝΑΔΙΚΑ ονόματα external callees, αλφαβητικά, οπότε
+        # πρέπει να διατηρούνται ΟΛΑ τα διαφορετικά ονόματα, όχι απλά τα πρώτα
+        # N raw edges (που μπορεί να είναι όλα επαναλήψεις του ίδιου ονόματος).
+        # Εδώ κάνουμε dedup στα external edges ΠΡΙΝ το cap, ώστε το όριο να
+        # μετράει μοναδικά ονόματα, όχι επαναλήψεις.
+        matches = [e for e in full_call_graph if e["caller_file"] in touched or e["callee_file"] in touched]
+        ext = [e for e in matches if e.get("edge_type") == "external"]
+        other = [e for e in matches if e.get("edge_type") != "external"]
+        seen_ext_names = set()
+        dedup_ext = []
+        for e in ext:
+            name = e.get("callee")
+            if name not in seen_ext_names:
+                seen_ext_names.add(name)
+                dedup_ext.append(e)
+        # Αλφαβητική ταξινόμηση ΠΡΙΝ το cap: το flatten_chain_to_text() κρατάει τα 10
+        # αλφαβητικά πρώτα μοναδικά ονόματα, άρα έτσι το cap δεν αλλάζει ποτέ το κείμενό του.
+        dedup_ext.sort(key=lambda e: e.get("callee") or "")
+        relevant_edges = (dedup_ext + other)[:MAX_RELEVANT_EDGES_PER_ANCHOR]
         behavior_chains.append(
             {
                 "language": language,
@@ -210,6 +245,9 @@ if __name__ == "__main__":
             "total_behavior_chains": len(all_chains),
             "by_category": by_category,
             "total_package_dependencies": len(package_dependency_graph),
+            # Σημάδι έκδοσης: αρχεία χωρίς αυτό παρήχθησαν πριν τα fixes του 2026-09-23
+            # (βλ. dataset/preparation/compact_chains.py).
+            "call_graph_format": "dedup-sorted-cap300",
         },
         "behavior_chains": all_chains,
         "full_call_graphs": full_graphs,          # function-level: caller -> callee (resolved + external)

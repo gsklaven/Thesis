@@ -2,12 +2,13 @@
 Multi-Hop RAG Query System & LLM Prompt Generator (SSVC Ready).
 """
 import json
+import re
 import sys
 import os
 import numpy as np
 from sentence_transformers import SentenceTransformer
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dataset", "preparation"))
-from utils import flatten_chain_to_text  # noqa: E402
+from utils import chain_to_llm_text, flatten_chain_to_text, is_pure_vendor_chain  # noqa: E402
 
 _THESIS_ROOT = os.environ.get(
     "THESIS_BASE_DIR",
@@ -26,6 +27,10 @@ POLICY_METADATA_FILE = os.path.join(POLICY_INDEX_DIR, "policy_metadata.json")
 MODEL_NAME = "all-MiniLM-L6-v2"
 MALWARE_TOP_K = 5
 POLICY_TOP_K = 4
+# Δεύτερο στάδιο ανάκτησης policies: ερώτημα ΜΟΝΟ με το όνομα του sensitive API
+# (το πλήρες κείμενο του chain σπάνια φέρνει τον κανόνα που αναφέρει το API).
+# Τα αποτελέσματα ΕΝΩΝΟΝΤΑΙ με του πρώτου σταδίου (χωρίς διπλότυπα).
+POLICY_API_TOP_K = 3
 MALWARE_THRESHOLD = 0.55
 
 # ΝΕΟ: prompt version tracking. Αύξησε αυτό ΚΑΘΕ ΦΟΡΑ που αλλάζεις ουσιαστικά
@@ -53,11 +58,27 @@ MALWARE_THRESHOLD = 0.55
 # πακέτο έχει παρόμοια επιφανειακή δομή, ανεξάρτητα από πραγματική πρόθεση.
 # Το STEP 2 τώρα επαναφέρει ΚΑΙ ενισχύει αυτή την προστασία, στοχευμένα.
 # v12: Ριζικά απλούστερο prompt. Αντί για 6 αντιφατικά steps, 3 σαφή
-# ερωτήματα με sim-based rules. Fixes: (a) LLM αθώωνε malicious squatted
-# packages λόγω name recognition, (b) αντιφατικές εντολές → LLM διάλεγε BENIGN.
-# Κύρια αλλαγή: sim≥0.90 → MALICIOUS default (εκτός explicit exception),
-# sim 0.70-0.90 → SUSPICIOUS default, sim<0.70 → BENIGN επιτρέπεται.
+# ερωτήματα (Q1 συμπεριφορά, Q2 στάθμιση Τμήματος Β, Q3 δυαδικό verdict).
+# Fixes: (a) LLM αθώωνε malicious squatted packages λόγω name recognition,
+# (b) αντιφατικές εντολές → LLM διάλεγε BENIGN. Το verdict είναι BENIGN μόνο
+# αν το Q1 δεν βρει ανεξήγητη ενέργεια (ανεξάρτητα από το similarity score),
+# αλλιώς MALICIOUS· δεν υπάρχει πλέον κατάσταση SUSPICIOUS.
+# 2026-09-24 (πριν τα runs του v12): ονόματα πεδίων που περιγράφουν ακριβώς τι
+# είναι - is_false_positive -> behavior_explained (το LLM δεν ξέρει ground truth),
+# policy_violations -> related_policies (ανακτημένες εγγραφές, όχι αποδεδειγμένες
+# παραβιάσεις), και η λίστα εξαρτήσεων δεν λέγεται πια "vendored" (CODEQL_NO_VENDOR).
 PROMPT_VERSION = "v12"
+
+# Ablation: ίδιο prompt, αλλά αφαιρούνται τα ανακτημένα αποτελέσματα (το prompt
+# ήδη λέει "No similar malware found" / "No relevant security policies matched").
+# RAG_MODE: sum (προεπιλογή, δείγματα + policies) | samples (μόνο δείγματα malware)
+#           | policy (μόνο policies) | llm (χωρίς ανάκτηση, μόνο LLM).
+RAG_MODE = os.environ.get("RAG_MODE", "sum")
+if RAG_MODE not in ("sum", "samples", "policy", "llm"):
+    raise SystemExit(f"RAG_MODE άκυρο: {RAG_MODE}")
+NO_MALWARE = RAG_MODE in ("policy", "llm")
+NO_POLICY = RAG_MODE in ("samples", "llm")
+RESULTS_TAG = f"{PROMPT_VERSION}_{RAG_MODE}" + os.environ.get("RESULTS_SUFFIX", "")
 
 
 SSVC_COT_PROMPT = """You are a cybersecurity analyst evaluating a Python/npm package for malicious intent.
@@ -199,33 +220,53 @@ verdict itself.
   - verdict MALICIOUS, with an unambiguous, confirmed malicious pattern
     (confirmed credential exfiltration, confirmed C2, confirmed execution
     of an undocumented decoded payload) → ssvc_decision ACT.
-CONSISTENCY REQUIREMENT: is_false_positive in your JSON output must directly
+CONSISTENCY REQUIREMENT: behavior_explained in your JSON output must directly
 reflect your Q1 finding and must agree with verdict: true only when verdict
-is BENIGN, false whenever verdict is MALICIOUS. Do not let these fields
-disagree with each other or with Q1.
+is BENIGN (every action has a specific legitimate explanation), false
+whenever verdict is MALICIOUS. Do not let these fields disagree with each
+other or with Q1.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT — Respond ONLY with this JSON:
+OUTPUT — Respond ONLY with this JSON. Fill the fields IN THE ORDER SHOWN:
+the reasoning fields (Q1, then Q2) come first and the verdict is derived
+from them, so write the reasoning before you decide the verdict.
 
 {{
+  "reasoning": {{
+    "code_intent": "Q1: What Section A code actually does",
+    "q1_finding": "Q1: the specific anomaly, or the specific legitimate explanation for every action",
+    "similarity_rule_applied": "Q2: How Section B was weighed given the Q1 finding",
+    "behavior_explained": false
+  }},
   "verdict": "MALICIOUS | BENIGN",
   "confidence": 0.0,
   "ssvc_decision": "TRACK | TRACK* | ATTEND | ACT",
-  "reasoning": {{
-    "code_intent": "What Section A code actually does",
-    "similarity_rule_applied": "How Section B was weighed given the Q1 finding",
-    "is_false_positive": false,
-    "false_positive_reason": "If FP: the specific legitimate explanation from Q1. If not FP: the specific anomaly from Q1"
-  }},
   "malware_similarity": {{
     "most_similar_package": "package_name or null",
     "similarity_score": 0.0,
     "similarity_explanation": "Structural overlap description"
   }},
-  "policy_violations": [{{"policy_id": "...", "policy_name": "...", "violation_reason": "..."}}],
+  "related_policies": [{{"policy_id": "...", "policy_name": "...", "relevance": "How this retrieved Section C entry relates to the behavior"}}],
   "mitre_mapping": [{{"technique_id": "...", "technique_name": "...", "relevance": "..."}}],
   "summary": "One-paragraph summary"
 }}"""
+
+_OSV_BOILERPLATE = re.compile(
+    r"_-= Per source details\. Do not edit below this line\.=-_"   # διαχωριστικό του OSV
+    r"|^#+\s*Source:.*$"                                             # "## Source: kam193 (hash)"
+    r"|^\s*-{3,}\s*$", re.M)                                        # "---"
+
+
+def clean_description(text):
+    """
+    Οι περιγραφές OSV ξεκινούν συχνά με boilerplate ("Malicious code in X (PyPI)", "---",
+    "_-= Per source details... =-_", "## Source: <αναλυτής> (<hash>)") που έτρωγε το όριο των
+    250 χαρακτήρων στο Τμήμα Β, πριν φτάσει η πραγματική περιγραφή. Αφαιρείται μόνο στο prompt.
+    """
+    t = _OSV_BOILERPLATE.sub(" ", text or "")
+    t = re.sub(r"^\s*Malicious code in \S+ \((PyPI|npm)\)\s*", "", t.strip())
+    return re.sub(r"\s+", " ", t).strip()
+
 
 def cosine_search(query_vec, vectors, top_k=5):
     similarities = np.dot(vectors, query_vec)
@@ -272,27 +313,30 @@ class RAGEngine:
             pkg_data = json.load(f)
 
         results = []
+        api_cache = {}
+        self.last_vendor_excluded = 0
 
         for idx, chain in enumerate(pkg_data.get("behavior_chains", [])):
-            text = flatten_chain_to_text(chain)
+            # Ίδιος κανόνας με το build_rag_index.py: κώδικας νόμιμων βιβλιοθηκών που
+            # εγκαταστήσαμε εμείς στο vendor/ δεν αξιολογείται ως κώδικας του πακέτου.
+            if is_pure_vendor_chain(chain):
+                self.last_vendor_excluded += 1
+                continue
+            text = flatten_chain_to_text(chain)  # κείμενο embedding (≤200 λέξεις), ίδιο με το index
             query_vec = self.model.encode([text], normalize_embeddings=True)[0]
+            llm_text = chain_to_llm_text(chain)  # πλήρες κείμενο για το Τμήμα Α του LLM
 
-            # Πακέτο-επίπεδο γράφος εξαρτήσεων: διαθέσιμο στο JSON αλλά δεν
-            # έφτανε ποτέ στο LLM prompt. Το προσθέτουμε ως συμπληρωματικό
-            # context (μία φορά ανά chain, κρατάμε μικρό για να μην τρώει
-            # tokens) ώστε το LLM να βλέπει τι τρίτου-μέρους βιβλιοθήκες
-            # περικλείει το πακέτο - σημαντικό για supply-chain ανάλυση.
-            dep_graph = pkg_data.get("package_dependency_graph", {})
+            # Εξαρτήσεις του πακέτου ως συμπληρωματικό context (μικρό, για να μην
+            # τρώει tokens). Με CODEQL_NO_VENDOR=1 το package_dependency_graph είναι
+            # {όνομα: []}: τα πακέτα τρίτων που κάνει import ο κώδικας, μόνο κατ' όνομα,
+            # χωρίς υπο-εξαρτήσεις και χωρίς να έχει αναλυθεί ο κώδικάς τους.
+            dep_names = sorted(pkg_data.get("package_dependency_graph") or {})
             chain_extra = extra_context
-            if dep_graph:
-                dep_lines = [
-                    f"  {pkg}: [{', '.join(deps[:5])}{'...' if len(deps) > 5 else ''}]"
-                    for pkg, deps in list(dep_graph.items())[:10]
-                ]
+            if dep_names:
                 dep_summary = (
-                    "\n[PACKAGE DEPENDENCY GRAPH (vendored third-party libs)]:\n"
-                    + "\n".join(dep_lines)
-                    + (f"\n  ... ({len(dep_graph)} packages total)" if len(dep_graph) > 10 else "")
+                    "\n[THIRD-PARTY PACKAGES IMPORTED BY THE CODE (names only; their code was not analyzed)]: "
+                    + ", ".join(dep_names[:15])
+                    + (f" ... ({len(dep_names)} total)" if len(dep_names) > 15 else "")
                     + "\n"
                 )
                 chain_extra = (extra_context + dep_summary) if extra_context else dep_summary
@@ -316,8 +360,8 @@ class RAGEngine:
                 )
                 chain_extra = (chain_extra + heuristic_note) if chain_extra else heuristic_note
 
-            m_matches = cosine_search(query_vec, self.malware_vectors, MALWARE_TOP_K)
-            p_matches = cosine_search(query_vec, self.policy_vectors, POLICY_TOP_K)
+            m_matches = [] if NO_MALWARE else cosine_search(query_vec, self.malware_vectors, MALWARE_TOP_K)
+            p_matches = [] if NO_POLICY else cosine_search(query_vec, self.policy_vectors, POLICY_TOP_K)
 
             malware_hits = [{
                 "package": self.malware_meta[i]["package"],
@@ -330,7 +374,7 @@ class RAGEngine:
                 # ablation study του IntelGuard) ότι το πλούσιο, εξηγηματικό
                 # κείμενο γύρω από ένα malware δείγμα βοηθάει σημαντικά το
                 # LLM reasoning, πέρα από μόνο tags/category.
-                "description": self.malware_meta[i].get("description", ""),
+                "description": clean_description(self.malware_meta[i].get("description", "")),
             } for sim, i in m_matches]
 
             policy_hits = [{
@@ -339,7 +383,31 @@ class RAGEngine:
                 "name": self.policy_meta[i]["name"],
                 "description": self.policy_meta[i].get("description", "")[:200],
                 "similarity": round(sim, 4),
+                "matched_by": "chain",
             } for sim, i in p_matches]
+
+            # Στάδιο 2: ανάκτηση policies με βάση ΜΟΝΟ το API του chain.
+            api = (chain.get("sensitive_api") or "").removesuffix("(...)")
+            if not NO_POLICY and chain.get("category") != "unanchored" and api and not api.startswith("ControlFlowNode for"):
+                if api not in api_cache:
+                    api_cache[api] = self.model.encode([f"Use of {api}"], normalize_embeddings=True)[0]
+                seen_ids = {h["id"] for h in policy_hits}
+                added = 0
+                for sim, i in cosine_search(api_cache[api], self.policy_vectors, POLICY_TOP_K + POLICY_API_TOP_K):
+                    if self.policy_meta[i]["id"] in seen_ids:
+                        continue
+                    policy_hits.append({
+                        "source": self.policy_meta[i]["source"],
+                        "id": self.policy_meta[i]["id"],
+                        "name": self.policy_meta[i]["name"],
+                        "description": self.policy_meta[i].get("description", "")[:200],
+                        "similarity": round(sim, 4),
+                        "matched_by": f"api:{api}",
+                    })
+                    seen_ids.add(self.policy_meta[i]["id"])
+                    added += 1
+                    if added >= POLICY_API_TOP_K:
+                        break
 
             best_sim = malware_hits[0]["similarity"] if malware_hits else 0.0
 
@@ -354,12 +422,13 @@ class RAGEngine:
             policy_context = "\n".join([
                 f"- [{h['similarity']:.2f}] {h['source']} [{h['id']}]: "
                 f"{h['name']} — {h['description'][:100]}"
+                + (f" [matched on API {h['matched_by'][4:]}]" if h.get("matched_by", "").startswith("api:") else "")
                 for h in policy_hits
             ]) or "No relevant security policies matched."
 
             prompt = SSVC_COT_PROMPT.format(
                 package_name=package_name,
-                behavior_text=text,
+                behavior_text=llm_text,
                 malware_top_k=MALWARE_TOP_K,
                 malware_context=malware_context,
                 policy_top_k=POLICY_TOP_K,
@@ -377,9 +446,11 @@ class RAGEngine:
                 "malware_matches": malware_hits,
                 "policy_matches": policy_hits,
                 "pre_verdict": "MATCHES_KNOWN_MALWARE" if best_sim >= MALWARE_THRESHOLD else "NO_STRONG_MATCH",
-                "behavior_text": text,
+                "behavior_text": llm_text,
+                "embedding_text": text,
                 "prompt_for_llm": prompt,
                 "prompt_version": PROMPT_VERSION,
+                "rag_mode": RAG_MODE,
             })
 
         return results

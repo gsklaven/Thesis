@@ -30,11 +30,12 @@ _THESIS_ROOT = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 )
 sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
-from query_rag import PROMPT_VERSION  # noqa: E402
+from query_rag import PROMPT_VERSION, RESULTS_TAG  # noqa: E402
 
-RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION)
+RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", RESULTS_TAG)
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
-SUMMARY_OUT = os.path.join(_THESIS_ROOT, f"evaluation_summary_{PROMPT_VERSION}.json")
+# Δομή του results/: <tag>/report_*.json, evaluation_summaries/, test_set_summaries/
+SUMMARY_OUT = os.path.join(_THESIS_ROOT, "results", "evaluation_summaries", f"evaluation_summary_{RESULTS_TAG}.json")
 
 
 def load_reports():
@@ -67,17 +68,18 @@ def compute_confusion(reports, expected_labels, positive_verdicts):
     tp = tn = fp = fn = 0
     static_misses = 0
     unscored = 0
+    benign_no_chains = 0  # benign που το LLM δεν είδε ποτέ: TN μόνο στο end-to-end
     for pkg, r in reports.items():
         expected = expected_labels.get(pkg)
         if expected not in ("benign", "malicious"):
             continue  # χωρίς ετικέτα - δεν μπαίνει καν στο confusion matrix
         verdict = r.get("final_verdict")
-        if verdict in ("EVALUATION_FAILED", "UNKNOWN", None):
+        if verdict in ("EVALUATION_FAILED", "INCOMPLETE", "UNKNOWN", None):
             unscored += 1  # ΔΕΝ μετράει ως λάθος - απλά δεν ξέρουμε
             continue
         if verdict == "NO_CHAINS_FOUND":
             if expected == "benign":
-                tn += 1  # ορθό αποτέλεσμα - καμία ψευδής συναγερμός
+                benign_no_chains += 1  # σωστό end-to-end, αλλά ΟΧΙ απόφαση του LLM
             else:
                 static_misses += 1  # ΞΕΧΩΡΙΣΤΟ από LLM reasoning miss
             continue
@@ -88,29 +90,36 @@ def compute_confusion(reports, expected_labels, positive_verdicts):
         else:
             fp += flagged
             tn += (not flagged)
-    return tp, tn, fp, fn, static_misses, unscored
+    return tp, tn, fp, fn, static_misses, unscored, benign_no_chains
 
 
-def print_metrics(label, tp, tn, fp, fn, static_misses, unscored):
-    # END-TO-END: static_misses μετράνε ως χαμένα malicious (μέρος του fn)
+def print_metrics(label, tp, tn, fp, fn, static_misses, unscored, benign_no_chains=0):
+    # END-TO-END: ό,τι έκανε το ΣΥΣΤΗΜΑ - malware χωρίς chains = χαμένο (FN),
+    # benign χωρίς chains = κανένας συναγερμός (TN).
     fn_end_to_end = fn + static_misses
-    total_e2e = tp + tn + fp + fn_end_to_end
-    accuracy_e2e = safe_div(tp + tn, total_e2e)
+    tn_end_to_end = tn + benign_no_chains
+    total_e2e = tp + tn_end_to_end + fp + fn_end_to_end
+    accuracy_e2e = safe_div(tp + tn_end_to_end, total_e2e)
     recall_e2e = safe_div(tp, tp + fn_end_to_end)
+    fpr_e2e = safe_div(fp, fp + tn_end_to_end)
 
-    # LLM-STAGE ONLY: εξαιρεί τα static-analysis misses εντελώς
+    # LLM-STAGE ONLY: ΜΟΝΟ πακέτα που αξιολόγησε το LLM - εξαιρούνται ΣΥΜΜΕΤΡΙΚΑ τα
+    # NO_CHAINS_FOUND και των δύο κλάσεων (πριν, τα benign NO_CHAINS μετρούσαν ως TN).
     total_llm = tp + tn + fp + fn
     accuracy_llm = safe_div(tp + tn, total_llm)
+    fpr_llm = safe_div(fp, fp + tn)
     precision = safe_div(tp, tp + fp)
     recall_llm = safe_div(tp, tp + fn)
     f1 = safe_div(2 * precision * recall_llm, precision + recall_llm)
 
     print(f"\n--- {label} ---")
     print(f"  TP={tp}  TN={tn}  FP={fp}  FN={fn}  static-analysis-misses={static_misses}  "
-          f"(ασαφή/αγνοήθηκαν: {unscored})")
-    print(f"  Accuracy  END-TO-END (static misses μετράνε ως χαμένα): {accuracy_e2e:.3f}")
+          f"benign-no-chains={benign_no_chains}  (ασαφή/αγνοήθηκαν: {unscored})")
+    print(f"  Accuracy  END-TO-END (NO_CHAINS: malware=FN, benign=TN): {accuracy_e2e:.3f}")
     print(f"  Recall    END-TO-END: {recall_e2e:.3f}")
-    print(f"  Accuracy  LLM-STAGE ONLY (εξαιρεί static misses):       {accuracy_llm:.3f}")
+    print(f"  FPR       END-TO-END: {fpr_e2e:.3f}")
+    print(f"  Accuracy  LLM-STAGE ONLY (χωρίς NO_CHAINS και στις 2 κλάσεις): {accuracy_llm:.3f}")
+    print(f"  FPR       LLM-STAGE ONLY: {fpr_llm:.3f}")
     trivial_note = "  [!] FP=0 -> τετριμμένο, χρειάζεσαι 'benign' ετικέτες στο expected_labels.json" \
         if fp == 0 and tp > 0 else ""
     print(f"  Precision LLM-STAGE ONLY: {precision:.3f}{trivial_note}")
@@ -123,9 +132,12 @@ def print_metrics(label, tp, tn, fp, fn, static_misses, unscored):
     return {
         "tp": tp, "tn": tn, "fp": fp, "fn": fn,
         "static_analysis_misses": static_misses, "unscored": unscored,
+        "benign_no_chains": benign_no_chains,
         "accuracy_end_to_end": round(accuracy_e2e, 4),
         "recall_end_to_end": round(recall_e2e, 4),
+        "fpr_end_to_end": round(fpr_e2e, 4),
         "accuracy_llm_stage_only": round(accuracy_llm, 4),
+        "fpr_llm_stage_only": round(fpr_llm, 4),
         "precision_llm_stage_only": round(precision, 4),
         "recall_llm_stage_only": round(recall_llm, 4),
         "f1_llm_stage_only": round(f1, 4),
@@ -180,11 +192,10 @@ def main():
     n_malicious_labels = sum(1 for v in expected_labels.values() if v == "malicious")
     print(f"\n[*] expected_labels.json: {n_malicious_labels} malicious, {n_benign_labels} benign")
 
-    tp, tn, fp, fn, static_misses, unscored = compute_confusion(reports, expected_labels, {"MALICIOUS"})
-    print_metrics_strict = print_metrics("STRICT (θετικό = μόνο MALICIOUS)", tp, tn, fp, fn, static_misses, unscored)
-
-    tp, tn, fp, fn, static_misses, unscored = compute_confusion(reports, expected_labels, {"MALICIOUS", "SUSPICIOUS"})
-    print_metrics_lenient = print_metrics("LENIENT (θετικό = MALICIOUS ή SUSPICIOUS)", tp, tn, fp, fn, static_misses, unscored)
+    print_metrics_strict = print_metrics("STRICT (θετικό = μόνο MALICIOUS)",
+                                         *compute_confusion(reports, expected_labels, {"MALICIOUS"}))
+    print_metrics_lenient = print_metrics("LENIENT (θετικό = MALICIOUS ή SUSPICIOUS)",
+                                          *compute_confusion(reports, expected_labels, {"MALICIOUS", "SUSPICIOUS"}))
 
     if n_benign_labels == 0:
         print("\n[!] ΚΑΝΕΝΑ 'benign' label στο expected_labels.json ακόμα - το Precision/F1 "
@@ -236,6 +247,7 @@ def main():
         "metrics_strict": print_metrics_strict,
         "metrics_lenient": print_metrics_lenient,
     }
+    os.makedirs(os.path.dirname(SUMMARY_OUT), exist_ok=True)
     with open(SUMMARY_OUT, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
     print(f"\n[✓] Περίληψη -> {SUMMARY_OUT}")

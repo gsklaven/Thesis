@@ -59,6 +59,23 @@ def campaign_signature(description):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
 
 
+def is_pure_vendor_chain(chain):
+    """
+    True αν το chain ανήκει ΕΞ ΟΛΟΚΛΗΡΟΥ σε vendored βιβλιοθήκη: το anchor του είναι μέσα
+    στο vendor/ (κώδικας που εγκαταστήσαμε ΕΜΕΙΣ από το PyPI με pip, όχι κώδικας του
+    πακέτου) ΚΑΙ καμία επιβεβαιωμένη ροή δεν ξεκινά από κώδικα του πακέτου. Τέτοια chains
+    είναι ίδια για κάθε πακέτο που κάνει import τη βιβλιοθήκη, άρα δεν λένε τίποτα για την
+    πρόθεσή του. Chains με anchor στο vendor/ αλλά ροή από την εφαρμογή (App-to-Vendor)
+    ΚΡΑΤΙΟΥΝΤΑΙ: είναι τα δεδομένα του πακέτου που φτάνουν σε sink μιας βιβλιοθήκης.
+    Χρησιμοποιείται ΚΑΙ στο build_rag_index.py ΚΑΙ στο query_rag.py (συμμετρία).
+    """
+    norm = lambda p: (p or "").replace("\\", "/")
+    if not norm(chain.get("location")).startswith("vendor/"):
+        return False
+    return all(norm(f.get("source", {}).get("file")).startswith("vendor/")
+               for f in chain.get("confirmed_source_flows", []))
+
+
 def flatten_chain_to_text(chain, attack_type_tags=None):
     """
     Μετατρέπει ένα behavior_chain dict σε περιγραφικό κείμενο για embedding.
@@ -72,6 +89,56 @@ def flatten_chain_to_text(chain, attack_type_tags=None):
     Αποφεύγουμε επίτηδες package name/file paths/line numbers - θέλουμε το
     embedding να συλλάβει τη ΣΥΜΠΕΡΙΦΟΡΑ, όχι μοναδικά αναγνωριστικά.
     """
+    # R2: Token truncation guard — το all-MiniLM-L6-v2 δέχεται max 256
+    # word pieces. Κείμενο πάνω από ~200 λέξεις αγνοείται σιωπηλά.
+    return _serialize_chain(chain, attack_type_tags, max_words=200, max_slice=10, max_callees=10)
+
+
+def chain_to_llm_text(chain):
+    """
+    Το κείμενο του Τμήματος Α στο LLM prompt. ΔΙΑΦΟΡΕΤΙΚΟ από το κείμενο του embedding:
+    το όριο των 200 λέξεων υπάρχει μόνο για το μοντέλο ενσωμάτωσης (~256 tokens) - το
+    LLM δεν έχει τέτοιο περιορισμό, οπότε βλέπει ΟΛΟΥΣ τους κόμβους, ροές, συνθήκες και
+    κλήσεις (χωρίς διπλότυπα), με μόνο ένα συνολικό όριο ασφαλείας (LLM_MAX_WORDS). Ό,τι
+    παραλείπεται σημειώνεται ρητά. Πριν (2026-09-23) το LLM έβλεπε το κείμενο του
+    embedding: ~24% των chains κόβονταν στις 200 λέξεις.
+    """
+    return _serialize_chain(chain, None, max_words=LLM_MAX_WORDS, max_slice=None, max_callees=None,
+                            dedup=True, mark_omitted=True)
+
+
+# Μόνο δίχτυ ασφαλείας για ακραία chains (π.χ. 1.230 κόμβοι ροής) - όλοι οι κόμβοι, ροές,
+# συνθήκες και κλήσεις δίνονται στο LLM (χωρίς διπλότυπα) μέχρι αυτό το συνολικό όριο.
+LLM_MAX_WORDS = 4000
+_NOISE_CALLEES = {"<complex_expr>"}  # placeholder του call_graph_py.ql για μη-ονομαστικές κλήσεις
+
+# Αρχικά τμήματα path που προέρχονται από τον τρόπο αποθήκευσης/αποσυμπίεσης και όχι από
+# το ίδιο το πακέτο: φάκελοι έκδοσης (2.13.36/), ρίζα sdist (name-1.2.3/), hashes,
+# φάκελοι αποσυμπίεσης (.x). Διαφέρουν συστηματικά ανάμεσα σε malware και benign, οπότε
+# αφαιρούνται για να μη λειτουργήσουν ως shortcut.
+_ARTIFACT_DIR = re.compile(r"(\d+(\.\d+)+.*|.+-\d+(\.\d+)*[\w.+-]*|[0-9a-f]{16,}|.+\.x"
+                           r"|tar-gz|tar\.gz|zip|whl|.+-whl|.+-tar-gz|tmp\w*)")
+
+
+def display_path(location):
+    """'2.13.36/pkg-2.13.36/pkg/setup.py:12' -> 'pkg/setup.py' (θέση ΜΕΣΑ στο πακέτο)."""
+    parts = (location or "").rsplit(":", 1)[0].replace("\\", "/").split("/")
+    while len(parts) > 1 and _ARTIFACT_DIR.fullmatch(parts[0]):
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
+                     max_flows=None, max_conditions=None, dedup=False, mark_omitted=False):
+    def capped(items, cap, what):
+        if mark_omitted:  # κείμενο LLM: κενή συμβολοσειρά/κόμβος -> ρητό "" αντί για κενό
+            items = [x if x.strip() else '""' for x in items]
+        if dedup:
+            items = list(dict.fromkeys(items))
+        if cap is None or len(items) <= cap:
+            return items
+        return items[:cap] + ([f"(+{len(items) - cap} more {what})"] if mark_omitted else [])
+
     parts = []
 
     category = chain.get("category", "unknown")
@@ -81,38 +148,41 @@ def flatten_chain_to_text(chain, attack_type_tags=None):
     if api:
         parts.append(f"Sensitive API involved: {api}.")
 
+    # Μόνο στο κείμενο του LLM (όχι στο embedding): σε ποιο αρχείο είναι η κλήση - π.χ.
+    # setup.py (τρέχει στην εγκατάσταση) ή __init__.py (τρέχει στο import).
+    if mark_omitted and chain.get("location"):
+        parts.append(f"Location: {display_path(chain['location'])}.")
+
     boundary = chain.get("flow_boundary", "Unknown")
     parts.append(f"Flow boundary: {boundary}.")
 
-    for flow in chain.get("confirmed_source_flows", []):
-        src_node = flow.get("source", {}).get("node", "")
-        sink_node = flow.get("sink_node", "")
-        parts.append(f"Data flows from a {src_node} source into a {sink_node} sink.")
+    q = (lambda x: x if (x or "").strip() else '""') if mark_omitted else (lambda x: x)
+    flows = [f"Data flows from a {q(f.get('source', {}).get('node', ''))} source into a {q(f.get('sink_node', ''))} sink."
+             for f in chain.get("confirmed_source_flows", [])]
+    parts.extend(capped(flows, max_flows, "data flows"))
 
-    for cond in chain.get("control_conditions", []):
-        parts.append(
-            f"Execution is gated by a condition ({cond.get('condition','')}) "
-            f"which must evaluate to {cond.get('must_be','')}."
-        )
+    conds = [f"Execution is gated by a condition ({c.get('condition', '')}) which must evaluate to {c.get('must_be', '')}."
+             for c in chain.get("control_conditions", [])]
+    parts.extend(capped(conds, max_conditions, "gating conditions"))
 
     slice_texts = [n.get("text", "") for n in chain.get("data_flow_slice", [])]
     if slice_texts:
-        parts.append("Contributing data-flow nodes: " + "; ".join(slice_texts[:10]) + ".")
+        parts.append("Contributing data-flow nodes: " + "; ".join(capped(slice_texts, max_slice, "nodes")) + ".")
 
     edges = chain.get("relevant_call_graph", [])
-    external_callees = sorted({e["callee"] for e in edges if e.get("edge_type") == "external"})
+    external_callees = sorted({e["callee"] for e in edges if e.get("edge_type") == "external"} - _NOISE_CALLEES)
     if external_callees:
-        parts.append("Calls external/library functions: " + ", ".join(external_callees[:10]) + ".")
+        parts.append("Calls external/library functions: " + ", ".join(capped(external_callees, max_callees, "functions")) + ".")
 
     if attack_type_tags:
         parts.append("Known attack-type classification: " + ", ".join(attack_type_tags) + ".")
 
-    # R2: Token truncation guard — το all-MiniLM-L6-v2 δέχεται max 256
-    # word pieces. Κείμενο πάνω από ~200 λέξεις αγνοείται σιωπηλά.
     final_text = " ".join(parts)
     words = final_text.split()
-    if len(words) > 200:
-        final_text = " ".join(words[:200])
+    if len(words) > max_words:
+        final_text = " ".join(words[:max_words])
+        if mark_omitted:
+            final_text += f" [... truncated: {len(words) - max_words} more words]"
     return final_text
 
 def find_target_dir(target_name):

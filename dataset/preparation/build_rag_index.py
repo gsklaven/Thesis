@@ -21,7 +21,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from utils import flatten_chain_to_text  # noqa: E402
+from utils import flatten_chain_to_text, is_pure_vendor_chain  # noqa: E402
 
 _THESIS_ROOT = os.environ.get(
     "THESIS_BASE_DIR",
@@ -84,6 +84,7 @@ def main():
 
     texts = []
     metadata = []
+    vendor_skipped = 0
 
     for fname in sorted(os.listdir(TRAIN_DIR)):
         if not fname.endswith(".json"):
@@ -96,6 +97,10 @@ def main():
         pkg_description = descriptions.get(pkg_name, "")
 
         for idx, chain in enumerate(data.get("behavior_chains", [])):
+            # Κώδικας νόμιμων βιβλιοθηκών (vendor/) ΔΕΝ είναι παράδειγμα malware - βλ. utils.
+            if is_pure_vendor_chain(chain):
+                vendor_skipped += 1
+                continue
             # I8 FIX: ΧΩΡΙΣ attack_type_tags στο embedding text - συμμετρικό
             # με το query_rag.py, που ΔΕΝ μπορεί να τα ξέρει για νέο πακέτο.
             text = flatten_chain_to_text(chain)
@@ -117,7 +122,8 @@ def main():
                 "text": text,
             })
 
-    print(f"[*] {len(texts)} behavior-chain κομμάτια (chunks) προς embedding.")
+    print(f"[*] {len(texts)} behavior-chain κομμάτια (chunks) προς embedding "
+          f"({vendor_skipped} καθαρά vendor chains εξαιρέθηκαν).")
 
     embeddings = model.encode(texts, show_progress_bar=True, normalize_embeddings=True)
     np.save(VECTORS_FILE, embeddings)
