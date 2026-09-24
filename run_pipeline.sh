@@ -60,10 +60,10 @@ export CODEQL_DB_TIMEOUT="${CODEQL_DB_TIMEOUT:-900}"
 export BATCH_ANALYSIS_TIMEOUT="${BATCH_ANALYSIS_TIMEOUT:-1200}"
 export BENIGN_ANALYSIS_TIMEOUT="${BENIGN_ANALYSIS_TIMEOUT:-2400}"
 
-mkdir -p "$LOGS" "$WORK"
+# logs/ και work/ δημιουργούνται μόνο όταν χρειάζονται (όχι π.χ. στο check/status)
 cd "$ROOT" || exit 1
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGS/pipeline.log"; }
+log() { mkdir -p "$LOGS"; echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGS/pipeline.log"; }
 die() { log "ΣΦΑΛΜΑ: $*"; exit 1; }
 run() { log "\$ $*"; "$@" || die "απέτυχε: $*"; }
 
@@ -222,6 +222,7 @@ cmd_collect() {
 cmd_analyze() {
   need_sources
   keep_awake
+  mkdir -p "$WORK"
   local targets="$WORK/analyze_targets.json"
   RETRY_FAILED="${RETRY_FAILED:-0}" "$PY" - "$targets" <<'EOF' || die "δεν φτιάχτηκε η λίστα"
 import glob, json, os, sys
@@ -319,6 +320,7 @@ cmd_evaluate() {
     RAG_MODE=$mode run "$PY" results/evaluation_summary.py
   done
   run "$PY" results/confusion_matrix_by_category.py
+  run "$PY" results/results_analysis.py     # confusion matrix, CI, ζώνες ομοιότητας, FP/FN -> results/analysis/
 }
 
 # ------------------------------------------------------------------------------ pack / unpack

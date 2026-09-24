@@ -191,9 +191,7 @@ def main():
     n_benign_labels = sum(1 for v in expected_labels.values() if v == "benign")
     n_malicious_labels = sum(1 for v in expected_labels.values() if v == "malicious")
     print(f"\n[*] expected_labels.json: {n_malicious_labels} malicious, {n_benign_labels} benign")
-
-    print_metrics_strict = print_metrics("STRICT (θετικό = μόνο MALICIOUS)",
-                                         *compute_confusion(reports, expected_labels, {"MALICIOUS"}))
+    
     print_metrics_lenient = print_metrics("LENIENT (θετικό = MALICIOUS ή SUSPICIOUS)",
                                           *compute_confusion(reports, expected_labels, {"MALICIOUS", "SUSPICIOUS"}))
 
@@ -244,7 +242,6 @@ def main():
         "model_used_counts": model_counts,
         "expected_labels_malicious": n_malicious_labels,
         "expected_labels_benign": n_benign_labels,
-        "metrics_strict": print_metrics_strict,
         "metrics_lenient": print_metrics_lenient,
     }
     os.makedirs(os.path.dirname(SUMMARY_OUT), exist_ok=True)
