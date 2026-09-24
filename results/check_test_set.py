@@ -209,7 +209,9 @@ def main():
               f"{inconclusive[:10]}{'...' if len(inconclusive) > 10 else ''}")
         print(f"    Ξανατρέξε το ίδιο script - αυτά θα ξαναπροσπαθήσουν αυτόματα.")
 
-    summary_out = os.path.join(_THESIS_ROOT, "results", "test_set_summaries", f"test_set_summary_{RESULTS_TAG}.json")
+    # ένα αρχείο ανά (run, test set): τα malware και benign του ίδιου RAG_MODE τρέχουν παράλληλα
+    summary_out = os.path.join(_THESIS_ROOT, "results", "test_set_summaries",
+                               f"test_set_summary_{RESULTS_TAG}_{os.path.basename(test_set_dir)}.json")
     os.makedirs(os.path.dirname(summary_out), exist_ok=True)
     llm_stage_scored = scored - len(static_analysis_misses) - len(benign_no_chains)
     with open(summary_out, "w", encoding="utf-8") as f:

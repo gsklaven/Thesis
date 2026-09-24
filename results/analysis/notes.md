@@ -61,4 +61,50 @@
 
 ## Ablations (samples / policy / llm)
 
-_(συμπληρώνεται όταν ολοκληρωθούν - σύγκριση στο `ablations.md`)_
+Συγκεντρωτικός πίνακας: `ablations.md`. Η σύγκριση γίνεται στα ίδια πακέτα και με το ίδιο ευρετήριο, οπότε
+διαφέρει μόνο το περιεχόμενο των Τμημάτων Β/Γ του prompt.
+
+### v12_samples - μόνο δείγματα malware (χωρίς βάση γνώσης ασφάλειας)
+
+- Recall 96,6% [94,4-98,0], FPR **3,1%** [1,2-7,6], precision 99,0%, F1 97,8%, accuracy 96,7%, balanced
+  accuracy 96,8%, end-to-end accuracy 95,9%. Όλα τα πακέτα πήραν τελική απόφαση.
+- Σε σχέση με το `sum`: FP 8 → 4, FN 12 → 14. Ανά πακέτο:
+  - benign που έπαψαν να είναι FP (5): oauth2client, crossplane, opentelemetry-exporter-gcp-monitoring,
+    frozendict, opencensus· νέο FP (1): qtconsole (`exec` στο `setup.py`)· κοινά FP (3): psutil, daff, fabric.
+  - malware που χάθηκαν (4): ansiicolor, moneyprinter-api, pohttp, ttensorflow-gpu· malware που πιάστηκαν
+    μόνο εδώ (2): rblxtools, set-utils.
+  - McNemar (ακριβές): benign 5 έναντι 1, p = 0,22· malware 4 έναντι 2, p = 0,69. Οι δύο διαμορφώσεις είναι
+    στατιστικά ισοδύναμες σε συνολική απόδοση· διαφέρουν στο σημείο λειτουργίας (ευαισθησία έναντι FPR).
+- **Ρόλος της βάσης γνώσης ασφάλειας: ανεβάζει την ευαισθησία.** Όταν το Τμήμα Γ περιέχει κανόνα που ονομάζει
+  τη συμπεριφορά, το LLM τον χρησιμοποιεί ως ενίσχυση της ύποπτης ερμηνείας· χωρίς αυτόν, δέχεται πιο εύκολα
+  μια αθώα εξήγηση. Παραδείγματα (ίδιο Behavior Chain, ίδιοι γείτονες στο Τμήμα Β):
+  - pohttp: base64 → `__import__` στο `setup.py`. Με το GuardDog `threat_runtime_obfuscation_base64exec`:
+    MALICIOUS· χωρίς πολιτικές: «setup scripts commonly … use base64», BENIGN.
+  - ansiicolor: test που κατεβάζει binary από το Dropbox και το εκτελεί. Με το GuardDog
+    `threat_process_download_exec`: MALICIOUS· χωρίς: «string literal used in tests», BENIGN.
+  - moneyprinter-api, ttensorflow-gpu: εκτέλεση τοπικού script / `subprocess.Popen` στο `setup.py`. Με τα
+    Semgrep `dangerous-os-exec` / `subprocess-injection`: MALICIOUS· χωρίς: «standard setup.py functionality».
+  - frozendict (benign): `exec` του version file στο `setup.py`. Με το Bandit B102 (`exec`) και το Semgrep
+    `exec-injection`: MALICIOUS· χωρίς: «standard build-time metadata/version extraction», BENIGN.
+- **Το μοτίβο `exec(open(...).read())` στο `setup.py` είναι αμφίσημο από το Behavior Chain.** Το set-utils
+  (malware) εκτελεί με ακριβώς τον ίδιο τρόπο το `para/about.py`, όπως τα νόμιμα frozendict/opencensus το
+  αρχείο έκδοσης. Οι αποφάσεις σε αυτά τα πακέτα αλλάζουν ανάμεσα στις διαμορφώσεις, επιβεβαιώνοντας ότι η
+  διάκριση απαιτεί το περιεχόμενο του αρχείου που εκτελείται (βλ. μελλοντική εργασία παραπάνω).
+- Ζώνες ομοιότητας: ≥0,98 recall 232/235, FP 2/29· 0,90-0,98 recall 128/139, FP 2/83· <0,90 recall
+  **42/42**, FP 0/18. Και χωρίς πολιτικές, το νέο malware (χωρίς κοντινό γείτονα) εντοπίζεται πλήρως.
+
+### v12_policy - μόνο βάση γνώσης ασφάλειας (χωρίς δείγματα)
+
+_(σε εξέλιξη)_ Πρώτες παρατηρήσεις:
+- Στα benign το LLM ελέγχει μία-μία τις ανακτημένες πολιτικές απέναντι στον κώδικα και απορρίπτει όσες
+  ταιριάζουν μόνο στο όνομα της κλήσης (π.χ. «Matches the API, but the data written is test attachment
+  content»). Χωρίς Τμήμα Β δεν υπάρχει γείτονας malware με συγκεκριμένα tags, οπότε η απόφαση στηρίζεται
+  αποκλειστικά στο Τμήμα Α.
+- Τα fabric (`exec` στο `setup.py`, με Bandit B102 / Semgrep `exec-injection`) και daff είναι FP όπως στο
+  `sum`: οι κανόνες για `exec`/`subprocess` ωθούν προς MALICIOUS και χωρίς δείγματα. Στο daff το chain είναι
+  `Subprocess.call` στο `__init__.py` και η αιτιολόγηση μιλά για πιθανό command injection - το LLM συγχέει εδώ
+  την ευπάθεια (που περιγράφει ο κανόνας Semgrep) με κακόβουλη πρόθεση.
+
+### v12_llm - χωρίς ανάκτηση
+
+_(εκκρεμεί)_

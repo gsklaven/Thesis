@@ -32,7 +32,7 @@ inference/
   llm_providers.py           κλήση του LLM: deepseek | gemini | lmstudio | openrouter (LLM_PROVIDER στο .env)
 results/
   <έκδοση>/report_*.json     αναφορά ανά πακέτο (π.χ. v12_sum/, v12_llm/)
-  test_set_summaries/        test_set_summary_<έκδοση>.json
+  test_set_summaries/        test_set_summary_<έκδοση>_<test set>.json
   evaluation_summaries/      evaluation_summary_<έκδοση>.json
   check_test_set.py, evaluation_summary.py, confusion_matrix_by_category.py
 expected_labels.json         ετικέτες αξιολόγησης (malicious για το rag_test, benign για το benign_test_set)

@@ -3,7 +3,7 @@
 | Θέση | Περιεχόμενο | Παράγεται από |
 |---|---|---|
 | `<έκδοση>/report_<πακέτο>.json` | πλήρης αναφορά ανά πακέτο: τελική απόφαση, απόφαση του LLM ανά Behavior Chain, ανακτημένα δείγματα και εγγραφές ασφάλειας, prompt | `inference/llm_evaluator.py` (μέσω του `check_test_set.py`) |
-| `test_set_summaries/test_set_summary_<έκδοση>.json` | απόφαση ανά πακέτο, false positives/negatives, static misses, ασαφή | `check_test_set.py` |
+| `test_set_summaries/test_set_summary_<έκδοση>_<test set>.json` | απόφαση ανά πακέτο, false positives/negatives, static misses, ασαφή | `check_test_set.py` |
 | `analysis/<έκδοση>.md`, `analysis/confusion_<έκδοση>.svg` / `.tex`, `analysis/ablations.md` | confusion matrix (γράφημα + πίνακας LaTeX), μετρικές με 95% διάστημα εμπιστοσύνης, ανάλυση ανά ζώνη ομοιότητας, λίστες FP/FN, σύγκριση ablations· ερμηνεία στο `analysis/notes.md` | `results_analysis.py` |
 | `evaluation_summaries/evaluation_summary_<έκδοση>.json` | confusion matrix, accuracy/precision/recall/F1/FPR (end-to-end και μόνο στάδιο LLM) | `evaluation_summary.py` |
 
