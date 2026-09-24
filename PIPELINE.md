@@ -8,6 +8,17 @@ Ctrl+C) δεν χάνει δουλειά. Αρκεί να ξανατρέξεις
 κλώνους των datasets malware) και, για την αξιολόγηση, **το κλειδί του LLM**. Γράφονται μία φορά
 στο `pipeline.env` (δεν ανεβαίνει στο git).
 
+## 0. Τι υπάρχει στο git και τι στο GitHub Release
+
+| Στο git (κλώνος του αποθετηρίου) | Στο GitHub Release (`./run_pipeline.sh pack`) |
+|---|---|
+| όλος ο κώδικας, `run_pipeline.sh`, οδηγοί, `requirements.txt` | `dataset/analyzed_chains/` - Behavior Chains όλων των malware (~10 GB) |
+| τα μικρά JSON του `dataset/`: λίστες δειγμάτων (`malware_dataset*.json`), ετικέτες, `payload_scan`, εξαιρέσεις, επιλογή (`final_diverse_subset_*.json`), `policy_rules.json` | `dataset/benign_test_set/` - Behavior Chains των νόμιμων πακέτων |
+| `dataset/preparation/policy_sources/` (χωρίς τους κανόνες Semgrep) | `dataset/rag_train/`, `dataset/rag_test/`, `dataset/indexes/` (με τα διανύσματα) |
+| `expected_labels.json`, συνόψεις αποτελεσμάτων (`results/*_summaries/`) | αναφορές LLM ανά πακέτο (`results/v12_*/`) + ξανά τα JSON του `dataset/` και το `expected_labels.json` |
+
+Ο κλώνος είναι μικρός. Τα μεγάλα δεδομένα κατεβαίνουν μία φορά από το Release (σενάριο Α).
+
 ## 1. Εγκατάσταση σε νέο μηχάνημα
 
 Χρειάζονται: Python 3.14, git (+ `git-lfs` για την πηγή MalwareBench) και το
@@ -107,8 +118,9 @@ gh release create chains-v12 dist/behavior_chains.tar.gz.part-* dist/SHA256SUMS 
 - Το GitHub δέχεται αρχεία έως 100 MB μέσα στο αποθετήριο, αλλά έως **2 GB ανά αρχείο σε Release**.
   Γι' αυτό το `pack` κόβει το αρχείο σε κομμάτια των 1,9 GB. Για μόνιμη αρχειοθέτηση με DOI, τα ίδια
   αρχεία μπορούν να ανέβουν και στο Zenodo.
-- Περιέχει: `analyzed_chains/`, `benign_test_set/`, `rag_train/`, `rag_test/`, `indexes/`, τα JSON του `dataset/`
-  (μαζί με το `malware_dataset_matched.json`, που δεν είναι στο git) και το `expected_labels.json`.
+- Περιέχει: `analyzed_chains/`, `benign_test_set/`, `rag_train/`, `rag_test/`, `indexes/`, τα JSON του `dataset/`,
+  τις αναφορές LLM `results/v12_*/` (όχι τα `*_smoke`) και το `expected_labels.json`. Τρέξ' το **αφού**
+  ολοκληρωθεί το `evaluate`, ώστε να περιέχει και τα αποτελέσματα.
 - Τα Behavior Chains είναι περιγραφές κώδικα (ονόματα κλήσεων, αποσπάσματα, URLs), όχι εκτελέσιμα
   πακέτα. **Μην ανεβάζεις** τις πηγές malware ούτε το `policy_sources/semgrep_rules.json`
   (άδεια Semgrep Rules: μόνο εσωτερική χρήση).
