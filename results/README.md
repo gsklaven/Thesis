@@ -2,11 +2,12 @@
 
 | Θέση | Περιεχόμενο | Παράγεται από |
 |---|---|---|
-| `<έκδοση>/report_<πακέτο>.json` | πλήρης αναφορά ανά πακέτο: τελική απόφαση, απόφαση του LLM ανά Behavior Chain, ανακτημένα δείγματα και εγγραφές ασφάλειας, prompt | `inference/llm_evaluator_deepseek.py` (μέσω του `check_test_set.py`) |
+| `<έκδοση>/report_<πακέτο>.json` | πλήρης αναφορά ανά πακέτο: τελική απόφαση, απόφαση του LLM ανά Behavior Chain, ανακτημένα δείγματα και εγγραφές ασφάλειας, prompt | `inference/llm_evaluator.py` (μέσω του `check_test_set.py`) |
 | `test_set_summaries/test_set_summary_<έκδοση>.json` | απόφαση ανά πακέτο, false positives/negatives, static misses, ασαφή | `check_test_set.py` |
 | `evaluation_summaries/evaluation_summary_<έκδοση>.json` | confusion matrix, accuracy/precision/recall/F1/FPR (end-to-end και μόνο στάδιο LLM) | `evaluation_summary.py` |
 
-Η `<έκδοση>` είναι `PROMPT_VERSION_RAG_MODE[RESULTS_SUFFIX]` (π.χ. `v12_sum`, `v12_llm`, `v12_sum_smoke`).
+Η `<έκδοση>` είναι `PROMPT_VERSION_RAG_MODE[_πάροχος][RESULTS_SUFFIX]` (π.χ. `v12_sum`, `v12_llm`,
+`v12_sum_gemini`, `v12_sum_smoke`). Ο πάροχος προστίθεται μόνο όταν δεν είναι ο `deepseek` (βλ. `LLM_PROVIDER`).
 Οι φάκελοι `v1`–`v11` είναι προηγούμενες εκδόσεις του prompt/pipeline και δεν είναι συγκρίσιμοι με το v12.
 
 ## Scripts

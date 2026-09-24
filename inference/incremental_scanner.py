@@ -165,7 +165,7 @@ def _git_current_sha(repo_dir: str) -> str:
 
 def _evaluate_chains(chain_json_path: str, evaluator_script: str) -> dict | None:
     """
-    Καλεί το llm_evaluator_deepseek.py για ένα chain JSON.
+    Καλεί το llm_evaluator.py για ένα chain JSON (πάροχος LLM από το .env).
     Επιστρέφει το report dict ή None αν απέτυχε.
     """
     result = subprocess.run(
@@ -546,7 +546,7 @@ def main():
     parser.add_argument("--prev-commit", default=None, dest="prev_commit",
                         help="[incremental] Previous commit SHA")
     parser.add_argument("--evaluator",
-                        default=os.path.join(_INFERENCE_DIR, "llm_evaluator_deepseek.py"),
+                        default=os.path.join(_INFERENCE_DIR, "llm_evaluator.py"),
                         help="Path to LLM evaluator script")
 
     args = parser.parse_args()

@@ -49,7 +49,8 @@ DEFAULT_TEST_SET_DIR = os.path.join(_THESIS_ROOT, "dataset", "rag_test")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
 
 INFERENCE_DIR = os.path.join(_THESIS_ROOT, "inference")
-LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator_deepseek.py")
+# Ο πάροχος του LLM (deepseek/gemini/lmstudio/openrouter) επιλέγεται στο .env - βλ. inference/llm_providers.py
+LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator.py")
 LLM_RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", RESULTS_TAG)
 # Verdicts που σημαίνουν ότι ΔΕΝ υπάρχει πλήρης αξιολόγηση: ξαναδοκιμάζονται στο
 # επόμενο run και δεν βαθμολογούνται (ούτε ως σωστά ούτε ως λάθος).
@@ -60,8 +61,10 @@ def main():
     # ΝΕΟ: δέχεται τον φάκελο ως όρισμα, ώστε το ΙΔΙΟ script να δουλεύει και
     # για το rag_test/ (391 ήδη επεξεργασμένα, γνωστά malicious) και για το
     # test_set/ (benign, όταν το ετοιμάσεις) - χωρίς διπλό κώδικα.
-    test_set_dir = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TEST_SET_DIR
-    labels_file = sys.argv[2] if len(sys.argv) > 2 else EXPECTED_LABELS_FILE
+    # Απόλυτες διαδρομές: ο evaluator τρέχει με cwd=inference/, οπότε μια σχετική διαδρομή
+    # (π.χ. dataset/rag_test) δεν θα έβρισκε κανένα αρχείο.
+    test_set_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TEST_SET_DIR)
+    labels_file = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else EXPECTED_LABELS_FILE)
 
     if not os.path.exists(test_set_dir):
         print(f"[!] Δεν βρέθηκε: {test_set_dir}")

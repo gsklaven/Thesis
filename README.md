@@ -28,7 +28,8 @@ dataset/
 inference/
   codeql_pipeline/           analysis.py, build_behavior_chain.py, python_queries/, js_queries/
   query_rag.py               ανάκτηση + κατασκευή του prompt (RAG_MODE για τα ablations)
-  llm_evaluator_deepseek.py  αξιολόγηση με DeepSeek (+ llm_evaluator.py: Gemini, llm_evaluator_lmstudio.py: τοπικά)
+  llm_evaluator.py           αξιολόγηση ενός πακέτου (κοινή λογική για κάθε LLM)
+  llm_providers.py           κλήση του LLM: deepseek | gemini | lmstudio | openrouter (LLM_PROVIDER στο .env)
 results/
   <έκδοση>/report_*.json     αναφορά ανά πακέτο (π.χ. v12_sum/, v12_llm/)
   test_set_summaries/        test_set_summary_<έκδοση>.json
@@ -37,14 +38,14 @@ results/
 expected_labels.json         ετικέτες αξιολόγησης (malicious για το rag_test, benign για το benign_test_set)
 run_pipeline.sh              αυτοματοποιημένη εκτέλεση όλων των σταδίων (οδηγός: PIPELINE.md)
 requirements.txt             εκδόσεις των πακέτων Python
-pipeline.env.example         υπόδειγμα τοπικών ρυθμίσεων (θέση πηγών, κλειδί LLM) -> pipeline.env
+.env.example         υπόδειγμα τοπικών ρυθμίσεων (θέση πηγών, κλειδί LLM) -> .env
 old/                         ό,τι δεν χρησιμοποιεί πλέον το pipeline (εκτός git)
 ```
 
 ## Γρήγορη εκκίνηση
 
 ```bash
-./run_pipeline.sh setup      # θέση πηγών -> pipeline.env, venv, πακέτα CodeQL
+./run_pipeline.sh setup      # θέση πηγών -> .env, venv, πακέτα CodeQL
 ./run_pipeline.sh check
 ./run_pipeline.sh status     # τι έχει γίνει και τι λείπει
 ./run_pipeline.sh all        # ή μεμονωμένα στάδια: sources, collect, analyze, benign, rag, evaluate
@@ -58,7 +59,7 @@ old/                         ό,τι δεν χρησιμοποιεί πλέον 
 
 - Python 3.14 και `venv/` με τα πακέτα του `requirements.txt` (το `./run_pipeline.sh setup` τα εγκαθιστά).
 - CodeQL CLI 2.27.0 στο `PATH` και τα πακέτα των queries (`codeql pack install`, επίσης από το `setup`).
-- Οι κλώνοι των πηγών malware σε έναν φάκελο ή δίσκο, δηλωμένο ως `THESIS_SOURCES_DIR` στο `pipeline.env`
+- Οι κλώνοι των πηγών malware σε έναν φάκελο ή δίσκο, δηλωμένο ως `THESIS_SOURCES_DIR` στο `.env`
   (`./run_pipeline.sh sources` τους κατεβάζει). Οι αποθηκευμένες διαδρομές των δειγμάτων μεταφράζονται
   αυτόματα σε αυτόν τον φάκελο (`utils.resolve_source_path`).
 - `DEEPSEEK_API_KEY` για το στάδιο του LLM.
@@ -66,7 +67,7 @@ old/                         ό,τι δεν χρησιμοποιεί πλέον 
 ## Ροή εκτέλεσης
 
 Αυτό κάνει το `run_pipeline.sh`, στάδιο προς στάδιο. Οι εντολές τρέχουν από τη ρίζα του έργου, με
-ενεργό το `venv` και φορτωμένο το `pipeline.env` (`set -a; . ./pipeline.env; set +a`).
+ενεργό το `venv`. Τη θέση των πηγών και τα κλειδιά τα διαβάζουν όλα από το `.env` (`utils.load_env_file`).
 
 ### 1. Συλλογή δειγμάτων malware
 
@@ -133,7 +134,7 @@ python3 dataset/preparation/audit_leakage.py --out dataset/audit_leakage_v12.jso
 ### 5. Αξιολόγηση με LLM (4 ablations)
 
 ```bash
-export DEEPSEEK_API_KEY=...
+# DEEPSEEK_API_KEY στο .env
 for MODE in sum samples policy llm; do     # sum = πλήρες σύστημα, llm = χωρίς ανάκτηση
   RAG_MODE=$MODE python3 results/check_test_set.py dataset/rag_test
   RAG_MODE=$MODE python3 results/check_test_set.py dataset/benign_test_set
@@ -155,8 +156,9 @@ python3 results/confusion_matrix_by_category.py
 | `CODEQL_NO_VENDOR=1` | οι εξαρτήσεις καταγράφονται κατ' όνομα και δεν εγκαθίστανται |
 | `CODEQL_QUERY_TIMEOUT`, `CODEQL_DB_TIMEOUT`, `BATCH_ANALYSIS_TIMEOUT`, `BENIGN_ANALYSIS_TIMEOUT` | χρονικά όρια (δευτερόλεπτα) |
 | `BATCH_STAGING_DIR` | προσωρινός φάκελος ανάλυσης (ένας ανά παράλληλη διεργασία) |
-| `THESIS_SOURCES_DIR` | φάκελος με τους κλώνους των πηγών (στο `pipeline.env`) |
+| `THESIS_SOURCES_DIR` | φάκελος με τους κλώνους των πηγών (στο `.env`) |
 | `THESIS_OSV_DIR`, `THESIS_BASE_DIR` | προαιρετικά: άλλη θέση για το OSV / τη ρίζα του έργου |
 | `RAG_MODE` | `sum` \| `samples` \| `policy` \| `llm` |
 | `RESULTS_SUFFIX` | επίθημα του φακέλου αποτελεσμάτων (π.χ. `_smoke`) |
-| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | πρόσβαση στο LLM (προεπιλογή `deepseek-flash`) |
+| `LLM_PROVIDER` | `deepseek` (προεπιλογή) \| `gemini` \| `lmstudio` \| `openrouter` - ίδιος evaluator για όλους |
+| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | πρόσβαση στο LLM (προεπιλογή `deepseek-flash`)· αντίστοιχα `GEMINI_*`, `LM_STUDIO_*`, `OPENROUTER_*` |

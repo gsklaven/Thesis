@@ -78,7 +78,11 @@ if RAG_MODE not in ("sum", "samples", "policy", "llm"):
     raise SystemExit(f"RAG_MODE άκυρο: {RAG_MODE}")
 NO_MALWARE = RAG_MODE in ("policy", "llm")
 NO_POLICY = RAG_MODE in ("samples", "llm")
-RESULTS_TAG = f"{PROMPT_VERSION}_{RAG_MODE}" + os.environ.get("RESULTS_SUFFIX", "")
+# Φάκελος αποτελεσμάτων: results/v12_<RAG_MODE>[_<πάροχος αν όχι deepseek>][RESULTS_SUFFIX], ώστε
+# αποτελέσματα άλλου LLM να μην αναμειγνύονται ποτέ με τα κύρια (deepseek).
+_PROVIDER = os.environ.get("LLM_PROVIDER", "deepseek").strip().lower()
+RESULTS_TAG = (f"{PROMPT_VERSION}_{RAG_MODE}" + ("" if _PROVIDER == "deepseek" else f"_{_PROVIDER}")
+               + os.environ.get("RESULTS_SUFFIX", ""))
 
 
 SSVC_COT_PROMPT = """You are a cybersecurity analyst evaluating a Python/npm package for malicious intent.

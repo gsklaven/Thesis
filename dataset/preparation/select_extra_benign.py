@@ -17,6 +17,7 @@ Output: benign_extra_selection.json (read by fetch_benign_test_set.py).
 """
 import json
 import os
+import sys
 import random
 import re
 import urllib.request
@@ -24,9 +25,10 @@ import urllib.request
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "benign_extra_selection.json")
 TOP_URL = "https://hugovk.github.io/top-pypi-packages/top-pypi-packages.min.json"
-OSV_DIR = os.environ.get("THESIS_OSV_DIR") or os.path.join(
-    os.environ.get("THESIS_SOURCES_DIR") or os.environ.get("THESIS_USB_MOUNT") or "/Volumes/GIORGOS_128",
-    "malicious-packages", "osv", "malicious", "pypi")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from utils import SOURCES_DIR  # noqa: E402  (φορτώνει και το .env)
+
+OSV_DIR = os.environ.get("THESIS_OSV_DIR") or os.path.join(SOURCES_DIR, "malicious-packages", "osv", "malicious", "pypi")
 SEED, N, RANK_MIN, RANK_MAX, MAX_KB = 42, 130, 300, 3000, 150
 
 norm = lambda s: re.sub(r"[-_.]+", "-", s).lower()

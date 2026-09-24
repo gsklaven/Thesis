@@ -8,11 +8,13 @@ pypi_malregistry) εναντίον του OSV directory (11.678 ονόματα, 
 
 import json
 import os
+import sys
 import re
 
 _THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 DATASET_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_matched.json")
-_SOURCES = os.environ.get("THESIS_SOURCES_DIR") or os.environ.get("THESIS_USB_MOUNT") or "/Volumes/GIORGOS_128"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from utils import SOURCES_DIR as _SOURCES  # noqa: E402  (φορτώνει και το .env)
 OSV_DIR = os.environ.get("THESIS_OSV_DIR") or next(
     (d for d in (os.path.join(_SOURCES, "malicious-packages", "osv", "malicious", "pypi"),
                  os.path.expanduser("~/Downloads/malicious-packages/osv/malicious/pypi")) if os.path.isdir(d)),

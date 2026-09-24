@@ -4,7 +4,7 @@
 # Κάθε στάδιο συνεχίζει από εκεί που σταμάτησε (ό,τι έχει ήδη αποτέλεσμα παραλείπεται).
 # Οδηγίες: PIPELINE.md
 #
-#   ./run_pipeline.sh setup        πρώτη εγκατάσταση: pipeline.env, venv + requirements, πακέτα CodeQL
+#   ./run_pipeline.sh setup        πρώτη εγκατάσταση: .env, venv + requirements, πακέτα CodeQL
 #   ./run_pipeline.sh check        έλεγχος προαπαιτούμενων (venv, CodeQL, πηγές, κλειδί LLM)
 #   ./run_pipeline.sh status       πού βρίσκεται το pipeline (αναλυμένα, αποτυχίες, RAG, αποτελέσματα)
 #   ./run_pipeline.sh sources      clone των πηγών που λείπουν + git pull στις υπάρχουσες (νέα πακέτα)
@@ -19,7 +19,7 @@
 #   ./run_pipeline.sh pack         Behavior Chains, train/test, ευρετήρια, JSON του dataset σε αρχεία <=1.9GB
 #   ./run_pipeline.sh unpack [DIR] επαναφορά τους από τα αρχεία του pack (προεπιλογή dist/)
 #
-# Ρυθμίσεις: στο pipeline.env (βλ. pipeline.env.example) ή ως μεταβλητές περιβάλλοντος:
+# Ρυθμίσεις: στο .env (βλ. .env.example) ή ως μεταβλητές περιβάλλοντος (υπερισχύουν του .env):
 #   THESIS_SOURCES_DIR   φάκελος με τους κλώνους των πηγών (ΥΠΟΧΡΕΩΤΙΚΟ για sources/collect/analyze)
 #   WORKERS=4            παράλληλες αναλύσεις CodeQL για malware (BENIGN_WORKERS=2 για benign)
 #   RETRY_FAILED=1       ξαναδοκιμάζει και όσα malware έχουν ήδη αποτύχει (προεπιλογή: όχι)
@@ -35,8 +35,21 @@ PIPE="$ROOT/inference/codeql_pipeline"
 PY="$ROOT/venv/bin/python"; [ -x "$PY" ] || PY="python3"
 LOGS="$ROOT/logs"
 WORK="$ROOT/work"
-# Τοπικές ρυθμίσεις του μηχανήματος (διαδρομές, κλειδιά) - βλ. pipeline.env.example
-if [ -f "$ROOT/pipeline.env" ]; then set -a; . "$ROOT/pipeline.env"; set +a; fi
+# Τοπικές ρυθμίσεις (θέση πηγών, κλειδιά API) από το .env - βλ. .env.example. Ίδιοι κανόνες με το
+# utils.load_env_file: ό,τι έχει ήδη οριστεί στο τερματικό υπερισχύει, κενές τιμές αγνοούνται.
+load_env() {
+  local line k v
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"; line="${line#export }"
+    { [ -z "$line" ] || [ "${line:0:1}" = "#" ]; } && continue
+    k="${line%%=*}"; v="${line#*=}"; [ "$k" = "$line" ] && continue
+    k="${k%"${k##*[![:space:]]}"}"
+    case "$v" in \"*\") v="${v#\"}"; v="${v%\"}" ;; \'*\') v="${v#\'}"; v="${v%\'}" ;; *) v="${v%% #*}"; v="${v%"${v##*[![:space:]]}"}" ;; esac
+    [ -n "$v" ] && [ -z "${!k:-}" ] && export "$k=$v"
+  done < "$1"
+}
+load_env "$ROOT/.env"
 WORKERS="${WORKERS:-4}"
 BENIGN_WORKERS="${BENIGN_WORKERS:-2}"
 MODES="${MODES:-sum samples policy llm}"
@@ -60,8 +73,16 @@ keep_awake() { if command -v caffeinate >/dev/null 2>&1; then caffeinate -ims -w
 
 # Τα στάδια που διαβάζουν τον ακατέργαστο κώδικα χρειάζονται τη θέση των πηγών.
 need_sources() {
-  [ -n "${THESIS_SOURCES_DIR:-}" ] || die "δεν έχει οριστεί THESIS_SOURCES_DIR (γράψ' το στο pipeline.env ή τρέξε ./run_pipeline.sh setup)"
+  [ -n "${THESIS_SOURCES_DIR:-}" ] || die "δεν έχει οριστεί THESIS_SOURCES_DIR (γράψ' το στο .env ή τρέξε ./run_pipeline.sh setup)"
   [ -d "$THESIS_SOURCES_DIR" ] || die "δεν βρέθηκε ο φάκελος πηγών $THESIS_SOURCES_DIR (συνδεδεμένος ο δίσκος;)"
+}
+
+# Ποιο κλειδί χρειάζεται ο επιλεγμένος πάροχος LLM (LLM_PROVIDER στο .env, βλ. inference/llm_providers.py)
+llm_key_var() {
+  case "${LLM_PROVIDER:-deepseek}" in
+    deepseek) echo DEEPSEEK_API_KEY ;; gemini) echo GEMINI_API_KEY ;; openrouter) echo OPENROUTER_API_KEY ;;
+    lmstudio) echo "" ;; *) die "άγνωστο LLM_PROVIDER=${LLM_PROVIDER} (deepseek|gemini|lmstudio|openrouter)" ;;
+  esac
 }
 
 # Κλώνοι των πηγών μέσα στο THESIS_SOURCES_DIR (φάκελος|αποθετήριο)
@@ -81,12 +102,16 @@ setup_worker() {
 
 # ------------------------------------------------------------------------------ setup
 cmd_setup() {
-  if [ ! -f "$ROOT/pipeline.env" ]; then
-    cp "$ROOT/pipeline.env.example" "$ROOT/pipeline.env"
-    local src=""
+  if [ ! -f "$ROOT/.env" ]; then
+    cp "$ROOT/.env.example" "$ROOT/.env"; chmod 600 "$ROOT/.env"
+    local src="" key=""
     read -r -p "Φάκελος με τις πηγές malware (δίσκος USB ή φάκελος όπου θα γίνει clone): " src
-    [ -n "$src" ] && sed -i.bak "s|^THESIS_SOURCES_DIR=.*|THESIS_SOURCES_DIR=$src|" "$ROOT/pipeline.env" && rm -f "$ROOT/pipeline.env.bak"
-    log "γράφτηκε pipeline.env (THESIS_SOURCES_DIR=${src:-<κενό>})"
+    [ -n "$src" ] && sed -i.bak "s|^THESIS_SOURCES_DIR=.*|THESIS_SOURCES_DIR=\"$src\"|" "$ROOT/.env"
+    read -r -s -p "DEEPSEEK_API_KEY (Enter για παράλειψη - μπορεί να προστεθεί αργότερα στο .env): " key; echo
+    [ -n "$key" ] && sed -i.bak "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=$key|" "$ROOT/.env"
+    rm -f "$ROOT/.env.bak"
+    load_env "$ROOT/.env"
+    log "γράφτηκε .env (THESIS_SOURCES_DIR=${src:-<κενό>}, κλειδί: $([ -n "$key" ] && echo ναι || echo όχι))"
   fi
   if [ ! -x "$ROOT/venv/bin/python" ]; then
     run python3 -m venv "$ROOT/venv"
@@ -117,7 +142,10 @@ cmd_check() {
   else
     log "πηγές: δεν έχει οριστεί/βρεθεί THESIS_SOURCES_DIR (χρειάζεται μόνο για sources/collect/analyze)"
   fi
-  [ -n "${DEEPSEEK_API_KEY:-}" ] && log "DEEPSEEK_API_KEY: ορισμένο" || log "DEEPSEEK_API_KEY: ΔΕΝ είναι ορισμένο (χρειάζεται μόνο για evaluate)"
+  local key_var; key_var="$(llm_key_var)"
+  if [ -z "$key_var" ]; then log "LLM: ${LLM_PROVIDER:-deepseek} (χωρίς κλειδί)"
+  elif [ -n "${!key_var:-}" ]; then log "LLM: ${LLM_PROVIDER:-deepseek} - $key_var ορισμένο"
+  else log "LLM: ${LLM_PROVIDER:-deepseek} - $key_var ΔΕΝ είναι ορισμένο στο .env (χρειάζεται μόνο για evaluate)"; fi
   [ "$ok" = 1 ] && log "check: OK" || die "check: λείπουν προαπαιτούμενα"
 }
 
@@ -158,7 +186,7 @@ EOF
 
 # ------------------------------------------------------------------------------ sources
 cmd_sources() {
-  [ -n "${THESIS_SOURCES_DIR:-}" ] || die "δεν έχει οριστεί THESIS_SOURCES_DIR (pipeline.env)"
+  [ -n "${THESIS_SOURCES_DIR:-}" ] || die "δεν έχει οριστεί THESIS_SOURCES_DIR (.env)"
   mkdir -p "$THESIS_SOURCES_DIR"
   local line name url d
   while IFS= read -r line; do
@@ -274,7 +302,8 @@ cmd_rag() {
 
 # ------------------------------------------------------------------------------ evaluate
 cmd_evaluate() {
-  [ -n "${DEEPSEEK_API_KEY:-}" ] || die "όρισε πρώτα: export DEEPSEEK_API_KEY=..."
+  local key_var; key_var="$(llm_key_var)"
+  [ -z "$key_var" ] || [ -n "${!key_var:-}" ] || die "λείπει το $key_var για LLM_PROVIDER=${LLM_PROVIDER:-deepseek}: γράψ' το στο .env"
   keep_awake
   local mode
   for mode in $MODES; do

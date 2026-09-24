@@ -25,6 +25,38 @@ _SOURCE_LINE_PATTERN = re.compile(
 _MALICIOUS_CODE_LINE_PATTERN = re.compile(
     r"malicious code in \S+\s*\([^)]*\)", re.IGNORECASE
 )
+_ROOT_DIR = os.environ.get("THESIS_BASE_DIR",
+                           os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
+
+
+def load_env_file(path=os.path.join(_ROOT_DIR, ".env")):
+    """
+    Φορτώνει το .env της ρίζας του έργου (KEY=VALUE, γραμμές # σχόλια) στο os.environ: θέση πηγών,
+    κλειδιά API κ.λπ. (υπόδειγμα: .env.example). ΔΕΝ αντικαθιστά μεταβλητές που έχουν ήδη οριστεί
+    στο τερματικό (αυτές υπερισχύουν) ούτε γράφει κενές τιμές. Χωρίς εξωτερική βιβλιοθήκη.
+    Καλείται αυτόματα όταν φορτώνεται το utils (το εισάγουν όλα τα scripts, και οι evaluators
+    μέσω του query_rag), οπότε το .env ισχύει είτε τρέχει το run_pipeline.sh είτε ένα script μόνο του.
+    """
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = (x.strip() for x in line.split("=", 1))
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]
+            else:
+                value = value.split(" #", 1)[0].strip()   # σχόλιο στο τέλος της γραμμής
+            if key and value and key not in os.environ:
+                os.environ[key] = value
+
+
+load_env_file()
+
 # Θέση των ακατέργαστων πηγών (κλώνοι pypi_malregistry, MalwareBench pypi, OSV malicious-packages,
 # Datadog, maloss): THESIS_SOURCES_DIR (ή THESIS_USB_MOUNT), προεπιλογή ο εξωτερικός δίσκος.
 SOURCES_DIR = (os.environ.get("THESIS_SOURCES_DIR") or os.environ.get("THESIS_USB_MOUNT")

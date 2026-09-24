@@ -6,7 +6,7 @@ Ctrl+C) δεν χάνει δουλειά. Αρκεί να ξανατρέξεις
 
 Το μόνο που πρέπει να δώσεις εσύ είναι **πού βρίσκονται οι πηγές** (ο δίσκος ή φάκελος με τους
 κλώνους των datasets malware) και, για την αξιολόγηση, **το κλειδί του LLM**. Γράφονται μία φορά
-στο `pipeline.env` (δεν ανεβαίνει στο git).
+στο `.env` (δεν ανεβαίνει στο git).
 
 ## 0. Τι υπάρχει στο git και τι στο GitHub Release
 
@@ -26,16 +26,20 @@ Ctrl+C) δεν χάνει δουλειά. Αρκεί να ξανατρέξεις
 
 ```bash
 git clone <αυτό το αποθετήριο> Thesis && cd Thesis
-./run_pipeline.sh setup    # ρωτά τη θέση των πηγών -> pipeline.env, φτιάχνει venv, εγκαθιστά τα πακέτα CodeQL
+./run_pipeline.sh setup    # ρωτά τη θέση των πηγών -> .env, φτιάχνει venv, εγκαθιστά τα πακέτα CodeQL
 ./run_pipeline.sh check    # επιβεβαιώνει venv, CodeQL, πηγές, κλειδί
 ```
 
-Ρυθμίσεις στο `pipeline.env` (υπόδειγμα: `pipeline.env.example`):
+Ρυθμίσεις στο `.env` (υπόδειγμα: `.env.example`). Το διαβάζουν **και** το `run_pipeline.sh` **και** κάθε
+script Python μόνο του (μέσω του `dataset/preparation/utils.py`), οπότε π.χ. το
+`python3 results/check_test_set.py dataset/rag_test` βρίσκει το κλειδί χωρίς `export`. Ό,τι έχει οριστεί
+στο τερματικό υπερισχύει του `.env`. Τιμές με κενά μπαίνουν σε εισαγωγικά.
 
 | Μεταβλητή | Τι είναι |
 |---|---|
 | `THESIS_SOURCES_DIR` | φάκελος με τους κλώνους των πηγών (π.χ. `/Volumes/USB`). Χρειάζεται για `sources`, `collect`, `analyze`, `rag` |
-| `DEEPSEEK_API_KEY` | μόνο για το `evaluate` |
+| `LLM_PROVIDER` | ποιο LLM για το `evaluate`: `deepseek` (προεπιλογή), `gemini`, `lmstudio`, `openrouter` (βλ. σενάριο Ε) |
+| `DEEPSEEK_API_KEY` | μόνο για το `evaluate` με `deepseek` (αντίστοιχα `GEMINI_API_KEY`, `OPENROUTER_API_KEY`) |
 | `WORKERS` | παράλληλες αναλύσεις CodeQL (προεπιλογή 4· ~4 GB RAM η καθεμία) |
 
 Οι διαδρομές των δειγμάτων στο `dataset/malware_dataset_matched.json` έχουν καταγραφεί σε άλλο
@@ -125,11 +129,32 @@ gh release create chains-v12 dist/behavior_chains.tar.gz.part-* dist/SHA256SUMS 
   πακέτα. **Μην ανεβάζεις** τις πηγές malware ούτε το `policy_sources/semgrep_rules.json`
   (άδεια Semgrep Rules: μόνο εσωτερική χρήση).
 
+### Ε. Αξιολόγηση με άλλο LLM
+
+Όλοι οι πάροχοι χρησιμοποιούν **τον ίδιο** evaluator (`inference/llm_evaluator.py`): ίδιο prompt, ίδια
+ανάγνωση της απάντησης, ίδιες επαναλήψεις για chains που αποτυγχάνουν, ίδια συγκέντρωση και μορφή
+αναφοράς. Αλλάζει μόνο η κλήση του μοντέλου (`inference/llm_providers.py`). Στο `.env`:
+
+| `LLM_PROVIDER` | Τι χρειάζεται | Αποτελέσματα στο |
+|---|---|---|
+| `deepseek` (προεπιλογή, πειράματα της εργασίας) | `DEEPSEEK_API_KEY` (+ `DEEPSEEK_MODEL`, προεπιλογή `deepseek-flash`) | `results/v12_<mode>/` |
+| `gemini` | `GEMINI_API_KEY` (+ `GEMINI_MODEL`) | `results/v12_<mode>_gemini/` |
+| `lmstudio` (τοπικά, τίποτα δεν φεύγει από τον υπολογιστή) | LM Studio με ανοιχτό server (+ `LM_STUDIO_URL`, `LM_STUDIO_MODEL`) | `results/v12_<mode>_lmstudio/` |
+| `openrouter` | `OPENROUTER_API_KEY` και `OPENROUTER_MODEL` (συγκεκριμένο μοντέλο) | `results/v12_<mode>_openrouter/` |
+
+```bash
+LLM_PROVIDER=gemini MODES=sum ./run_pipeline.sh evaluate   # ή μόνιμα: LLM_PROVIDER=gemini στο .env
+```
+
+Κάθε αναφορά γράφει `llm_provider`/`llm_model`, και κάθε απόφαση chain το `model_used`. Δεν γίνεται
+ποτέ σιωπηλή αλλαγή μοντέλου: αν ένας πάροχος αποτύχει ή εξαντλήσει το όριό του, το chain
+ξαναδοκιμάζεται και, αν αποτύχει οριστικά, το πακέτο μένει `INCOMPLETE` για επόμενη εκτέλεση.
+
 ## 3. Όλες οι εντολές
 
 | Εντολή | Τι κάνει |
 |---|---|
-| `setup` | `pipeline.env`, venv + `requirements.txt`, `codeql pack install` για τα queries |
+| `setup` | `.env`, venv + `requirements.txt`, `codeql pack install` για τα queries |
 | `check` | έλεγχος προαπαιτούμενων |
 | `status` | αναλυμένα / σε εκκρεμότητα / αποτυχημένα, μέγεθος RAG, πρόοδος αποτελεσμάτων |
 | `sources` | clone όσων πηγών λείπουν + git pull |
@@ -156,7 +181,7 @@ benign test ταυτόχρονα στο `evaluate`), `RESULTS_SUFFIX`, `CODEQL_Q
 | `dist/` | αρχεία του `pack` |
 | `results/` | βλ. `results/README.md` |
 
-Τα `logs/`, `work/`, `dist/`, `old/` και `pipeline.env` είναι στο `.gitignore`.
+Τα `logs/`, `work/`, `dist/`, `old/` και `.env` είναι στο `.gitignore`.
 
 ## 5. Συνήθη προβλήματα
 
