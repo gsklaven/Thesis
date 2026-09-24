@@ -16,7 +16,12 @@
      "βρέθηκε κάτι κοντινό" binary σήμα (ό,τι είχαμε ήδη δει σε μικρότερο
      δείγμα - εδώ ενσωματωμένο, ώστε να μη χρειάζεται ξεχωριστό script).
 
-Διαβάζει: results/<PROMPT_VERSION>/report_*.json
+Χρήση:  python3 results/evaluation_summary.py [tag ...]      π.χ. v12_samples
+        - με ορίσματα: μόνο αυτά τα runs
+        - χωρίς ορίσματα, με RAG_MODE στο περιβάλλον: το run αυτού του RAG_MODE
+        - χωρίς τίποτα: όλα τα results/<PROMPT_VERSION>_* (εκτός smoke), και όσα τρέχουν ακόμα
+
+Διαβάζει: results/<tag>/report_*.json
           expected_labels.json (προαιρετικό, για metrics)
 """
 
@@ -32,15 +37,24 @@ _THESIS_ROOT = os.environ.get(
 sys.path.insert(0, os.path.join(_THESIS_ROOT, "inference"))
 from query_rag import PROMPT_VERSION, RESULTS_TAG  # noqa: E402
 
-RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", RESULTS_TAG)
+RESULTS_ROOT = os.path.join(_THESIS_ROOT, "results")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
 # Δομή του results/: <tag>/report_*.json, evaluation_summaries/, test_set_summaries/
-SUMMARY_OUT = os.path.join(_THESIS_ROOT, "results", "evaluation_summaries", f"evaluation_summary_{RESULTS_TAG}.json")
+SUMMARY_DIR = os.path.join(RESULTS_ROOT, "evaluation_summaries")
 
 
-def load_reports():
+def select_tags():
+    if len(sys.argv) > 1:
+        return [os.path.basename(os.path.normpath(t)) for t in sys.argv[1:]]
+    if os.environ.get("RAG_MODE"):
+        return [RESULTS_TAG]
+    return sorted(os.path.basename(d) for d in glob.glob(os.path.join(RESULTS_ROOT, f"{PROMPT_VERSION}_*"))
+                  if os.path.isdir(d) and "smoke" not in os.path.basename(d))
+
+
+def load_reports(results_dir):
     reports = {}
-    for path in glob.glob(os.path.join(RESULTS_DIR, "report_*.json")):
+    for path in glob.glob(os.path.join(results_dir, "report_*.json")):
         pkg_name = os.path.basename(path)[len("report_"):-len(".json")]
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -146,13 +160,25 @@ def print_metrics(label, tp, tn, fp, fn, static_misses, unscored, benign_no_chai
 
 
 def main():
-    reports = load_reports()
     expected_labels = {}
     if os.path.exists(EXPECTED_LABELS_FILE):
         with open(EXPECTED_LABELS_FILE, "r", encoding="utf-8") as f:
             expected_labels = json.load(f)
+    tags = select_tags()
+    if not tags:
+        sys.exit(f"[!] Δεν βρέθηκαν αποτελέσματα ({RESULTS_ROOT}/{PROMPT_VERSION}_*)")
+    for tag in tags:
+        summarize(tag, expected_labels)
 
-    print(f"[*] {len(reports)} reports βρέθηκαν στο {RESULTS_DIR}")
+
+def summarize(tag, expected_labels):
+    results_dir = os.path.join(RESULTS_ROOT, tag)
+    summary_out = os.path.join(SUMMARY_DIR, f"evaluation_summary_{tag}.json")
+    reports = load_reports(results_dir)
+    print(f"\n{'=' * 70}\n{tag}\n{'=' * 70}")
+    print(f"[*] {len(reports)} reports βρέθηκαν στο {results_dir}")
+    if not reports:
+        return
 
     # --- 1. Κατανομή τελικών verdicts (ανά πακέτο) ---
     verdict_counts = {}
@@ -237,6 +263,7 @@ def main():
 
     # --- 4. Αποθήκευση για αναφορά ---
     summary = {
+        "results_tag": tag,
         "total_reports": len(reports),
         "verdict_counts": verdict_counts,
         "model_used_counts": model_counts,
@@ -244,10 +271,10 @@ def main():
         "expected_labels_benign": n_benign_labels,
         "metrics_lenient": print_metrics_lenient,
     }
-    os.makedirs(os.path.dirname(SUMMARY_OUT), exist_ok=True)
-    with open(SUMMARY_OUT, "w", encoding="utf-8") as f:
+    os.makedirs(SUMMARY_DIR, exist_ok=True)
+    with open(summary_out, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
-    print(f"\n[✓] Περίληψη -> {SUMMARY_OUT}")
+    print(f"\n[✓] Περίληψη -> {summary_out}")
 
 
 if __name__ == "__main__":

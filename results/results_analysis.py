@@ -274,7 +274,7 @@ def main():
     if not tags:
         sys.exit("[!] Δεν βρέθηκαν αποτελέσματα (results/v12_*)")
     # ομοιότητα ανά πακέτο από εκτέλεση με ανάκτηση δειγμάτων
-    sim_tag = next((t for t in tags if t.split("_")[1:2] in (["sum"], ["samples"])), tags[0])
+    sim_tag = next((t for mode in ("sum", "samples") for t in tags if t.split("_")[1:2] == [mode]), tags[0])
     sim_source = {p: max_similarity(r) for p, r in load(sim_tag).items()}
     os.makedirs(OUT, exist_ok=True)
     all_res = []

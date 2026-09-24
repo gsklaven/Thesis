@@ -16,7 +16,7 @@
 ```bash
 RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test          # malware του test
 RAG_MODE=sum python3 results/check_test_set.py dataset/benign_test_set   # νόμιμα πακέτα
-RAG_MODE=sum python3 results/evaluation_summary.py                       # μετρικές
+python3 results/evaluation_summary.py [v12_samples ...]                  # μετρικές (χωρίς όρισμα: όλα τα v12_*)
 python3 results/confusion_matrix_by_category.py                          # recall ανά κατηγορία επίθεσης, όλες οι εκδόσεις
 python3 results/results_analysis.py                                      # αναλυτικά αποτελέσματα + confusion matrix -> results/analysis/
 ```
