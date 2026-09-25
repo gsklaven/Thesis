@@ -1,9 +1,9 @@
 """
-incremental_scanner.py — Incremental malware analysis για Git repositories.
+incremental_scanner.py - Incremental malware analysis for Git repositories (planned extension, e.g. as a GitHub Action).
 
-ΛΕΙΤΟΥΡΓΙΕΣ:
-  full        : Πλήρης ανάλυση όλου του repository (1ο push / baseline).
-  incremental : Ανάλυση μόνο των chains που αφορούν changed files σε ένα commit.
+MODES:
+  full        : Full analysis of the whole repository (first push / baseline).
+  incremental : Analysis of only the chains related to the files changed by a commit.
 
 FLOW:
   Full:
@@ -13,21 +13,21 @@ FLOW:
 
   Incremental:
     git diff → changed files
-    CodeQL (full repo, αλλά filter output) → behavior chains
-    → φιλτράρισμα: chains που αγγίζουν changed files
-    → cross-ref με baseline fingerprints → μόνο νέα chains
+    CodeQL (full repo, filtered output) → behavior chains
+    → filter: chains that touch changed files
+    → cross-reference with baseline fingerprints → new chains only
     → LLM (NEW chains only)
-    → merge με baseline → ενημερωμένο report
+    → merge with baseline → updated report
     → .malware_scan/incremental/commit_<sha>.json
 
-ΧΡΗΣΗ:
-  # Πρώτο push — full scan
+USAGE:
+  # First push - full scan
   python3 incremental_scanner.py \\
       --target /path/to/repo \\
       --package my-package \\
       --mode full
 
-  # Επόμενο commit
+  # Next commit
   python3 incremental_scanner.py \\
       --target /path/to/repo \\
       --package my-package \\
@@ -35,7 +35,7 @@ FLOW:
       --commit abc1234 \\
       --prev-commit def5678
 
-  # Αν τρέχει μέσα στο ίδιο repo (για GitHub Actions)
+  # When running inside the scanned repo itself (GitHub Actions)
   python3 incremental_scanner.py \\
       --target . \\
       --package my-package \\
@@ -75,8 +75,8 @@ INCREMENTAL_DIR = "incremental"
 
 def _run_codeql_pipeline(target_dir: str) -> str | None:
     """
-    Τρέχει analysis.py + build_behavior_chain.py με CODEQL_TARGET_DIR=target_dir.
-    Επιστρέφει το path του παραγόμενου sliced_behavior_chain.json, ή None αν απέτυχε.
+    Run analysis.py + build_behavior_chain.py with CODEQL_TARGET_DIR=target_dir.
+    Returns the path of the produced sliced_behavior_chain.json, or None on failure.
     """
     env = os.environ.copy()
     env["CODEQL_TARGET_DIR"] = os.path.abspath(target_dir)
@@ -84,7 +84,7 @@ def _run_codeql_pipeline(target_dir: str) -> str | None:
 
     results_dir = os.path.join(_PIPELINE_DIR, "results")
 
-    # Καθαρισμός προηγούμενων αποτελεσμάτων (αποφυγή stale-CSV bug)
+    # remove previous results (a stale CSV would be attributed to this run)
     for pattern in [
         "final_codeql_results_*.csv",
         "call_graph_*.csv",
@@ -99,7 +99,7 @@ def _run_codeql_pipeline(target_dir: str) -> str | None:
     if os.path.exists(chain_json):
         os.remove(chain_json)
 
-    print(f"[CodeQL] Ανάλυση: {target_dir}")
+    print(f"[CodeQL] Analysing: {target_dir}")
     for script in ["analysis.py", "build_behavior_chain.py"]:
         script_path = os.path.join(_PIPELINE_DIR, script)
         result = subprocess.run(
@@ -108,18 +108,18 @@ def _run_codeql_pipeline(target_dir: str) -> str | None:
             env=env,
         )
         if result.returncode != 0:
-            print(f"[!] Αποτυχία: {script} (exit code {result.returncode})")
+            print(f"[!] Failed: {script} (exit code {result.returncode})")
             return None
 
     if not os.path.exists(chain_json):
-        print("[!] Δεν παράχθηκε sliced_behavior_chain.json")
+        print("[!] No sliced_behavior_chain.json was produced")
         return None
 
     return chain_json
 
 
 def _load_chains(chain_json_path: str) -> tuple[list, dict]:
-    """Φορτώνει chains και επιστρέφει (chains_list, full_pkg_data)."""
+    """Load a chains file and return (chains_list, full_pkg_data)."""
     with open(chain_json_path, encoding="utf-8") as f:
         pkg_data = json.load(f)
     return pkg_data.get("behavior_chains", []), pkg_data
@@ -131,8 +131,8 @@ def _load_chains(chain_json_path: str) -> tuple[list, dict]:
 
 def _git_changed_files(repo_dir: str, commit: str, prev_commit: str) -> set:
     """
-    Επιστρέφει set με τα αρχεία που άλλαξαν μεταξύ prev_commit και commit.
-    Paths είναι relative ως προς τη ρίζα του repo.
+    Set of the files changed between prev_commit and commit.
+    Paths are relative to the root of the repository.
     """
     result = subprocess.run(
         ["git", "diff", "--name-only", prev_commit, commit],
@@ -141,7 +141,7 @@ def _git_changed_files(repo_dir: str, commit: str, prev_commit: str) -> set:
         text=True,
     )
     if result.returncode != 0:
-        print(f"[!] git diff απέτυχε: {result.stderr.strip()}")
+        print(f"[!] git diff failed: {result.stderr.strip()}")
         return set()
 
     files = {line.strip() for line in result.stdout.splitlines() if line.strip()}
@@ -151,7 +151,7 @@ def _git_changed_files(repo_dir: str, commit: str, prev_commit: str) -> set:
 
 
 def _git_current_sha(repo_dir: str) -> str:
-    """Επιστρέφει το τρέχον commit SHA (short)."""
+    """Current commit SHA (short form)."""
     result = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"],
         cwd=repo_dir, capture_output=True, text=True,
@@ -165,8 +165,8 @@ def _git_current_sha(repo_dir: str) -> str:
 
 def _evaluate_chains(chain_json_path: str, evaluator_script: str) -> dict | None:
     """
-    Καλεί το llm_evaluator.py για ένα chain JSON (πάροχος LLM από το .env).
-    Επιστρέφει το report dict ή None αν απέτυχε.
+    Run llm_evaluator.py on a chains JSON (LLM provider from .env).
+    Returns the report dict, or None on failure.
     """
     result = subprocess.run(
         [sys.executable, evaluator_script, chain_json_path],
@@ -175,7 +175,7 @@ def _evaluate_chains(chain_json_path: str, evaluator_script: str) -> dict | None
     if result.returncode != 0:
         return None
 
-    # Βρες το report που έγραψε ο evaluator
+    # find the report written by the evaluator
     pkg_name = os.path.basename(chain_json_path).replace(".json", "")
     report_path = os.path.join(_THESIS_ROOT, "results", PROMPT_VERSION,
                                f"report_{pkg_name}.json")
@@ -189,8 +189,8 @@ def _evaluate_subset(all_chains: list, new_chain_indices: list,
                      pkg_data: dict, package_name: str,
                      evaluator_script: str) -> dict | None:
     """
-    Δημιουργεί ένα temporary JSON με ΜΟΝΟ τα new chains και το στέλνει στο LLM.
-    Επιστρέφει το report dict για αυτά τα chains.
+    Write a temporary JSON with ONLY the new chains and send it to the LLM.
+    Returns the report dict of those chains.
     """
     import tempfile
 
@@ -221,15 +221,16 @@ def _evaluate_subset(all_chains: list, new_chain_indices: list,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _scan_state_dir(target_dir: str) -> str:
+    """Folder of the scanner's state inside the target repository (.malware_scan/)."""
     return os.path.join(os.path.abspath(target_dir), SCAN_STATE_DIR)
 
 
 def _load_baseline(target_dir: str) -> dict:
     """
-    Φορτώνει το baseline από .malware_scan/baseline.json.
-    Επιστρέφει empty dict αν δεν υπάρχει.
+    Load the baseline from .malware_scan/baseline.json
+    (an empty baseline if it does not exist).
 
-    Δομή baseline:
+    Baseline structure:
     {
       "prompt_version": "v11",
       "last_full_scan": "2024-01-01T12:00:00",
@@ -252,28 +253,28 @@ def _load_baseline(target_dir: str) -> dict:
 
 
 def _save_baseline(target_dir: str, baseline: dict) -> None:
+    """Write the baseline (and, once, a .gitignore for temporary files) into the state folder."""
     state_dir = _scan_state_dir(target_dir)
     os.makedirs(state_dir, exist_ok=True)
     baseline_path = os.path.join(state_dir, BASELINE_FILE)
     with open(baseline_path, "w", encoding="utf-8") as f:
         json.dump(baseline, f, indent=2, ensure_ascii=False)
 
-    # Δημιούργησε .gitignore μέσα στο .malware_scan/ για να κρατάμε
-    # τα baseline αρχεία αλλά να αγνοούμε τα temp αρχεία
+    # a .gitignore inside .malware_scan/ keeps the baseline files in git but ignores temporary files
     gitignore = os.path.join(state_dir, ".gitignore")
     if not os.path.exists(gitignore):
         with open(gitignore, "w") as f:
             f.write("# Malware Scanner State\n")
-            f.write("# Commit baseline.json και last_scan.json στο git\n")
-            f.write("# για να διατηρείται το state μεταξύ CI runs.\n")
+            f.write("# Commit baseline.json and last_scan.json to git\n")
+            f.write("# so that the state is kept between CI runs.\n")
             f.write("*.tmp\n")
             f.write("*.bak\n")
 
 
 def _update_baseline_from_report(baseline: dict, chains: list, report: dict) -> dict:
     """
-    Ενημερώνει το baseline με τα αποτελέσματα ενός report.
-    Κάθε chain verdict αποθηκεύεται με fingerprint ως key.
+    Update the baseline with the results of a report.
+    Every chain verdict is stored with its fingerprint as the key.
     """
     chain_details = report.get("chain_details", [])
     for chain_detail in chain_details:
@@ -301,8 +302,8 @@ def _update_baseline_from_report(baseline: dict, chains: list, report: dict) -> 
 
 def mode_full(args):
     """
-    Πλήρης ανάλυση — τρέχει CodeQL σε ολόκληρο το target repo,
-    αναλύει ΟΛΑ τα chains, αποθηκεύει baseline.
+    Full analysis - runs CodeQL on the whole target repository,
+    evaluates ALL chains and stores the baseline.
     """
     print(f"\n{'='*70}")
     print(f"FULL SCAN — {args.package} @ {args.target}")
@@ -311,30 +312,30 @@ def mode_full(args):
     # 1. CodeQL pipeline
     chain_json = _run_codeql_pipeline(args.target)
     if chain_json is None:
-        print("[!] CodeQL pipeline απέτυχε.")
+        print("[!] The CodeQL pipeline failed.")
         sys.exit(1)
 
     chains, pkg_data = _load_chains(chain_json)
-    print(f"[*] Chains βρέθηκαν: {len(chains)}")
+    print(f"[*] Chains found: {len(chains)}")
 
     if not chains:
-        print("[*] Δεν βρέθηκαν behavior chains — το repo είναι clean.")
+        print("[*] No behavior chains found - the repository is clean.")
         baseline = _load_baseline(args.target)
         baseline["last_full_scan"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         baseline["prompt_version"] = PROMPT_VERSION
         _save_baseline(args.target, baseline)
         return
 
-    # Αντιγραφή JSON στο test_set με το όνομα του package
+    # copy the chains JSON to test_set/ under the package name
     pkg_json = os.path.join(_THESIS_ROOT, "test_set", f"{args.package}.json")
     shutil.copy2(chain_json, pkg_json)
     print(f"[*] Chain JSON → {pkg_json}")
 
     # 2. LLM evaluation
-    print(f"\n[*] LLM ανάλυση όλων των {len(chains)} chains...")
+    print(f"\n[*] LLM analysis of all {len(chains)} chains...")
     report = _evaluate_chains(pkg_json, args.evaluator)
     if report is None:
-        print("[!] LLM evaluation απέτυχε.")
+        print("[!] The LLM evaluation failed.")
         sys.exit(1)
 
     # 3. Update baseline
@@ -356,38 +357,37 @@ def mode_full(args):
 
 def mode_incremental(args):
     """
-    Incremental ανάλυση — τρέχει CodeQL στο full repo αλλά αναλύει
-    μόνο chains που αφορούν changed files και δεν έχουν ίδιο fingerprint
-    με ήδη αναλυμένα chains.
+    Incremental analysis - runs CodeQL on the full repository but evaluates only the chains that touch
+    changed files and whose fingerprint differs from every already analysed chain.
     """
     print(f"\n{'='*70}")
     print(f"INCREMENTAL SCAN — {args.package} | commit {args.commit[:8] if args.commit else 'HEAD'}")
     print(f"{'='*70}\n")
 
     if not args.commit or not args.prev_commit:
-        print("[!] Incremental mode απαιτεί --commit και --prev-commit.")
+        print("[!] Incremental mode requires --commit and --prev-commit.")
         sys.exit(1)
 
     # 1. Changed files
     changed_files = _git_changed_files(args.target, args.commit, args.prev_commit)
     if not changed_files:
-        print("[*] Δεν βρέθηκαν changed files. Τίποτα να αναλυθεί.")
+        print("[*] No changed files. Nothing to analyse.")
         return
 
     # 2. CodeQL (full repo)
     chain_json = _run_codeql_pipeline(args.target)
     if chain_json is None:
-        print("[!] CodeQL pipeline απέτυχε.")
+        print("[!] The CodeQL pipeline failed.")
         sys.exit(1)
 
     chains, pkg_data = _load_chains(chain_json)
-    print(f"[*] Σύνολο chains στο repo: {len(chains)}")
+    print(f"[*] Total chains in the repository: {len(chains)}")
 
-    # 3. Φιλτράρισμα: chains που αγγίζουν changed files
+    # 3. Filter: chains that touch changed files
     relevant_indices = []
     for i, chain in enumerate(chains):
         touched = chain_touched_files(chain)
-        # Normalize: αφαίρεσε leading slash, vendor prefix κτλ.
+        # normalise: strip a leading slash or ./ (paths may be relative to different roots)
         touched_normalized = {f.lstrip("/").lstrip("./") for f in touched}
         if any(
             cf in touched_normalized or any(t.endswith(cf) or cf.endswith(t)
@@ -396,13 +396,13 @@ def mode_incremental(args):
         ):
             relevant_indices.append(i)
 
-    print(f"[*] Chains που αφορούν changed files: {len(relevant_indices)}/{len(chains)}")
+    print(f"[*] Chains related to changed files: {len(relevant_indices)}/{len(chains)}")
 
     if not relevant_indices:
-        print("[*] Κανένα chain δεν αφορά τα changed files. Τίποτα να αναλυθεί.")
+        print("[*] No chain is related to the changed files. Nothing to analyse.")
         return
 
-    # 4. Cross-ref με baseline fingerprints
+    # 4. Cross-reference with the baseline fingerprints
     baseline = _load_baseline(args.target)
     known_fps = set(baseline.get("fingerprints", {}).keys())
 
@@ -415,24 +415,24 @@ def mode_incremental(args):
         else:
             new_indices.append(i)
 
-    print(f"[*] Ήδη αναλυμένα (ίδιο fingerprint): {skipped_count}")
-    print(f"[*] Νέα chains για ανάλυση: {len(new_indices)}")
+    print(f"[*] Already analysed (same fingerprint): {skipped_count}")
+    print(f"[*] New chains to analyse: {len(new_indices)}")
 
     if not new_indices:
-        print("[✓] Όλα τα affected chains έχουν ήδη αναλυθεί — repo clean.")
+        print("[✓] All affected chains have already been analysed - repository clean.")
         return
 
-    # 5. LLM evaluation μόνο στα νέα chains
-    print(f"\n[*] Αποστολή {len(new_indices)} νέων chains στο LLM...")
+    # 5. LLM evaluation of the new chains only
+    print(f"\n[*] Sending {len(new_indices)} new chains to the LLM...")
     report = _evaluate_subset(chains, new_indices, pkg_data,
                               args.package, args.evaluator)
     if report is None:
-        print("[!] LLM evaluation απέτυχε.")
+        print("[!] The LLM evaluation failed.")
         sys.exit(1)
 
     # 6. Update baseline
-    # Για τα νέα chains, χρησιμοποιούμε τους original indices
-    # αλλά το report έχει chain_index 0,1,2... (από το subset JSON)
+    # The report numbers the chains 0,1,2... (indices of the subset JSON), so they are mapped back
+    # to the original indices
     # Mapping: report chain_index i → original chains[new_indices[i]]
     chain_details = report.get("chain_details", [])
     for detail in chain_details:
@@ -492,12 +492,13 @@ def mode_incremental(args):
 def _print_summary(report: dict, mode: str, chains_total: int,
                    chains_analyzed: int, chains_skipped: int = 0,
                    changed_files: set = None):
+    """Print the scan result and, for a malicious/suspicious verdict, the flagged chains with their location."""
     verdict = report.get("final_verdict", "UNKNOWN")
     mal_chains = report.get("malicious_chains", 0)
     sus_chains = report.get("suspicious_chains", 0)
 
     print(f"\n{'='*70}")
-    print(f"ΑΠΟΤΕΛΕΣΜΑ {'FULL' if mode == 'full' else 'INCREMENTAL'} SCAN")
+    print(f"RESULT OF {'FULL' if mode == 'full' else 'INCREMENTAL'} SCAN")
     print(f"{'='*70}")
     if mode == "incremental" and changed_files:
         print(f"Changed files: {', '.join(sorted(changed_files)[:5])}"
@@ -507,7 +508,7 @@ def _print_summary(report: dict, mode: str, chains_total: int,
     print(f"Final verdict:   {verdict}")
     print(f"Malicious chains: {mal_chains} | Suspicious: {sus_chains}")
 
-    # Εκτύπωση MALICIOUS chains με location
+    # print the MALICIOUS / SUSPICIOUS chains with their location
     if verdict in ("MALICIOUS", "SUSPICIOUS"):
         print(f"\n{'⚠️  ALERT' if verdict == 'MALICIOUS' else '⚡ WARNING'}: "
               f"{'Malicious' if verdict == 'MALICIOUS' else 'Suspicious'} behavior detected!")
@@ -530,6 +531,7 @@ def _print_summary(report: dict, mode: str, chains_total: int,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+    """Parse the arguments, check the paths and run the selected mode."""
     parser = argparse.ArgumentParser(
         description="Incremental malware scanner for Git repositories",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -552,11 +554,11 @@ def main():
     args = parser.parse_args()
 
     if not os.path.isdir(args.target):
-        print(f"[!] Target directory δεν υπάρχει: {args.target}")
+        print(f"[!] Target directory does not exist: {args.target}")
         sys.exit(1)
 
     if not os.path.isfile(args.evaluator):
-        print(f"[!] Evaluator script δεν υπάρχει: {args.evaluator}")
+        print(f"[!] Evaluator script does not exist: {args.evaluator}")
         sys.exit(1)
 
     if args.mode == "full":

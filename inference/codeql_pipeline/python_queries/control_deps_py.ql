@@ -21,12 +21,12 @@ import semmle.python.ApiGraphs
 import SensitiveAPIsPy
 
 /**
- * Ανακατασκευάζει ανθρώπινα-αναγνώσιμο κείμενο για AstNode συνθήκης
- * (guard nodes). Καλύπτει Attribute, Name, StringLiteral.
+ * Rebuilds human-readable text for the AstNode of a condition
+ * (guard nodes). Covers Attribute, Name, StringLiteral.
  */
 
-/** Recursive helper για Expr nodes. */
-/** Σύμβολο τελεστή για αναγνώσιμο κείμενο (binary / unary expressions). */
+/** Recursive helper for Expr nodes. */
+/** Operator symbol for readable text (binary / unary expressions). */
 private string opSym(Operator o) {
   o instanceof Add and result = "+"
   or
@@ -64,15 +64,15 @@ private string unarySym(Unaryop o) {
 }
 
 private string readableCondExpr(Expr e) {
-  // Attribute (recursive): self.flag, os.environ.get, κλπ.
+  // Attribute (recursive): self.flag, os.environ.get, etc.
   exists(Attribute attr | attr = e |
     result = readableCondExpr(attr.getObject()) + "." + attr.getName()
   )
   or
-  // Name: αναγνωριστικό μεταβλητής
+  // Name: variable identifier
   exists(Name nm | nm = e | result = nm.getId())
   or
-  // StringLiteral: πραγματική τιμή literal
+  // StringLiteral: actual literal value
   exists(StringLiteral lit | lit = e | result = lit.getS())
   or
   exists(IntegerLiteral i | i = e | result = i.getN())
@@ -112,9 +112,8 @@ string getReadableCondText(AstNode n) {
 }
 
 /**
- * ΝΕΟ FIX: ίδιο πρόβλημα με το backward_slice_py.ql - το "anchor_api"
- * χρησιμοποιούσε call.toString() (π.χ. "ControlFlowNode for Attribute()")
- * αντί να ανακατασκευάζει το πραγματικό κείμενο κλήσης.
+ * Readable text of the anchor call ("anchor_api"), as in backward_slice_py.ql: call.toString()
+ * would give "ControlFlowNode for Attribute()" instead of the actual call text.
  */
 string getReadableCallText(DataFlow::CallCfgNode call) {
   exists(Expr func | func = call.asExpr().(Call).getFunc() |

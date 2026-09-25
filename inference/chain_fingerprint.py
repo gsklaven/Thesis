@@ -1,22 +1,21 @@
 """
-chain_fingerprint.py — Stable fingerprinting for behavior chains.
+chain_fingerprint.py - Stable fingerprinting for behavior chains.
 
-Χρησιμοποιείται για να παρακολουθούμε ποια chains έχουν ήδη αναλυθεί,
-ώστε να μην ξαναστέλνουμε το ίδιο chain στο LLM σε επόμενα commits.
+Used by the incremental scanner to track which chains have already been analysed, so the same chain is
+not sent to the LLM again on later commits.
 
-Fingerprint ορισμός:
-  - Εξαρτάται από: category, sensitive_api, flow_boundary,
-    και τα normalized texts των data_flow_slice nodes
-  - ΔΕΝ εξαρτάται από: line numbers, whitespace, variable names
-  - Έτσι: ένα αρχείο που αλλάζει μόνο variable names ή μετακινείται
-    σε άλλη γραμμή δίνει ΤΟ ΙΔΙΟ fingerprint → skip (δεν ξαναναλύεται)
+Fingerprint definition:
+  - Depends on: category, sensitive_api, flow_boundary, and the normalised texts of the data-flow slice
+    nodes, the gating conditions and the confirmed source flows
+  - Does NOT depend on: line numbers or whitespace
+  - So a file that only moves code to other lines gives THE SAME fingerprint -> skipped (not re-analysed)
 """
 import hashlib
 import re
 
 
 def _normalize(text: str) -> str:
-    """Strip whitespace και κάνε lowercase για fingerprint stability."""
+    """Collapse whitespace and lower-case the text, for fingerprint stability."""
     if not text:
         return ""
     # Collapse all whitespace to single space
@@ -26,7 +25,7 @@ def _normalize(text: str) -> str:
 
 def chain_fingerprint(chain: dict) -> str:
     """
-    Επιστρέφει ένα 16-χαρακτηρο hex fingerprint για ένα behavior chain.
+    Return a 16-character hex fingerprint of a behavior chain.
 
     Stable across: line number changes, whitespace changes, variable renames.
     NOT stable across: changes to API calls, data flow nodes, category.
@@ -57,9 +56,8 @@ def chain_fingerprint(chain: dict) -> str:
 
 def chain_touched_files(chain: dict) -> set:
     """
-    Επιστρέφει το σύνολο των αρχείων που αφορά ένα chain.
-    Χρησιμοποιείται για να φιλτράρουμε ποια chains σχετίζονται
-    με τα changed files ενός commit.
+    Return the set of files a chain touches (anchor, slice nodes, conditions, source flows).
+    Used to select the chains related to the files changed by a commit.
     """
     files = set()
 
@@ -97,7 +95,7 @@ def chain_touched_files(chain: dict) -> set:
 
 def fingerprint_all(chains: list) -> dict:
     """
-    Επιστρέφει dict: fingerprint → chain_index
-    για γρήγορη αναζήτηση αν ένα chain έχει ήδη αναλυθεί.
+    Return a dict fingerprint -> chain_index, for a quick lookup of whether a chain has already
+    been analysed.
     """
     return {chain_fingerprint(c): i for i, c in enumerate(chains)}

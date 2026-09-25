@@ -1,3 +1,11 @@
+"""
+Match every dataset entry with its source code on disk: dataset/malware_dataset_matched.json.
+
+Entries that already have a source_code_path (from collect_all_samples.py) pass through unchanged.
+Entries without one (OSV reports) are matched by package name against every folder of the source
+repositories; the matched code is copied into a single malware_samples/ folder under the sources
+location. Entries without any match go to dataset/malware_dataset_unmatched.json with a reason.
+"""
 import os
 import json
 import shutil
@@ -12,14 +20,16 @@ DATASET_JSON = os.path.join(BASE_DIR, "malware_dataset_all_sources.json")
 MATCHED_OUTPUT = os.path.join(BASE_DIR, "malware_dataset_matched.json")
 UNMATCHED_OUTPUT = os.path.join(BASE_DIR, "malware_dataset_unmatched.json")
 
-# Ίδιο dual-name fallback με το collect_all_samples.py
+# Folder name(s) of the Datadog dataset (same fallback idea as in collect_all_samples.py)
 DATADOG_FOLDER_CANDIDATES = ["malicious-software-packages-dataset"]
 
 
 def resolve_output_dir():
-    """Προτιμά έναν ΗΔΗ υπάρχοντα φάκελο malware_samples/ (όπου κι αν ζει),
-    ώστε να ΜΗ φτιάχνουμε δεύτερο, ξεχωριστό αντίγραφο σε άλλο δίσκο απλά
-    επειδή αυτός συνέβη να είναι πρώτος στη λίστα candidates."""
+    """
+    Prefer an EXISTING malware_samples/ folder (wherever it lives), so that a second, separate copy
+    is not created on another disk just because that disk happens to come first in the candidates.
+    Otherwise use the first existing sources location, and as a last resort the dataset folder.
+    """
     existing = find_target_dir("malware_samples")
     if existing:
         return existing
@@ -33,6 +43,7 @@ OUTPUT_DIR = resolve_output_dir()
 
 
 def extract_samples():
+    """Match entries to code by name, copy matched code to OUTPUT_DIR, write matched / unmatched lists."""
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
@@ -42,10 +53,10 @@ def extract_samples():
     already_matched = [item for item in dataset if item.get("source_code_path")]
     to_match = [item for item in dataset if not item.get("source_code_path")]
 
-    print(f"[*] {len(already_matched)} πακέτα έχουν ήδη source_code_path (από collect_all_samples.py).")
-    print(f"[*] {len(to_match)} OSV entries χρειάζονται αντιστοίχηση με τον κώδικα στο disk.")
+    print(f"[*] {len(already_matched)} packages already have a source_code_path (from collect_all_samples.py).")
+    print(f"[*] {len(to_match)} OSV entries need to be matched with code on disk.")
 
-    print("[*] Ευρετηρίαση ΟΛΩΝ των φακέλων κώδικα για αντιστοίχηση...")
+    print("[*] Indexing ALL code folders for matching...")
 
     SOURCE_DIRECTORIES = []
     for folder_name in ["pypi_malregistry", "maloss-samples", "pypi", "npm"] + DATADOG_FOLDER_CANDIDATES:
@@ -57,6 +68,7 @@ def extract_samples():
     if os.path.exists(datadog_extract):
         SOURCE_DIRECTORIES.append(datadog_extract)
 
+    # lower-cased folder name -> first path where a folder with that name occurs
     registry_dirs = {}
     for src_dir in SOURCE_DIRECTORIES:
         for root, dirs, files in os.walk(src_dir):
@@ -72,12 +84,13 @@ def extract_samples():
     final_dataset = list(already_matched)
     unmatched_dataset = []
 
-    print("[*] Αντιστοίχιση των OSV reports με τον πηγαίο κώδικα...")
+    print("[*] Matching the OSV reports with source code...")
     for item in to_match:
         pkg_name = item.get("package_name")
         matched_path = registry_dirs.get(pkg_name.lower())
 
         if matched_path:
+            # copy once; an existing copy is reused
             target_dest = os.path.join(OUTPUT_DIR, pkg_name)
             if not os.path.exists(target_dest):
                 try:
@@ -101,11 +114,11 @@ def extract_samples():
     with open(UNMATCHED_OUTPUT, 'w', encoding='utf-8') as f:
         json.dump(unmatched_dataset, f, indent=4, ensure_ascii=False)
 
-    print(f"\n[✓] Η διαδικασία ολοκληρώθηκε!")
-    print(f"[+] Pass-through (ήδη αντιστοιχισμένα): {len(already_matched)} πακέτα.")
-    print(f"[+] Βρέθηκε κώδικας για {found_count} OSV πακέτα (Αντιγράφηκαν στο {OUTPUT_DIR}).")
-    print(f"[-] Δεν βρέθηκε κώδικας για {missing_count} πακέτα.")
-    print(f"[*] Σύνολο έτοιμων για CodeQL: {len(final_dataset)} πακέτα -> {MATCHED_OUTPUT}")
+    print(f"\n[✓] Done!")
+    print(f"[+] Pass-through (already matched): {len(already_matched)} packages.")
+    print(f"[+] Code found for {found_count} OSV packages (copied to {OUTPUT_DIR}).")
+    print(f"[-] No code found for {missing_count} packages.")
+    print(f"[*] Total ready for CodeQL: {len(final_dataset)} packages -> {MATCHED_OUTPUT}")
 
 if __name__ == "__main__":
     extract_samples()

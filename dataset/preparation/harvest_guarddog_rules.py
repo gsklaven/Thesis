@@ -1,15 +1,14 @@
 """
-Κατεβάζει τους ΔΙΚΟΥΣ κανόνες ανίχνευσης του GuardDog (Datadog) - Semgrep
-(.yml) και YARA (.yar) - και τους μετατρέπει στο ίδιο modular format που
-ήδη χρησιμοποιεί το policy_sources/ (id/name/description).
+Extract the detection rules of GuardDog (Datadog) - Semgrep (.yml) and YARA (.yar) - into the
+modular format of policy_sources/ ({source, rules: [{id, name, description}]}).
 
-Κανένα LLM δεν χρειάζεται - οι κανόνες είναι ήδη δομημένοι, με ρητό id και
-description field το καθένα. Ιδιαίτερα σχετικό dataset δεδομένου ότι ήδη
-χρησιμοποιείς τα ΔΕΙΓΜΑΤΑ της Datadog - αυτό προσθέτει και τους ΚΑΝΟΝΕΣ τους.
+No LLM is involved: the rules are already structured, each with an explicit id and description.
+They complement the Datadog SAMPLES of the dataset with the RULES of the same vendor.
 
-Χρήση:
+Usage:
     git clone --depth=1 https://github.com/DataDog/guarddog.git /tmp/guarddog
     python3 harvest_guarddog_rules.py /tmp/guarddog
+Output: policy_sources/guarddog_rules.json
 """
 
 import json
@@ -20,7 +19,7 @@ import sys
 try:
     import yaml
 except ImportError:
-    print("[!] Χρειάζεται: pip install pyyaml --break-system-packages")
+    print("[!] Required: pip install pyyaml --break-system-packages")
     sys.exit(1)
 
 OUTPUT_FILE = os.path.join(
@@ -29,13 +28,13 @@ OUTPUT_FILE = os.path.join(
 
 
 def parse_semgrep_yaml(fpath):
-    """Κάθε .yml αρχείο μπορεί να περιέχει πολλαπλούς κανόνες μέσα σε 'rules:'."""
+    """Rules of one Semgrep .yml file (a file may contain several rules under 'rules:')."""
     entries = []
     try:
         with open(fpath, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except Exception as e:
-        print(f"  [!] Παράλειψη {fpath}: {e}")
+        print(f"  [!] Skipped {fpath}: {e}")
         return entries
 
     if not data or "rules" not in data:
@@ -44,6 +43,7 @@ def parse_semgrep_yaml(fpath):
     for rule in data["rules"]:
         rule_id = rule.get("id", os.path.basename(fpath))
         metadata = rule.get("metadata", {}) or {}
+        # prefer the documented description, fall back to the rule's message
         description = metadata.get("description") or rule.get("message", "")
         entries.append({
             "id": f"GUARDDOG-SEMGREP-{rule_id}",
@@ -54,17 +54,16 @@ def parse_semgrep_yaml(fpath):
 
 
 def parse_yara_file(fpath):
-    """Απλή regex εξαγωγή rule name + meta.description, χωρίς να χρειάζεται
-    πλήρη YARA parser - αρκετό για id/description."""
+    """Rule name + meta.description of each rule of a .yar file, by regex (no full YARA parser needed)."""
     entries = []
     try:
         with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
     except Exception as e:
-        print(f"  [!] Παράλειψη {fpath}: {e}")
+        print(f"  [!] Skipped {fpath}: {e}")
         return entries
 
-    # Κάθε "rule <name> { ... }" block
+    # every "rule <name> { ... }" block
     for match in re.finditer(r'rule\s+(\w+)\s*\{(.*?)\n\}', content, re.DOTALL):
         rule_name = match.group(1)
         body = match.group(2)
@@ -79,20 +78,21 @@ def parse_yara_file(fpath):
 
 
 def main():
+    """Walk the GuardDog repository, parse every rule file and write guarddog_rules.json."""
     if len(sys.argv) != 2:
-        print("Χρήση: python3 harvest_guarddog_rules.py /path/to/guarddog_repo")
+        print("Usage: python3 harvest_guarddog_rules.py /path/to/guarddog_repo")
         sys.exit(1)
 
     repo_path = sys.argv[1]
     if not os.path.isdir(repo_path):
-        print(f"[!] Δεν βρέθηκε: {repo_path}")
+        print(f"[!] Not found: {repo_path}")
         sys.exit(1)
 
     all_rules = []
     yml_count = yar_count = 0
 
     for root, dirs, files in os.walk(repo_path):
-        # Μόνο μέσα στο analyzer/sourcecode - εκεί ζουν οι rules, όχι tests/CI configs
+        # only inside analyzer/sourcecode - that is where the rules live, not tests/CI configs
         if "sourcecode" not in root:
             continue
         for fname in files:
@@ -108,11 +108,11 @@ def main():
                 if new_entries:
                     yar_count += 1
 
-    # Αφαίρεση κανόνων χωρίς καμία περιγραφή - δεν προσφέρουν τίποτα στο retrieval
+    # rules without any description add nothing to retrieval
     all_rules = [r for r in all_rules if r["description"].strip()]
 
-    print(f"[*] {yml_count} Semgrep αρχεία, {yar_count} YARA αρχεία διαβάστηκαν.")
-    print(f"[+] {len(all_rules)} κανόνες με πραγματική περιγραφή εξήχθησαν.")
+    print(f"[*] {yml_count} Semgrep files, {yar_count} YARA files read.")
+    print(f"[+] {len(all_rules)} rules with a real description extracted.")
 
     output = {
         "source": "GuardDog (Datadog) Detection Rules",
@@ -124,7 +124,7 @@ def main():
         json.dump(output, f, indent=4, ensure_ascii=False)
 
     print(f"[✓] -> {OUTPUT_FILE}")
-    print(f"\nΜετά: python3 build_policy_dataset.py && python3 build_policy_index.py")
+    print(f"\nThen: python3 build_policy_dataset.py && python3 build_policy_index.py")
 
 
 if __name__ == "__main__":

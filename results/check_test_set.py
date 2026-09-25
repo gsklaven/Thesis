@@ -1,36 +1,29 @@
 """
-Τρέχει το llm_evaluator.py πάνω σε ΚΑΘΕ *.json μέσα στο test_set/ (ήδη
-παραγμένα sliced_behavior_chain.json, ένα ανά πακέτο - εσύ τα φτιάχνεις
-χειροκίνητα με analysis.py + build_behavior_chain.py), και συγκεντρώνει
-τα verdicts σε έναν τελικό πίνακα.
+Run inference/llm_evaluator.py on EVERY *.json of an evaluation folder (chains files produced by the
+CodeQL pipeline, one per package, e.g. dataset/rag_test or dataset/benign_test_set) and collect the
+verdicts into a final table and a summary JSON.
 
-ΔΟΜΗ ΠΟΥ ΠΕΡΙΜΕΝΕΙ:
-    /Users/giorgos/Documents/Thesis/test_set/
-        paramiko.json        <- sliced_behavior_chain.json, μετονομασμένο
-        fabric.json
-        boto3.json
-        some-known-malware.json
-        ...
+Usage:
+    RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test [expected_labels.json]
 
-(Το filename ΠΡΕΠΕΙ να είναι το όνομα του πακέτου - το llm_evaluator.py
-παίρνει από εκεί το όνομα του report που θα γράψει.)
+The file name MUST be the package name: llm_evaluator.py names the report after it
+(results/<RESULTS_TAG>/report_<package>.json).
 
-Για να παράξεις ένα τέτοιο αρχείο χειροκίνητα:
-    export CODEQL_TARGET_DIR=/path/to/extracted/paramiko/source
-    cd /Users/giorgos/Documents/Thesis/inference/codeql_pipeline
+Resumable: packages that already have a complete report are skipped; EVALUATION_FAILED / INCOMPLETE /
+UNKNOWN reports are evaluated again. With expected_labels.json ({"paramiko": "benign",
+"some-malware": "malicious", ...}) the false positives / negatives are scored as well.
+
+To produce a chains file by hand:
+    export CODEQL_TARGET_DIR=/path/to/extracted/package/source
+    cd inference/codeql_pipeline
     rm -f results/final_codeql_results_*.csv results/call_graph_*.csv \
           results/backward_slice_*.csv results/control_deps_*.csv \
           results/sliced_behavior_chain.json
     python3 analysis.py
     python3 build_behavior_chain.py
-    cp results/sliced_behavior_chain.json /Users/giorgos/Documents/Thesis/test_set/paramiko.json
-
-(Το καθάρισμα πριν το analysis.py ΔΕΝ είναι προαιρετικό - βλ. το stale-CSV
-bug που βρήκαμε στο πρώτο benign test. Χωρίς αυτό, ένα πακέτο όπου το
-CodeQL δεν βρίσκει κώδικα "κληρονομεί" το behavior του προηγούμενου.)
-
-ΠΡΟΑΙΡΕΤΙΚΟ - expected_labels.json, για αυτόματο σκορ false positive/negative:
-    {"paramiko": "benign", "fabric": "benign", "some-known-malware": "malicious"}
+    cp results/sliced_behavior_chain.json /path/to/evaluation_folder/<package>.json
+(The clean-up before analysis.py is NOT optional: otherwise a package on which CodeQL finds no code
+"inherits" the behaviour of the previous package from its stale CSV files.)
 """
 
 import json
@@ -49,112 +42,107 @@ DEFAULT_TEST_SET_DIR = os.path.join(_THESIS_ROOT, "dataset", "rag_test")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
 
 INFERENCE_DIR = os.path.join(_THESIS_ROOT, "inference")
-# Ο πάροχος του LLM (deepseek/gemini/lmstudio/openrouter) επιλέγεται στο .env - βλ. inference/llm_providers.py
+# The LLM provider (deepseek/gemini/lmstudio/openrouter) is selected in .env - see inference/llm_providers.py
 LLM_EVALUATOR = os.path.join(INFERENCE_DIR, "llm_evaluator.py")
 LLM_RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", RESULTS_TAG)
-# Verdicts που σημαίνουν ότι ΔΕΝ υπάρχει πλήρης αξιολόγηση: ξαναδοκιμάζονται στο
-# επόμενο run και δεν βαθμολογούνται (ούτε ως σωστά ούτε ως λάθος).
+# Verdicts that mean there is NO complete evaluation: retried on the next run and not scored (neither
+# as correct nor as wrong).
 RETRY_VERDICTS = ("EVALUATION_FAILED", "INCOMPLETE", "UNKNOWN")
 
 
 def main():
-    # ΝΕΟ: δέχεται τον φάκελο ως όρισμα, ώστε το ΙΔΙΟ script να δουλεύει και
-    # για το rag_test/ (391 ήδη επεξεργασμένα, γνωστά malicious) και για το
-    # test_set/ (benign, όταν το ετοιμάσεις) - χωρίς διπλό κώδικα.
-    # Απόλυτες διαδρομές: ο evaluator τρέχει με cwd=inference/, οπότε μια σχετική διαδρομή
-    # (π.χ. dataset/rag_test) δεν θα έβρισκε κανένα αρχείο.
+    """Evaluate every package of the folder (skipping finished ones), print the table and write the summary."""
+    # The folder is an argument, so the SAME script serves the malware and the benign sets. Absolute paths:
+    # the evaluator runs with cwd=inference/, so a relative path (e.g. dataset/rag_test) would find nothing.
     test_set_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TEST_SET_DIR)
     labels_file = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else EXPECTED_LABELS_FILE)
 
     if not os.path.exists(test_set_dir):
-        print(f"[!] Δεν βρέθηκε: {test_set_dir}")
+        print(f"[!] Not found: {test_set_dir}")
         sys.exit(1)
 
     expected_labels = {}
     if os.path.exists(labels_file):
         with open(labels_file, "r", encoding="utf-8") as f:
             expected_labels = json.load(f)
-        print(f"[*] {len(expected_labels)} αναμενόμενες ετικέτες φορτώθηκαν από {labels_file}")
+        print(f"[*] {len(expected_labels)} expected labels loaded from {labels_file}")
     else:
-        print(f"[*] Δεν βρέθηκε {labels_file} - θα τυπωθούν μόνο τα verdicts, χωρίς σκορ.")
+        print(f"[*] {labels_file} not found - only the verdicts will be printed, without a score.")
 
     json_files = sorted(f for f in os.listdir(test_set_dir) if f.endswith(".json"))
     packages = [f[:-5] for f in json_files]
-    print(f"[*] {len(packages)} πακέτα στο {test_set_dir}")
+    print(f"[*] {len(packages)} packages in {test_set_dir}")
 
     reports = {}
     skipped = 0
     for fname, pkg_name in zip(json_files, packages):
         report_path = os.path.join(LLM_RESULTS_DIR, f"report_{pkg_name}.json")
 
-        # ΝΕΟ: resume - αν υπάρχει ήδη ΕΓΚΥΡΟ report ΚΑΙ δεν ήταν αποτυχία API,
-        # μην το ξανατρέξεις. Ένα "EVALUATION_FAILED" (π.χ. εξαντλημένο quota)
-        # ΔΕΝ μετράει ως "ήδη έτοιμο" - χρειάζεται πραγματική επανάληψη.
+        # Resume: a VALID existing report that was not a failure is not run again. An
+        # "EVALUATION_FAILED" (e.g. exhausted quota) does NOT count as done - it needs a real retry.
         if os.path.exists(report_path):
             try:
                 with open(report_path, "r", encoding="utf-8") as f:
                     existing = json.load(f)
                 if existing.get("final_verdict") in RETRY_VERDICTS:
-                    print(f"[*] Ξαναπροσπάθεια (προηγούμενο ήταν {existing.get('final_verdict')}): {pkg_name}")
+                    print(f"[*] Retrying (previous result was {existing.get('final_verdict')}): {pkg_name}")
                 else:
                     reports[pkg_name] = existing
-                    print(f"[{len(reports)}/{len(packages)}] Παράλειψη (ήδη αξιολογημένο): {pkg_name}")
+                    print(f"[{len(reports)}/{len(packages)}] Skipped (already evaluated): {pkg_name}")
                     skipped += 1
                     continue
             except Exception:
-                pass  # κατεστραμμένο report - ξαναπροσπάθησε κανονικά
+                pass  # corrupted report - evaluate again
 
         json_path = os.path.join(test_set_dir, fname)
         print(f"\n{'=' * 70}\n=== {pkg_name} ===\n{'=' * 70}")
 
-        # sys.executable: ίδιος Python (venv) με το check_test_set - ένα σκέτο "python3" εκτός venv
-        # αποτύγχανε σε κάθε πακέτο (χωρίς numpy/sentence_transformers) και το run συνέχιζε χωρίς αξιολόγηση.
+        # sys.executable: the same Python (venv) as this script - a plain "python3" outside the venv would
+        # fail on every package (no numpy/sentence_transformers) while the run carried on unevaluated.
         res = subprocess.run([sys.executable, LLM_EVALUATOR, json_path], cwd=INFERENCE_DIR)
         if res.returncode != 0:
-            print(f"  [!] Σφάλμα LLM evaluator για {pkg_name} - παράλειψη.")
+            print(f"  [!] LLM evaluator error for {pkg_name} - skipped.")
             continue
 
         if os.path.exists(report_path):
             with open(report_path, "r", encoding="utf-8") as f:
                 reports[pkg_name] = json.load(f)
         else:
-            print(f"  [!] Δεν βρέθηκε το αναμενόμενο report: {report_path}")
+            print(f"  [!] The expected report was not found: {report_path}")
 
     if skipped:
-        print(f"\n[*] Σύνολο παραλειφθέντων (ήδη αξιολογημένα από προηγούμενο run): {skipped}")
+        print(f"\n[*] Total skipped (already evaluated by a previous run): {skipped}")
 
-    # --- Τελικός πίνακας ---
+    # --- Final table ---
     print(f"\n\n{'=' * 90}")
-    print("ΣΥΓΚΕΝΤΡΩΤΙΚΑ ΑΠΟΤΕΛΕΣΜΑΤΑ")
+    print("SUMMARY OF RESULTS")
     print(f"{'=' * 90}")
-    print(f"{'Πακέτο':30s} {'Verdict':22s} {'Chains':8s} {'Αναμενόμενο':14s} {'Σωστό;':8s}")
+    print(f"{'Package':30s} {'Verdict':22s} {'Chains':8s} {'Expected':14s} {'Correct?':8s}")
     print("-" * 90)
 
     correct = 0
     scored = 0
     false_positives = []
-    false_negatives = []          # Πραγματικά αξιολογήθηκε, το LLM είπε BENIGN
-    static_analysis_misses = []   # NO_CHAINS_FOUND σε γνωστό malicious - το CodeQL δεν βρήκε τίποτα να αξιολογήσει
-    benign_no_chains = []         # NO_CHAINS_FOUND σε benign: σωστό end-to-end, αλλά ΟΧΙ απόφαση του LLM
+    false_negatives = []          # really evaluated, the LLM said BENIGN
+    static_analysis_misses = []   # NO_CHAINS_FOUND on known malware - CodeQL found nothing to evaluate
+    benign_no_chains = []         # NO_CHAINS_FOUND on benign: correct end-to-end, but NOT a decision of the LLM
     inconclusive = []
 
     for pkg_name in packages:
         r = reports.get(pkg_name)
-        verdict = r.get("final_verdict", "ΔΕΝ ΤΡΕΞΕ") if r else "ΔΕΝ ΤΡΕΞΕ"
+        verdict = r.get("final_verdict", "NOT_RUN") if r else "NOT_RUN"
         n_chains = r.get("total_chains_analyzed", "-") if r else "-"
         expected = expected_labels.get(pkg_name, "")
 
-        if verdict in RETRY_VERDICTS or verdict == "ΔΕΝ ΤΡΕΞΕ":
+        if verdict in RETRY_VERDICTS or verdict == "NOT_RUN":
             inconclusive.append(pkg_name)
-            print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'? ασαφές':10s}")
+            print(f"{pkg_name:30s} {verdict:22s} {str(n_chains):8s} {expected:14s} {'? unclear':10s}")
             continue
 
-        # ΝΕΟ: NO_CHAINS_FOUND (το CodeQL δεν βρήκε ΚΑΜΙΑ ευαίσθητη
-        # συμπεριφορά) ΔΕΝ είναι το ίδιο με "το LLM είπε BENIGN" - είναι
-        # limitation του static-analysis σταδίου. Για benign labels είναι
-        # στην πραγματικότητα το ΣΩΣΤΟ αποτέλεσμα (καμία ψευδής συναγερμός).
-        # Για malicious labels είναι πραγματικό κενό, αλλά ΞΕΧΩΡΙΣΤΟ από
-        # ένα LLM reasoning miss - καταγράφεται σε δική του λίστα.
+        # NO_CHAINS_FOUND (CodeQL found NO sensitive behaviour) is not the same as "the LLM said BENIGN" -
+        # it is a limit of the static-analysis stage. For benign labels it is the CORRECT outcome (no
+        # false alarm); for malicious labels it is a real miss, but SEPARATE from an LLM reasoning miss,
+        # so it is kept in its own list.
         if verdict == "NO_CHAINS_FOUND":
             scored += 1
             if expected == "benign":
@@ -187,36 +175,36 @@ def main():
 
     if scored:
         print("-" * 90)
-        print(f"\n[*] Σκορ END-TO-END (μαζί με static-analysis misses): {correct}/{scored} ({correct/scored*100:.0f}%)")
-        # Συμμετρικά: εξαιρούνται τα NO_CHAINS_FOUND ΚΑΙ των δύο κλάσεων
+        print(f"\n[*] END-TO-END score (including static-analysis misses): {correct}/{scored} ({correct/scored*100:.0f}%)")
+        # symmetric: NO_CHAINS_FOUND packages of BOTH classes are excluded
         llm_stage_scored = scored - len(static_analysis_misses) - len(benign_no_chains)
         llm_stage_correct = correct - len(benign_no_chains)
         if llm_stage_scored:
-            print(f"[*] Σκορ ΜΟΝΟ LLM-stage (χωρίς NO_CHAINS_FOUND σε καμία κλάση): "
+            print(f"[*] LLM-stage-only score (no NO_CHAINS_FOUND in either class): "
                   f"{llm_stage_correct}/{llm_stage_scored} ({llm_stage_correct/llm_stage_scored*100:.0f}%)")
         if benign_no_chains:
-            print(f"[*] Benign χωρίς chains (TN μόνο end-to-end): {len(benign_no_chains)}")
+            print(f"[*] Benign without chains (TN end-to-end only): {len(benign_no_chains)}")
         if false_positives:
             print(f"[!] False Positives ({len(false_positives)}): {false_positives}")
         if false_negatives:
-            print(f"[!] False Negatives - LLM αξιολόγησε αλλά είπε BENIGN ({len(false_negatives)}): {false_negatives}")
+            print(f"[!] False Negatives - evaluated by the LLM but BENIGN ({len(false_negatives)}): {false_negatives}")
         if static_analysis_misses:
-            print(f"[!] Static-analysis misses - CodeQL δεν βρήκε τίποτα να αξιολογήσει "
+            print(f"[!] Static-analysis misses - CodeQL found nothing to evaluate "
                   f"({len(static_analysis_misses)}): {static_analysis_misses[:10]}"
                   f"{'...' if len(static_analysis_misses) > 10 else ''}")
     if inconclusive:
-        print(f"\n[?] Ασαφή (API failure ή ποτέ δεν έγραψε report - ΔΕΝ μετρήθηκαν) - {len(inconclusive)}: "
+        print(f"\n[?] Unclear (API failure or no report written - NOT scored) - {len(inconclusive)}: "
               f"{inconclusive[:10]}{'...' if len(inconclusive) > 10 else ''}")
-        print(f"    Ξανατρέξε το ίδιο script - αυτά θα ξαναπροσπαθήσουν αυτόματα.")
+        print(f"    Run the same script again - they will be retried automatically.")
 
-    # ένα αρχείο ανά (run, test set): τα malware και benign του ίδιου RAG_MODE τρέχουν παράλληλα
+    # one file per (run, test set): the malware and benign sets of the same RAG_MODE run in parallel
     summary_out = os.path.join(_THESIS_ROOT, "results", "test_set_summaries",
                                f"test_set_summary_{RESULTS_TAG}_{os.path.basename(test_set_dir)}.json")
     os.makedirs(os.path.dirname(summary_out), exist_ok=True)
     llm_stage_scored = scored - len(static_analysis_misses) - len(benign_no_chains)
     with open(summary_out, "w", encoding="utf-8") as f:
         json.dump({
-            "results": {pkg: reports.get(pkg, {}).get("final_verdict", "ΔΕΝ ΤΡΕΞΕ") for pkg in packages},
+            "results": {pkg: reports.get(pkg, {}).get("final_verdict", "NOT_RUN") for pkg in packages},
             "false_positives": false_positives,
             "false_negatives": false_negatives,
             "static_analysis_misses": static_analysis_misses,
@@ -227,8 +215,8 @@ def main():
             "scored_end_to_end": scored,
             "scored_llm_stage_only": llm_stage_scored,
         }, f, indent=2, ensure_ascii=False)
-    print(f"\n[✓] Περίληψη -> {summary_out}")
-    print(f"[✓] Πλήρη LLM reports -> {LLM_RESULTS_DIR}/report_<πακέτο>.json")
+    print(f"\n[✓] Summary -> {summary_out}")
+    print(f"[✓] Full LLM reports -> {LLM_RESULTS_DIR}/report_<package>.json")
 
 
 if __name__ == "__main__":

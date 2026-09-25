@@ -1,3 +1,17 @@
+"""
+Build the security knowledge base (policy store) of the Hybrid RAG: dataset/policy_rules.json.
+
+Two kinds of sources:
+  1. Downloaded at build time: MITRE ATT&CK Enterprise (STIX JSON), CWE and CAPEC (CSV archives).
+     Only entries whose name/description mention a keyword relevant to malicious packages
+     (RELEVANT_KEYWORDS) are kept.
+  2. Local JSON files in policy_sources/ (tool rules such as GuardDog, Bandit and Semgrep, OWASP,
+     SLSA, registry acceptable-use policies, heuristics). Every file is loaded as is, so a new
+     category of rules only needs a new JSON file, no code change.
+
+Every entry gets a text_for_embedding = "<name>. <description>" (see build_dataset()); the vector
+index itself is built by build_policy_index.py.
+"""
 import json
 import os
 import io
@@ -14,12 +28,13 @@ OUTPUT_JSON = os.path.join(BASE_DIR, "policy_rules.json")
 POLICY_SOURCES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy_sources")
 
 # ==========================================
-# 1. ΔΥΝΑΜΙΚΕΣ ΠΗΓΕΣ (APIs & Repositories) - ΑΝΕΓΓΙΧΤΟ
+# 1. DOWNLOADED SOURCES (APIs & repositories)
 # ==========================================
 MITRE_ATTACK_URL = "https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json"
 CWE_CSV_URL = "https://cwe.mitre.org/data/csv/1000.csv.zip"
 CAPEC_CSV_URL = "https://capec.mitre.org/data/csv/3000.csv.zip"
 
+# an ATT&CK/CWE/CAPEC entry is kept only if its text mentions one of these
 RELEVANT_KEYWORDS = [
     "injection", "supply chain", "download", "execution", "deserialization",
     "malicious", "authentication", "credential", "obfuscation", "dependency",
@@ -28,22 +43,21 @@ RELEVANT_KEYWORDS = [
 ]
 
 # ==========================================
-# 2. ΣΤΑΤΙΚΕΣ ΠΗΓΕΣ - ΤΩΡΑ modular, βλ. policy_sources/*.json
-#    (OWASP_CICD / SLSA_REQUIREMENTS / THREAT_HUNTING_HEURISTICS
-#    μετακομίσαν σε ξεχωριστά .json αρχεία - βλ. load_policy_source_files())
+# 2. LOCAL SOURCES - one JSON file per source in policy_sources/
+#    (see load_policy_source_files())
 # ==========================================
 
 
 def load_policy_source_files(directory=POLICY_SOURCES_DIR):
     """
-    Σαρώνει το policy_sources/ και φορτώνει ΟΛΑ τα .json αρχεία. Κάθε αρχείο:
-        {"source": "...", "rules": [{"id":..., "name":..., "description":...}, ...]}
-    Για νέα κατηγορία κανόνων στο μέλλον: απλά πρόσθεσε ένα νέο .json εδώ -
-    ΔΕΝ χρειάζεται καμία αλλαγή στον Python κώδικα.
+    Load ALL .json files of policy_sources/. Each file has the form
+        {"source": "...", "rules": [{"id": ..., "name": ..., "description": ...}, ...]}
+    and every rule is returned with its "source" attached. A new category of rules only needs a
+    new .json file here - no change to the Python code.
     """
     all_rules = []
     if not os.path.exists(directory):
-        print(f"[!] Δεν βρέθηκε ο φάκελος {directory} - δημιούργησέ τον και βάλε .json αρχεία μέσα.")
+        print(f"[!] Folder {directory} not found - create it and put .json files in it.")
         return all_rules
 
     json_files = sorted(f for f in os.listdir(directory) if f.endswith(".json"))
@@ -56,38 +70,42 @@ def load_policy_source_files(directory=POLICY_SOURCES_DIR):
             rules = data.get("rules", [])
             for rule in rules:
                 all_rules.append({"source": source, **rule})
-            print(f"  [+] {fname}: {len(rules)} κανόνες (source: {source})")
+            print(f"  [+] {fname}: {len(rules)} rules (source: {source})")
         except Exception as e:
-            print(f"  [!] Σφάλμα φόρτωσης {fname}: {e}")
+            print(f"  [!] Error loading {fname}: {e}")
 
-    print(f"[+] Σύνολο από policy_sources/: {len(all_rules)} κανόνες από {len(json_files)} αρχεία.")
+    print(f"[+] Total from policy_sources/: {len(all_rules)} rules from {len(json_files)} files.")
     return all_rules
 
 
 # ==========================================
-# ΣΥΝΑΡΤΗΣΕΙΣ ΑΝΤΛΗΣΗΣ ΚΑΙ ΦΙΛΤΡΑΡΙΣΜΑΤΟΣ - ΑΝΕΓΓΙΧΤΟ
+# DOWNLOAD AND FILTERING FUNCTIONS
 # ==========================================
 
 def is_relevant(text):
+    """True if the text mentions at least one of RELEVANT_KEYWORDS (case-insensitive)."""
     text_lower = text.lower()
     return any(kw in text_lower for kw in RELEVANT_KEYWORDS)
 
 
 def fetch_mitre_attack():
-    print("[*] Δυναμική λήψη MITRE ATT&CK Enterprise...")
+    """Relevant, non-deprecated ATT&CK Enterprise techniques (attack-pattern objects of the STIX bundle)."""
+    print("[*] Downloading MITRE ATT&CK Enterprise...")
     try:
         response = requests.get(MITRE_ATTACK_URL, timeout=30)
         response.raise_for_status()
         stix_data = response.json()
     except Exception as e:
-        print(f"[!] Αποτυχία λήψης MITRE: {e}")
+        print(f"[!] MITRE download failed: {e}")
         return []
 
     mitre_rules = []
     for obj in stix_data.get("objects", []):
+        # techniques only; skip revoked and deprecated ones
         if obj.get("type") != "attack-pattern" or obj.get("revoked") or obj.get("x_mitre_deprecated"):
             continue
 
+        # the technique id (e.g. T1059) is the external reference of source "mitre-attack"
         external_id = next((ref.get("external_id") for ref in obj.get("external_references", []) if ref.get("source_name") == "mitre-attack"), "UNKNOWN")
         name = obj.get("name", "")
         description = obj.get("description", "")
@@ -97,24 +115,26 @@ def fetch_mitre_attack():
                 "source": "MITRE ATT&CK", "id": external_id, "name": name, "description": description
             })
 
-    print(f"[+] Αντλήθηκαν {len(mitre_rules)} τεχνικές από MITRE ATT&CK.")
+    print(f"[+] Fetched {len(mitre_rules)} techniques from MITRE ATT&CK.")
     return mitre_rules
 
 
 def fetch_mitre_csv(url, source_name, id_prefix):
-    """Γενική συνάρτηση για λήψη και parse των CWE και CAPEC από το MITRE."""
-    print(f"[*] Δυναμική λήψη {source_name} από {url}...")
+    """Generic download + parse of the CWE and CAPEC CSV archives published by MITRE (relevant rows only)."""
+    print(f"[*] Downloading {source_name} from {url}...")
     rules = []
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
 
+        # the archive contains a single CSV file
         with zipfile.ZipFile(io.BytesIO(response.content)) as z:
             csv_filename = z.namelist()[0]
             with z.open(csv_filename) as f:
                 content = f.read().decode('utf-8', errors='ignore')
                 reader = csv.DictReader(content.splitlines())
 
+                # CWE names its id column 'CWE-ID', CAPEC 'ID'
                 id_col = 'CWE-ID' if 'CWE-ID' in reader.fieldnames else 'ID'
 
                 for row in reader:
@@ -127,35 +147,35 @@ def fetch_mitre_csv(url, source_name, id_prefix):
                             "source": source_name, "id": rule_id, "name": name, "description": desc
                         })
     except Exception as e:
-        print(f"[!] Αποτυχία λήψης {source_name}: {e}")
+        print(f"[!] {source_name} download failed: {e}")
 
-    print(f"[+] Αντλήθηκαν {len(rules)} εγγραφές από {source_name}.")
+    print(f"[+] Fetched {len(rules)} entries from {source_name}.")
     return rules
 
 
 def build_dataset():
+    """Collect all sources, add the embedding text of every entry and write policy_rules.json."""
     all_policies = []
 
-    # 1. Δυναμικά Δεδομένα (ανέγγιχτο)
+    # 1. downloaded sources
     all_policies.extend(fetch_mitre_attack())
     all_policies.extend(fetch_mitre_csv(CWE_CSV_URL, "CWE Database", "CWE"))
     all_policies.extend(fetch_mitre_csv(CAPEC_CSV_URL, "CAPEC Attack Patterns", "CAPEC"))
 
-    # 2. Στατικά Δεδομένα - modular, από policy_sources/
-    print("[*] Ενσωμάτωση modular policy_sources/...")
+    # 2. local sources (policy_sources/)
+    print("[*] Adding the local policy_sources/...")
     all_policies.extend(load_policy_source_files())
 
-    # M5 FIX: Embedding text = μόνο semantic content (name + description).
-    # Τα sentence transformer models δεν εκπαιδεύτηκαν να κατανοούν
-    # structured IDs ("CWE-94", "CICD-SEC-3") — αυτά μειώνουν τη ποιότητα
-    # retrieval. Τα metadata (source, id) υπάρχουν στο policy_metadata.json.
+    # The embedding text holds only semantic content (name + description): sentence-transformer
+    # models were not trained on structured ids ("CWE-94", "CICD-SEC-3"), which would only add noise
+    # to retrieval. Source and id are kept as metadata in policy_metadata.json.
     for policy in all_policies:
         policy["text_for_embedding"] = f"{policy['name']}. {policy['description']}"
 
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(all_policies, f, indent=4, ensure_ascii=False)
 
-    print(f"\n[✓] Το Ισχυρό Policy Dataset χτίστηκε! Συνολικοί κανόνες: {len(all_policies)} -> {OUTPUT_JSON}")
+    print(f"\n[✓] Policy dataset built! Total rules: {len(all_policies)} -> {OUTPUT_JSON}")
 
 
 if __name__ == "__main__":

@@ -1,67 +1,78 @@
 """
-Κοινές βοηθητικές συναρτήσεις για το pipeline προετοιμασίας δεδομένων.
-Εισάγεται από prepare_dataset_diverse.py, attack_type_tagger.py και
-build_final_dataset.py ώστε οι ορισμοί να είναι πάντα συνεπείς.
+Shared helpers for the data-preparation pipeline and the inference stage.
+
+Everything that must be defined identically in more than one place lives here, so that the
+definitions can never drift apart:
+  - loading of the project's .env file (sources location, API keys),
+  - resolution of sample paths under THESIS_SOURCES_DIR, on any machine,
+  - the campaign signature of an OSV report,
+  - the "pure vendor chain" test used both when building the index and when querying it,
+  - the two text serialisations of a Behavior Chain (compact one for embeddings, full one for the LLM),
+  - the normalised in-package display path of a file.
+
+Imported by almost every script of dataset/preparation/ and, through query_rag.py, by the evaluator.
 """
 
 import hashlib
 import re
-import os 
+import os
 
-# Αφαιρεί hex hashes (>= 16 χαρακτήρες) που αλλάζουν ανά report μέλος
-# μιας καμπάνιας, ώστε το boilerplate κείμενο να παραμείνει ίδιο.
+# Hex hashes (>= 16 characters) differ between the reports of the members of one campaign;
+# removing them leaves the campaign's shared boilerplate text.
 _HASH_PATTERN = re.compile(r"\b[0-9a-f]{16,}\b", re.IGNORECASE)
-# Αφαιρεί γραμμές "## Source: RepoName (abc123ef)" - μοναδικό ανά report
+# "## Source: RepoName (abc123ef)" lines are unique per report, so they are removed as well.
 _SOURCE_LINE_PATTERN = re.compile(
     r"##\s*Source:\s*\w+\s*\([0-9a-f]+\)", re.IGNORECASE
 )
-# ΝΕΟ FIX: αφαιρεί "Malicious code in {package_name} (PyPI)" - η ΠΡΩΤΗ
-# γραμμή σε reports νεότερης μορφής (π.χ. EsqueleSquad/checkmarx). Χωρίς
-# αυτό, το ΜΟΝΑΔΙΚΟ όνομα πακέτου έμενε στο κείμενο πριν τον υπολογισμό
-# του SHA-256, κάνοντας ΚΑΘΕ signature μοναδικό ακόμα κι όταν το
-# υπόλοιπο, πραγματικό campaign κείμενο ήταν πανομοιότυπο - 5.310
-# EsqueleSquad πακέτα εμφανίζονταν λανθασμένα σαν ~5.310 ξεχωριστές
-# καμπάνιες αντί για 1.
+# "Malicious code in {package_name} (PyPI)" is the first line of newer-style reports. It contains
+# the (unique) package name, so without removing it every member of a campaign would get its own
+# signature even when the rest of the report text is identical.
 _MALICIOUS_CODE_LINE_PATTERN = re.compile(
     r"malicious code in \S+\s*\([^)]*\)", re.IGNORECASE
 )
+# Project root: THESIS_BASE_DIR if set, otherwise two levels above this file.
 _ROOT_DIR = os.environ.get("THESIS_BASE_DIR",
                            os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 
 
 def load_env_file(path=os.path.join(_ROOT_DIR, ".env")):
     """
-    Φορτώνει το .env της ρίζας του έργου (KEY=VALUE, γραμμές # σχόλια) στο os.environ: θέση πηγών,
-    κλειδιά API κ.λπ. (υπόδειγμα: .env.example). ΔΕΝ αντικαθιστά μεταβλητές που έχουν ήδη οριστεί
-    στο τερματικό (αυτές υπερισχύουν) ούτε γράφει κενές τιμές. Χωρίς εξωτερική βιβλιοθήκη.
-    Καλείται αυτόματα όταν φορτώνεται το utils (το εισάγουν όλα τα scripts, και οι evaluators
-    μέσω του query_rag), οπότε το .env ισχύει είτε τρέχει το run_pipeline.sh είτε ένα script μόνο του.
+    Load the project's .env file (KEY=VALUE lines, # comments) into os.environ: the location of the
+    sources, API keys, the LLM provider, etc. (template: .env.example). No external library is used.
+
+    Variables that are already set in the shell are NOT overwritten (the shell wins), and empty values
+    are ignored. The function runs automatically when utils is imported (every script imports it, the
+    evaluators through query_rag), so the .env applies both under run_pipeline.sh and when a script is
+    run on its own.
     """
     if not os.path.isfile(path):
         return
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
+            # accept shell-style "export KEY=VALUE" lines too
             if line.startswith("export "):
                 line = line[len("export "):].strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = (x.strip() for x in line.split("=", 1))
+            # a quoted value is taken literally (it may contain " #")
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
                 value = value[1:-1]
             else:
-                value = value.split(" #", 1)[0].strip()   # σχόλιο στο τέλος της γραμμής
+                value = value.split(" #", 1)[0].strip()   # comment at the end of the line
             if key and value and key not in os.environ:
                 os.environ[key] = value
 
 
 load_env_file()
 
-# Θέση των ακατέργαστων πηγών (κλώνοι pypi_malregistry, MalwareBench pypi, OSV malicious-packages,
-# Datadog, maloss): THESIS_SOURCES_DIR (ή THESIS_USB_MOUNT), προεπιλογή ο εξωτερικός δίσκος.
+# Location of the raw sources (clones of pypi_malregistry, MalwareBench pypi, OSV malicious-packages,
+# Datadog, maloss): THESIS_SOURCES_DIR (or the older THESIS_USB_MOUNT), default the external disk.
 SOURCES_DIR = (os.environ.get("THESIS_SOURCES_DIR") or os.environ.get("THESIS_USB_MOUNT")
                or "/Volumes/GIORGOS_128")
-# Όλοι οι πιθανοί δίσκοι (οι /media/... είναι του αρχικού Linux μηχανήματος)
+# Every place the sources may be found, in order (the /media/... entries are the mount points of
+# the original Linux machine, kept so that older datasets keep resolving).
 CANDIDATE_SOURCES_DIRS = [
     SOURCES_DIR,
     "/media/sklavenitis/C09F-7FCB",
@@ -70,21 +81,22 @@ CANDIDATE_SOURCES_DIRS = [
     os.path.join(os.environ.get("THESIS_BASE_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))), "dataset", "sources"),
 ]
 
-# Οι φάκελοι-ρίζες των πηγών μέσα στο SOURCES_DIR (κλώνοι/αποσυμπιέσεις).
+# Top-level folders of the sources inside SOURCES_DIR (clones / extracted archives).
 SOURCE_ROOTS = ("pypi_malregistry", "pypi", "malicious-software-packages-dataset", "malware_samples",
                 "malware_samples_datadog", "maloss-samples", "malicious-packages", "npm")
 
 
 def resolve_source_path(path):
     """
-    Διαδρομή πηγαίου κώδικα όπως αποθηκεύτηκε στο malware_dataset*.json (από ΟΠΟΙΟΔΗΠΟΤΕ
-    μηχάνημα, π.χ. /media/sklavenitis/C09F-7FCB/pypi_malregistry/x/1.0) -> η αντίστοιχη
-    διαδρομή κάτω από το SOURCES_DIR αυτού του μηχανήματος. Ο χρήστης δίνει ΜΟΝΟ τη θέση
-    των πηγών (THESIS_SOURCES_DIR)· όλα τα scripts λύνουν τις διαδρομές μέσω αυτής.
+    Map a source-code path as stored in malware_dataset*.json (written on ANY machine, e.g.
+    /media/sklavenitis/C09F-7FCB/pypi_malregistry/x/1.0) to the same sample under SOURCES_DIR of
+    this machine. The user only provides the location of the sources (THESIS_SOURCES_DIR); every
+    script resolves sample paths through this function.
     """
     if not path or os.path.exists(path):
         return path
     parts = path.replace("\\", "/").split("/")
+    # keep everything from the first known source folder onwards, re-rooted under SOURCES_DIR
     for i, part in enumerate(parts):
         if part in SOURCE_ROOTS:
             return os.path.join(SOURCES_DIR, *parts[i:])
@@ -92,25 +104,22 @@ def resolve_source_path(path):
 
 
 def source_name(path):
-    """Η πηγή (φάκελος-ρίζα) ενός δείγματος, π.χ. 'pypi_malregistry' - για στατιστικά ανά πηγή."""
+    """Source (top-level folder) of a sample, e.g. 'pypi_malregistry' - for per-source statistics."""
     parts = (path or "").replace("\\", "/").split("/")
     return next((p for p in parts if p in SOURCE_ROOTS), "unknown")
 
 
 def campaign_signature(description):
     """
-    Επιστρέφει την κανονικοποιημένη υπογραφή καμπάνιας για ένα OSV description.
+    Normalised campaign signature of an OSV report description.
 
-    Αφαιρεί per-report hashes και IDs ώστε όλα τα μέλη της ίδιας καμπάνιας
-    (που μοιράζονται boilerplate κείμενο αλλά διαφέρουν στο hash) να πέφτουν
-    στο ίδιο signature bucket.
+    Per-report hashes, source lines and the "Malicious code in X" line are removed, so that all the
+    members of one campaign (identical boilerplate text, different hashes/names) get the same
+    signature. The signature is a SHA-256 of the whole normalised text (not a prefix), so two
+    campaigns that only share their first sentences are not merged.
 
-    H3 FIX: Χρήση SHA-256 hash αντί truncation στους 200 χαρακτήρες.
-    Η truncation μπορούσε να δημιουργήσει false collisions αν δύο διαφορετικές
-    καμπάνιες μοιράζονταν τα πρώτα 200 chars αλλά διέφεραν στη συνέχεια.
-
-    Επιστρέφει None αν το description είναι κενό ή πολύ σύντομο για να είναι
-    αξιόπιστο campaign ID (< 20 χαρακτήρες μετά τον καθαρισμό).
+    Returns None when the description is empty or too short (<= 20 characters after cleaning) to
+    identify a campaign reliably.
     """
     if not description:
         return None
@@ -125,13 +134,14 @@ def campaign_signature(description):
 
 def is_pure_vendor_chain(chain):
     """
-    True αν το chain ανήκει ΕΞ ΟΛΟΚΛΗΡΟΥ σε vendored βιβλιοθήκη: το anchor του είναι μέσα
-    στο vendor/ (κώδικας που εγκαταστήσαμε ΕΜΕΙΣ από το PyPI με pip, όχι κώδικας του
-    πακέτου) ΚΑΙ καμία επιβεβαιωμένη ροή δεν ξεκινά από κώδικα του πακέτου. Τέτοια chains
-    είναι ίδια για κάθε πακέτο που κάνει import τη βιβλιοθήκη, άρα δεν λένε τίποτα για την
-    πρόθεσή του. Chains με anchor στο vendor/ αλλά ροή από την εφαρμογή (App-to-Vendor)
-    ΚΡΑΤΙΟΥΝΤΑΙ: είναι τα δεδομένα του πακέτου που φτάνουν σε sink μιας βιβλιοθήκης.
-    Χρησιμοποιείται ΚΑΙ στο build_rag_index.py ΚΑΙ στο query_rag.py (συμμετρία).
+    True if the chain belongs ENTIRELY to vendored library code: its anchor is inside vendor/
+    (third-party code installed from PyPI during analysis, not code of the package itself) AND no
+    confirmed flow starts in the package's own code. Such chains are the same for every package that
+    imports the library, so they say nothing about the package's intent.
+
+    Chains anchored in vendor/ but fed by the application (App-to-Vendor) are KEPT: they are the
+    package's own data reaching a library sink. Used by build_rag_index.py AND query_rag.py, so the
+    index and the queries are filtered the same way.
     """
     norm = lambda p: (p or "").replace("\\", "/")
     if not norm(chain.get("location")).startswith("vendor/"):
@@ -142,51 +152,49 @@ def is_pure_vendor_chain(chain):
 
 def flatten_chain_to_text(chain, attack_type_tags=None):
     """
-    Μετατρέπει ένα behavior_chain dict σε περιγραφικό κείμενο για embedding.
+    Compact Behavior Chain Representation: the text that is embedded for similarity search.
 
-    ΚΡΙΣΙΜΟ: αυτή είναι η ΜΟΝΑΔΙΚΗ υλοποίηση - χρησιμοποιείται ΚΑΙ από το
-    build_rag_index.py (όταν χτίζεται το index) ΚΑΙ από το query_rag.py
-    (όταν γίνεται αναζήτηση). Αν οι δύο πλευρές χρησιμοποιούν διαφορετικό
-    επίπεδο λεπτομέρειας κειμένου, το cosine similarity είναι λιγότερο
-    ακριβές - συγκρίνεις "λεπτομερές" vector με "αραιό" vector.
+    This is the ONLY implementation, used both by build_rag_index.py (index side) and by
+    query_rag.py (query side): if the two sides used different levels of detail, cosine similarity
+    would compare a "detailed" vector with a "sparse" one.
 
-    Αποφεύγουμε επίτηδες package name/file paths/line numbers - θέλουμε το
-    embedding να συλλάβει τη ΣΥΜΠΕΡΙΦΟΡΑ, όχι μοναδικά αναγνωριστικά.
+    Package names, file paths and line numbers are deliberately left out: the embedding should
+    capture the BEHAVIOUR, not identifiers of a particular package.
     """
-    # R2: Token truncation guard — το all-MiniLM-L6-v2 δέχεται max 256
-    # word pieces. Κείμενο πάνω από ~200 λέξεις αγνοείται σιωπηλά.
+    # all-MiniLM-L6-v2 accepts at most 256 word pieces and silently ignores the rest, so the text
+    # is kept to ~200 words (first 10 slice nodes and 10 callees).
     return _serialize_chain(chain, attack_type_tags, max_words=200, max_slice=10, max_callees=10)
 
 
 def chain_to_llm_text(chain):
     """
-    Το κείμενο του Τμήματος Α στο LLM prompt. ΔΙΑΦΟΡΕΤΙΚΟ από το κείμενο του embedding:
-    το όριο των 200 λέξεων υπάρχει μόνο για το μοντέλο ενσωμάτωσης (~256 tokens) - το
-    LLM δεν έχει τέτοιο περιορισμό, οπότε βλέπει ΟΛΟΥΣ τους κόμβους, ροές, συνθήκες και
-    κλήσεις (χωρίς διπλότυπα), με μόνο ένα συνολικό όριο ασφαλείας (LLM_MAX_WORDS). Ό,τι
-    παραλείπεται σημειώνεται ρητά. Πριν (2026-09-23) το LLM έβλεπε το κείμενο του
-    embedding: ~24% των chains κόβονταν στις 200 λέξεις.
+    Full Behavior Chain Representation: the text of Section A of the LLM prompt.
+
+    Unlike the embedding text, it is not limited to 200 words (that limit exists only because of the
+    embedding model): the LLM sees ALL nodes, flows, conditions and callees (without duplicates),
+    with a single overall safety cap (LLM_MAX_WORDS). Anything that is left out is stated explicitly.
     """
     return _serialize_chain(chain, None, max_words=LLM_MAX_WORDS, max_slice=None, max_callees=None,
                             dedup=True, mark_omitted=True)
 
 
-# Μόνο δίχτυ ασφαλείας για ακραία chains (π.χ. 1.230 κόμβοι ροής) - όλοι οι κόμβοι, ροές,
-# συνθήκες και κλήσεις δίνονται στο LLM (χωρίς διπλότυπα) μέχρι αυτό το συνολικό όριο.
+# Only a safety net for extreme chains (e.g. 1,230 data-flow nodes): all nodes, flows, conditions and
+# callees are given to the LLM (without duplicates) up to this overall limit.
 LLM_MAX_WORDS = 4000
-_NOISE_CALLEES = {"<complex_expr>"}  # placeholder του call_graph_py.ql για μη-ονομαστικές κλήσεις
+_NOISE_CALLEES = {"<complex_expr>"}  # placeholder of call_graph_py.ql for calls without a simple name
 
-# Αρχικά τμήματα path που προέρχονται από τον τρόπο αποθήκευσης/αποσυμπίεσης και όχι από
-# το ίδιο το πακέτο: φάκελοι έκδοσης (2.13.36/), ρίζα sdist (name-1.2.3/), hashes,
-# φάκελοι αποσυμπίεσης (.x). Διαφέρουν συστηματικά ανάμεσα σε malware και benign, οπότε
-# αφαιρούνται για να μη λειτουργήσουν ως shortcut.
+# Leading path components that come from how samples were stored/extracted and not from the package
+# itself: version folders (2.13.36/), sdist root (name-1.2.3/), hashes, extraction folders (.x).
+# They differ systematically between malware and benign samples, so they are removed to prevent
+# them from acting as a shortcut.
 _ARTIFACT_DIR = re.compile(r"(\d+(\.\d+)+.*|.+-\d+(\.\d+)*[\w.+-]*|[0-9a-f]{16,}|.+\.x"
                            r"|tar-gz|tar\.gz|zip|whl|.+-whl|.+-tar-gz|tmp\w*)")
 
 
 def display_path(location):
-    """'2.13.36/pkg-2.13.36/pkg/setup.py:12' -> 'pkg/setup.py' (θέση ΜΕΣΑ στο πακέτο)."""
+    """'2.13.36/pkg-2.13.36/pkg/setup.py:12' -> 'pkg/setup.py' (the position INSIDE the package)."""
     parts = (location or "").rsplit(":", 1)[0].replace("\\", "/").split("/")
+    # drop storage/extraction folders from the front, but always keep the file name
     while len(parts) > 1 and _ARTIFACT_DIR.fullmatch(parts[0]):
         parts = parts[1:]
     return "/".join(parts)
@@ -194,11 +202,20 @@ def display_path(location):
 
 def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
                      max_flows=None, max_conditions=None, dedup=False, mark_omitted=False):
+    """
+    Deterministic text serialisation of one Behavior Chain, shared by both representations.
+
+    The parts appear in a fixed order: category, sensitive API, (LLM only) location, flow boundary,
+    confirmed source->sink flows, gating conditions, data-flow slice nodes, external callees and
+    (index only) attack-type tags. Each list can be capped; with mark_omitted=True (LLM text) the
+    number of omitted items and any final truncation are stated in the text.
+    """
     def capped(items, cap, what):
-        if mark_omitted:  # κείμενο LLM: κενή συμβολοσειρά/κόμβος -> ρητό "" αντί για κενό
+        """Optionally de-duplicate a list and cut it at `cap`, noting how many items were omitted."""
+        if mark_omitted:  # LLM text: an empty string/node becomes an explicit "" instead of nothing
             items = [x if x.strip() else '""' for x in items]
         if dedup:
-            items = list(dict.fromkeys(items))
+            items = list(dict.fromkeys(items))  # keeps the original order
         if cap is None or len(items) <= cap:
             return items
         return items[:cap] + ([f"(+{len(items) - cap} more {what})"] if mark_omitted else [])
@@ -212,14 +229,15 @@ def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
     if api:
         parts.append(f"Sensitive API involved: {api}.")
 
-    # Μόνο στο κείμενο του LLM (όχι στο embedding): σε ποιο αρχείο είναι η κλήση - π.χ.
-    # setup.py (τρέχει στην εγκατάσταση) ή __init__.py (τρέχει στο import).
+    # LLM text only (not the embedding): the file of the call, e.g. setup.py (runs at install time)
+    # or __init__.py (runs on import).
     if mark_omitted and chain.get("location"):
         parts.append(f"Location: {display_path(chain['location'])}.")
 
     boundary = chain.get("flow_boundary", "Unknown")
     parts.append(f"Flow boundary: {boundary}.")
 
+    # q() makes empty node texts visible as "" in the LLM text (identity for the embedding text)
     q = (lambda x: x if (x or "").strip() else '""') if mark_omitted else (lambda x: x)
     flows = [f"Data flows from a {q(f.get('source', {}).get('node', ''))} source into a {q(f.get('sink_node', ''))} sink."
              for f in chain.get("confirmed_source_flows", [])]
@@ -233,6 +251,7 @@ def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
     if slice_texts:
         parts.append("Contributing data-flow nodes: " + "; ".join(capped(slice_texts, max_slice, "nodes")) + ".")
 
+    # external (library) callees of the relevant call-graph part, sorted for determinism
     edges = chain.get("relevant_call_graph", [])
     external_callees = sorted({e["callee"] for e in edges if e.get("edge_type") == "external"} - _NOISE_CALLEES)
     if external_callees:
@@ -241,6 +260,7 @@ def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
     if attack_type_tags:
         parts.append("Known attack-type classification: " + ", ".join(attack_type_tags) + ".")
 
+    # final word limit (embedding model input size, or the LLM safety cap)
     final_text = " ".join(parts)
     words = final_text.split()
     if len(words) > max_words:
@@ -251,14 +271,13 @@ def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
 
 def find_target_dir(target_name):
     """
-    Ψάχνει για έναν συγκεκριμένο υποφάκελο (π.χ. 'pypi_malregistry')
-    σε όλους τους πιθανούς δίσκους. Επιστρέφει το πλήρες path αν βρεθεί,
-    αλλιώς επιστρέφει None.
+    Look for a source folder (e.g. 'pypi_malregistry') in every candidate sources location
+    (CANDIDATE_SOURCES_DIRS). Returns its full path, or None if it is not found anywhere.
     """
     for base in CANDIDATE_SOURCES_DIRS:
         candidate_path = os.path.join(base, target_name)
         if os.path.exists(candidate_path):
             return candidate_path
-            
-    print(f"  [!] Προειδοποίηση: Ο φάκελος '{target_name}' δεν βρέθηκε σε κανέναν δίσκο.")
+
+    print(f"  [!] Warning: folder '{target_name}' was not found in any sources location.")
     return None

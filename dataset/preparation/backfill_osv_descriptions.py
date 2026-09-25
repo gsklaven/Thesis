@@ -1,9 +1,13 @@
 """
-Cross-reference: πακέτα με ΚΕΝΟ description (bulk-sourced, π.χ.
-pypi_malregistry) εναντίον του OSV directory (11.678 ονόματα, πολύ
-μεγαλύτερο από τα 2.475 αρχικά ταιριασμένα) - αν το ΙΔΙΟ όνομα υπάρχει
-ΚΑΙ στα δύο, "δανειζόμαστε" την πραγματική OSV περιγραφή. Ο κώδικας ήδη
-υπάρχει (ήδη αναλυμένος) - εμπλουτίζουμε ΜΟΝΟ το μεταδεδομένο.
+Backfill of missing sample descriptions from the OSV reports.
+
+Samples collected in bulk (e.g. from pypi_malregistry) have an EMPTY description. The OSV folder of
+OpenSSF Malicious Packages covers many more package names than the initial matching did; when the SAME
+(PEP 503-normalised) name exists in both, the real OSV summary/details are copied into the sample.
+Only the metadata is enriched - the code of the sample is not touched (it is already analysed).
+
+Input/output: dataset/malware_dataset_matched.json (updated in place).
+OSV folder: THESIS_OSV_DIR, or <THESIS_SOURCES_DIR>/malicious-packages/osv/malicious/pypi.
 """
 
 import json
@@ -14,7 +18,8 @@ import re
 _THESIS_ROOT = os.environ.get("THESIS_BASE_DIR", os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 DATASET_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_matched.json")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from utils import SOURCES_DIR as _SOURCES  # noqa: E402  (φορτώνει και το .env)
+from utils import SOURCES_DIR as _SOURCES  # noqa: E402  (also loads the .env)
+# first existing OSV folder: explicit variable, the sources location, or a local download
 OSV_DIR = os.environ.get("THESIS_OSV_DIR") or next(
     (d for d in (os.path.join(_SOURCES, "malicious-packages", "osv", "malicious", "pypi"),
                  os.path.expanduser("~/Downloads/malicious-packages/osv/malicious/pypi")) if os.path.isdir(d)),
@@ -27,6 +32,7 @@ def norm(name):
 
 
 def extract_description(pkg_folder):
+    """Concatenated summary + details of every OSV report (JSON file) in a package's OSV folder."""
     texts = []
     for root, dirs, files in os.walk(pkg_folder):
         for fname in files:
@@ -47,20 +53,22 @@ def extract_description(pkg_folder):
 
 
 def main():
-    print("[*] Φόρτωση dataset...")
+    """Fill empty descriptions from OSV and rewrite the dataset file."""
+    print("[*] Loading dataset...")
     with open(DATASET_JSON, "r", encoding="utf-8") as f:
         dataset = json.load(f)
 
     zero_desc_items = [item for item in dataset if not item.get("description", "").strip()]
-    print(f"    {len(zero_desc_items)} πακέτα με κενό description.")
+    print(f"    {len(zero_desc_items)} packages with an empty description.")
 
     if not os.path.exists(OSV_DIR):
-        print(f"[!] Δεν βρέθηκε OSV φάκελος: {OSV_DIR}")
+        print(f"[!] OSV folder not found: {OSV_DIR}")
         return
 
+    # normalised name -> actual folder name in the OSV directory
     osv_map = {norm(n): n for n in os.listdir(OSV_DIR)}
     osv_names = set(osv_map)
-    print(f"    {len(osv_names)} πακέτα διαθέσιμα στο OSV directory.\n")
+    print(f"    {len(osv_names)} packages available in the OSV directory.\n")
 
     enriched, still_empty, lengths = 0, 0, []
 
@@ -72,23 +80,23 @@ def main():
         description = extract_description(os.path.join(OSV_DIR, osv_map[norm(pkg)]))
         if description:
             item["description"] = description
-            item["description_backfilled_from"] = "osv_cross_reference"
+            item["description_backfilled_from"] = "osv_cross_reference"  # provenance of the text
             enriched += 1
             lengths.append(len(description))
         else:
             still_empty += 1
 
-    print(f"[+] {enriched} πακέτα εμπλουτίστηκαν με πραγματική OSV περιγραφή.")
-    print(f"[+] {still_empty} παραμένουν χωρίς περιγραφή (ούτε το OSV τα έχει).")
+    print(f"[+] {enriched} packages enriched with a real OSV description.")
+    print(f"[+] {still_empty} remain without a description (not in OSV either).")
     if lengths:
         import statistics
-        print(f"[*] Μέσο μήκος νέας περιγραφής: {statistics.mean(lengths):.0f} χαρακτήρες "
-              f"(διάμεσος: {statistics.median(lengths):.0f})")
+        print(f"[*] Mean length of the new descriptions: {statistics.mean(lengths):.0f} characters "
+              f"(median: {statistics.median(lengths):.0f})")
 
     with open(DATASET_JSON, "w", encoding="utf-8") as f:
         json.dump(dataset, f, indent=2, ensure_ascii=False)
-    print(f"\n[✓] Ενημερώθηκε: {DATASET_JSON}")
-    print("    Επόμενο βήμα: python3 build_rag_index.py (ξαναχτίζει με τα εμπλουτισμένα δεδομένα)")
+    print(f"\n[✓] Updated: {DATASET_JSON}")
+    print("    Next step: python3 build_rag_index.py (rebuilds the index with the enriched data)")
 
 
 if __name__ == "__main__":

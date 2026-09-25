@@ -23,6 +23,7 @@ GH = "https://docs.github.com/en/site-policy/acceptable-use-policies/github-acti
 
 
 def paragraphs(url, article_only=False):
+    """Visible text paragraphs of a web page (scripts, styles, navigation, header and footer removed); optionally only the <article>/<main> part."""
     raw = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=60).read().decode("utf-8", "replace")
     if article_only:
         m = re.search(r"<article.*?</article>|<main.*?</main>", raw, re.S)
@@ -34,6 +35,7 @@ def paragraphs(url, article_only=False):
 
 
 def span(paras, start, end=None, include_end=False):
+    """The paragraph that starts with `start`, or the joined paragraphs from it up to the one starting with `end` (inclusive if include_end)."""
     i = next(k for k, p in enumerate(paras) if p.startswith(start))
     if end is None:
         return paras[i]
@@ -42,7 +44,9 @@ def span(paras, start, end=None, include_end=False):
 
 
 def main():
+    """Extract the verbatim clauses of the PyPI / npm / GitHub acceptable-use policies about malware and name squatting, and write registry_policies.json."""
     py, npm, gh = paragraphs(PYPI), paragraphs(NPM), paragraphs(GH, article_only=True)
+    # (id, name, verbatim text, source url) of every clause
     rules = [
         ("PYPI-AUP-ACTIVE-MALWARE", "PyPI AUP: Active Malware or Exploits",
          span(py, "Being part of a community includes not taking advantage", "Advertising"), PYPI),

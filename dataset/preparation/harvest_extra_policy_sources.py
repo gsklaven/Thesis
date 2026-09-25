@@ -25,10 +25,12 @@ OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy_sourc
 
 
 def squash(text):
+    """Collapse all whitespace (newlines, indentation) into single spaces."""
     return re.sub(r"\s+", " ", text).strip()
 
 
 def guarddog_metadata(repo):
+    """GuardDog metadata heuristics (PyPI + npm): rule name from RULE_NAME, description from the first paragraph of the module (or class) docstring; very short descriptions are dropped."""
     rules = []
     base = os.path.join(repo, "guarddog", "analyzer", "metadata")
     for eco in ("pypi", "npm"):
@@ -38,6 +40,7 @@ def guarddog_metadata(repo):
                 continue
             src = open(os.path.join(d, fname), encoding="utf-8").read()
             doc = ast.get_docstring(ast.parse(src)) or ""
+            # the rule name is the RULE_NAME constant of the detector (fallback: file name)
             m = re.search(r'RULE_NAME\s*=\s*"([^"]+)"', src)
             name = m.group(1) if m else fname[:-3]
             desc = squash(doc.split("\n\n")[0] if doc else "")
@@ -50,10 +53,12 @@ def guarddog_metadata(repo):
     return rules
 
 
+# section header of a Bandit docstring:  ====\nB101: title\n====
 HEADER = re.compile(r"^={3,}\n(B\d{3}): (.+?)\n={3,}$", re.M)
 
 
 def _bandit_from_docstring(doc, rules):
+    """Append the rules documented in a Bandit plugin's module docstring (sections headed 'Bxxx: title' between ==== lines), without the example/see-also parts."""
     heads = list(HEADER.finditer(doc))
     for i, h in enumerate(heads):
         end = heads[i + 1].start() if i + 1 < len(heads) else len(doc)
@@ -66,10 +71,12 @@ def _bandit_from_docstring(doc, rules):
                           "description": desc + (f" (Related: {cwe.group(1)})" if cwe else "")})
 
 
+# first line of a Bandit check function docstring: **B301: title**
 FUNC_HEAD = re.compile(r"^\*\*(B\d{3}): (.+?)\*\*\s*", re.S)
 
 
 def bandit_rules(repo):
+    """Bandit checks from three places: plugin module docstrings, plugin function docstrings ('**Bxxx: title**') and the blacklist definitions (calls.py / imports.py)."""
     rules = []
     pdir = os.path.join(repo, "bandit", "plugins")
     for fname in sorted(os.listdir(pdir)):
@@ -106,6 +113,7 @@ def bandit_rules(repo):
 
 
 def write(fname, source, rules):
+    """Write one policy_sources file ({source, rules}), keeping the first rule of every id."""
     seen, uniq = set(), []
     for r in rules:
         if r["id"] not in seen:
@@ -117,6 +125,7 @@ def write(fname, source, rules):
 
 
 def main():
+    """Usage: harvest_extra_policy_sources.py <guarddog repo> <bandit repo>."""
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     write("guarddog_metadata_rules.json", "GuardDog (Datadog) Metadata Heuristics", guarddog_metadata(sys.argv[1]))

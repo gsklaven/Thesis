@@ -1,28 +1,21 @@
 """
-Συγκεντρωτική στατιστική αξιολόγηση όλων των report_*.json.
+Aggregate statistics of the LLM reports (results/<tag>/report_*.json) of one or more runs.
 
-Παράγει:
-  1. Κατανομή τελικών verdicts (ανά πακέτο) + πόσα analyzed συνολικά
-  2. Ποιο μοντέλο απάντησε ανά chain (Gemini vs OpenRouter fallback) -
-     χρήσιμο για methodological transparency στο thesis
-  3. Confusion matrix + accuracy/precision/recall/F1, σε ΔΥΟ ορισμούς
-     "θετικού" αποτελέσματος:
-       - STRICT:  θετικό = μόνο MALICIOUS
-       - LENIENT: θετικό = MALICIOUS ή SUSPICIOUS
-     (χρήσιμο γιατί το SSVC έχει 4 επίπεδα, όχι binary - η επιλογή ορίου
-     επηρεάζει τα νούμερα, αξίζει να τα δείξεις και τα δύο)
-  4. Similarity score (RAG retrieval) ανά τελικό verdict - ελέγχει αν το
-     similarity πραγματικά διακρίνει benign/malicious ή είναι απλά ένα
-     "βρέθηκε κάτι κοντινό" binary σήμα (ό,τι είχαμε ήδη δει σε μικρότερο
-     δείγμα - εδώ ενσωματωμένο, ώστε να μη χρειάζεται ξεχωριστό script).
+For every run it prints and saves (results/evaluation_summaries/evaluation_summary_<tag>.json):
+  1. the distribution of the final package verdicts (and of prompt versions, if mixed);
+  2. which model answered, per chain - methodological transparency;
+  3. the confusion matrix and accuracy / precision / recall / F1 / FPR, both end-to-end and for the
+     LLM stage only (positive = MALICIOUS or SUSPICIOUS);
+  4. the retrieval similarity score per chain verdict - does similarity alone separate benign from
+     malicious, or is it just a "something close was found" signal?
 
-Χρήση:  python3 results/evaluation_summary.py [tag ...]      π.χ. v12_samples
-        - με ορίσματα: μόνο αυτά τα runs
-        - χωρίς ορίσματα, με RAG_MODE στο περιβάλλον: το run αυτού του RAG_MODE
-        - χωρίς τίποτα: όλα τα results/<PROMPT_VERSION>_* (εκτός smoke), και όσα τρέχουν ακόμα
+Usage:  python3 results/evaluation_summary.py [tag ...]      e.g. v12_samples
+        - with arguments: only these runs
+        - without arguments, with RAG_MODE in the environment: the run of that RAG_MODE
+        - with neither: every results/<PROMPT_VERSION>_* run (except smoke tests), including running ones
 
-Διαβάζει: results/<tag>/report_*.json
-          expected_labels.json (προαιρετικό, για metrics)
+Reads: results/<tag>/report_*.json
+       expected_labels.json (optional, for the metrics)
 """
 
 import glob
@@ -39,11 +32,12 @@ from query_rag import PROMPT_VERSION, RESULTS_TAG  # noqa: E402
 
 RESULTS_ROOT = os.path.join(_THESIS_ROOT, "results")
 EXPECTED_LABELS_FILE = os.path.join(_THESIS_ROOT, "expected_labels.json")
-# Δομή του results/: <tag>/report_*.json, evaluation_summaries/, test_set_summaries/
+# Layout of results/: <tag>/report_*.json, evaluation_summaries/, test_set_summaries/
 SUMMARY_DIR = os.path.join(RESULTS_ROOT, "evaluation_summaries")
 
 
 def select_tags():
+    """Runs to summarise: command-line tags, else the RAG_MODE run, else every <PROMPT_VERSION>_* run."""
     if len(sys.argv) > 1:
         return [os.path.basename(os.path.normpath(t)) for t in sys.argv[1:]]
     if os.environ.get("RAG_MODE"):
@@ -53,6 +47,7 @@ def select_tags():
 
 
 def load_reports(results_dir):
+    """{package: report} of every readable report_*.json in results_dir."""
     reports = {}
     for path in glob.glob(os.path.join(results_dir, "report_*.json")):
         pkg_name = os.path.basename(path)[len("report_"):-len(".json")]
@@ -60,42 +55,42 @@ def load_reports(results_dir):
             with open(path, "r", encoding="utf-8") as f:
                 reports[pkg_name] = json.load(f)
         except Exception as e:
-            print(f"  [!] Αγνοήθηκε {path}: {e}")
+            print(f"  [!] Ignored {path}: {e}")
     return reports
 
 
 def safe_div(a, b):
+    """a / b, or 0.0 when b is 0."""
     return a / b if b else 0.0
 
 
 def compute_confusion(reports, expected_labels, positive_verdicts):
     """
-    ΔΙΟΡΘΩΣΗ: το NO_CHAINS_FOUND (το CodeQL δεν βρήκε ΚΑΜΙΑ ευαίσθητη
-    συμπεριφορά) ΔΕΝ είναι το ίδιο με "το LLM αξιολόγησε και είπε BENIGN" -
-    είναι limitation του static-analysis σταδίου, όχι του LLM reasoning.
-    Πριν, μετρούνταν σαν απλό False Negative, νοθεύοντας το recall όποτε
-    υπάρχουν πολλά τέτοια πακέτα (π.χ. 50/399 σε ένα run). Τώρα: για
-    benign labels μετράει σωστά ως TN (καμία ψευδής συναγερμός), για
-    malicious labels πάει σε ΞΕΧΩΡΙΣΤΟ bucket (static_misses) - ίδια
-    λογική με το check_test_set.py, που ήδη το έκανε σωστά.
+    Confusion counts of the labelled packages: (tp, tn, fp, fn, static_misses, unscored, benign_no_chains).
+
+    NO_CHAINS_FOUND (CodeQL found NO sensitive behaviour) is not the same as "the LLM evaluated it and
+    said BENIGN" - it is a limit of the static-analysis stage, not of the LLM reasoning. For benign
+    labels it is counted separately (a correct TN end-to-end), for malicious labels it goes to a SEPARATE
+    bucket (static_misses) - the same logic as check_test_set.py. Packages without a complete evaluation
+    (EVALUATION_FAILED / INCOMPLETE / UNKNOWN) are not scored.
     """
     tp = tn = fp = fn = 0
     static_misses = 0
     unscored = 0
-    benign_no_chains = 0  # benign που το LLM δεν είδε ποτέ: TN μόνο στο end-to-end
+    benign_no_chains = 0  # benign packages the LLM never saw: TN end-to-end only
     for pkg, r in reports.items():
         expected = expected_labels.get(pkg)
         if expected not in ("benign", "malicious"):
-            continue  # χωρίς ετικέτα - δεν μπαίνει καν στο confusion matrix
+            continue  # no label - not part of the confusion matrix at all
         verdict = r.get("final_verdict")
         if verdict in ("EVALUATION_FAILED", "INCOMPLETE", "UNKNOWN", None):
-            unscored += 1  # ΔΕΝ μετράει ως λάθος - απλά δεν ξέρουμε
+            unscored += 1  # NOT counted as an error - the outcome is simply unknown
             continue
         if verdict == "NO_CHAINS_FOUND":
             if expected == "benign":
-                benign_no_chains += 1  # σωστό end-to-end, αλλά ΟΧΙ απόφαση του LLM
+                benign_no_chains += 1  # correct end-to-end, but NOT a decision of the LLM
             else:
-                static_misses += 1  # ΞΕΧΩΡΙΣΤΟ από LLM reasoning miss
+                static_misses += 1  # SEPARATE from an LLM reasoning miss
             continue
         flagged = verdict in positive_verdicts
         if expected == "malicious":
@@ -108,8 +103,9 @@ def compute_confusion(reports, expected_labels, positive_verdicts):
 
 
 def print_metrics(label, tp, tn, fp, fn, static_misses, unscored, benign_no_chains=0):
-    # END-TO-END: ό,τι έκανε το ΣΥΣΤΗΜΑ - malware χωρίς chains = χαμένο (FN),
-    # benign χωρίς chains = κανένας συναγερμός (TN).
+    """Print the end-to-end and LLM-stage metrics of one confusion matrix and return them as a dict."""
+    # END-TO-END: what the SYSTEM did - malware without chains = missed (FN), benign without chains =
+    # no alarm (TN).
     fn_end_to_end = fn + static_misses
     tn_end_to_end = tn + benign_no_chains
     total_e2e = tp + tn_end_to_end + fp + fn_end_to_end
@@ -117,8 +113,8 @@ def print_metrics(label, tp, tn, fp, fn, static_misses, unscored, benign_no_chai
     recall_e2e = safe_div(tp, tp + fn_end_to_end)
     fpr_e2e = safe_div(fp, fp + tn_end_to_end)
 
-    # LLM-STAGE ONLY: ΜΟΝΟ πακέτα που αξιολόγησε το LLM - εξαιρούνται ΣΥΜΜΕΤΡΙΚΑ τα
-    # NO_CHAINS_FOUND και των δύο κλάσεων (πριν, τα benign NO_CHAINS μετρούσαν ως TN).
+    # LLM STAGE ONLY: ONLY packages evaluated by the LLM - NO_CHAINS_FOUND packages of both classes are
+    # excluded SYMMETRICALLY.
     total_llm = tp + tn + fp + fn
     accuracy_llm = safe_div(tp + tn, total_llm)
     fpr_llm = safe_div(fp, fp + tn)
@@ -128,21 +124,19 @@ def print_metrics(label, tp, tn, fp, fn, static_misses, unscored, benign_no_chai
 
     print(f"\n--- {label} ---")
     print(f"  TP={tp}  TN={tn}  FP={fp}  FN={fn}  static-analysis-misses={static_misses}  "
-          f"benign-no-chains={benign_no_chains}  (ασαφή/αγνοήθηκαν: {unscored})")
+          f"benign-no-chains={benign_no_chains}  (unclear/ignored: {unscored})")
     print(f"  Accuracy  END-TO-END (NO_CHAINS: malware=FN, benign=TN): {accuracy_e2e:.3f}")
     print(f"  Recall    END-TO-END: {recall_e2e:.3f}")
     print(f"  FPR       END-TO-END: {fpr_e2e:.3f}")
-    print(f"  Accuracy  LLM-STAGE ONLY (χωρίς NO_CHAINS και στις 2 κλάσεις): {accuracy_llm:.3f}")
+    print(f"  Accuracy  LLM-STAGE ONLY (no NO_CHAINS in either class): {accuracy_llm:.3f}")
     print(f"  FPR       LLM-STAGE ONLY: {fpr_llm:.3f}")
-    trivial_note = "  [!] FP=0 -> τετριμμένο, χρειάζεσαι 'benign' ετικέτες στο expected_labels.json" \
+    trivial_note = "  [!] FP=0 -> trivial, 'benign' labels are needed in expected_labels.json" \
         if fp == 0 and tp > 0 else ""
     print(f"  Precision LLM-STAGE ONLY: {precision:.3f}{trivial_note}")
     print(f"  Recall    LLM-STAGE ONLY: {recall_llm:.3f}")
     print(f"  F1        LLM-STAGE ONLY: {f1:.3f}")
 
-    # ΝΕΟ: επίστρεψε τα ίδια νούμερα που μόλις τυπώθηκαν, ώστε ο καλών να
-    # μπορεί να τα αποθηκεύσει - πριν, αυτοί οι υπολογισμοί ζούσαν ΜΟΝΟ
-    # στην οθόνη, ποτέ στο αποθηκευμένο summary JSON.
+    # the same numbers that were printed, so that the caller can save them in the summary JSON
     return {
         "tp": tp, "tn": tn, "fp": fp, "fn": fn,
         "static_analysis_misses": static_misses, "unscored": unscored,
@@ -160,27 +154,29 @@ def print_metrics(label, tp, tn, fp, fn, static_misses, unscored, benign_no_chai
 
 
 def main():
+    """Summarise every selected run."""
     expected_labels = {}
     if os.path.exists(EXPECTED_LABELS_FILE):
         with open(EXPECTED_LABELS_FILE, "r", encoding="utf-8") as f:
             expected_labels = json.load(f)
     tags = select_tags()
     if not tags:
-        sys.exit(f"[!] Δεν βρέθηκαν αποτελέσματα ({RESULTS_ROOT}/{PROMPT_VERSION}_*)")
+        sys.exit(f"[!] No results found ({RESULTS_ROOT}/{PROMPT_VERSION}_*)")
     for tag in tags:
         summarize(tag, expected_labels)
 
 
 def summarize(tag, expected_labels):
+    """Print the statistics of one run and write its evaluation_summary_<tag>.json."""
     results_dir = os.path.join(RESULTS_ROOT, tag)
     summary_out = os.path.join(SUMMARY_DIR, f"evaluation_summary_{tag}.json")
     reports = load_reports(results_dir)
     print(f"\n{'=' * 70}\n{tag}\n{'=' * 70}")
-    print(f"[*] {len(reports)} reports βρέθηκαν στο {results_dir}")
+    print(f"[*] {len(reports)} reports found in {results_dir}")
     if not reports:
         return
 
-    # --- 1. Κατανομή τελικών verdicts (ανά πακέτο) ---
+    # --- 1. Distribution of final verdicts (per package) and of answering models (per chain) ---
     verdict_counts = {}
     model_counts = {}
     total_chains = 0
@@ -189,26 +185,25 @@ def summarize(tag, expected_labels):
         verdict_counts[v] = verdict_counts.get(v, 0) + 1
         for c in r.get("chain_details", []):
             total_chains += 1
-            m = c.get("llm_evaluation", {}).get("model_used", "άγνωστο/σφάλμα")
+            m = c.get("llm_evaluation", {}).get("model_used", "unknown/error")
             model_counts[m] = model_counts.get(m, 0) + 1
 
-    print(f"\n=== Κατανομή τελικών verdicts (ανά πακέτο, {len(reports)} σύνολο) ===")
+    print(f"\n=== Distribution of final verdicts (per package, {len(reports)} in total) ===")
     for v, n in sorted(verdict_counts.items(), key=lambda x: -x[1]):
         print(f"  {v:20s} {n}")
 
-    # breakdown ανά prompt_version - χρήσιμο μόλις αρχίσεις να συγκρίνεις
-    # v1 (baseline) έναντι v2/v3. Reports από ΠΡΙΝ την προσθήκη αυτού του
-    # tracking θα δείχνουν "unversioned".
+    # breakdown per prompt_version, shown only when a folder mixes several versions; reports written
+    # before version tracking existed show "unversioned"
     version_counts = {}
     for r in reports.values():
         pv = r.get("prompt_version", "unversioned")
         version_counts[pv] = version_counts.get(pv, 0) + 1
     if len(version_counts) > 1:
-        print(f"\n=== Κατανομή prompt_version (ανά πακέτο) ===")
+        print(f"\n=== Distribution of prompt_version (per package) ===")
         for pv, n in sorted(version_counts.items(), key=lambda x: -x[1]):
             print(f"  {pv:20s} {n}")
 
-    print(f"\n=== Ποιο μοντέλο απάντησε (ανά chain, {total_chains} σύνολο) ===")
+    print(f"\n=== Which model answered (per chain, {total_chains} in total) ===")
     for m, n in sorted(model_counts.items(), key=lambda x: -x[1]):
         pct = n / total_chains * 100 if total_chains else 0
         print(f"  {m:25s} {n:5d}  ({pct:.1f}%)")
@@ -217,17 +212,17 @@ def summarize(tag, expected_labels):
     n_benign_labels = sum(1 for v in expected_labels.values() if v == "benign")
     n_malicious_labels = sum(1 for v in expected_labels.values() if v == "malicious")
     print(f"\n[*] expected_labels.json: {n_malicious_labels} malicious, {n_benign_labels} benign")
-    
-    print_metrics_lenient = print_metrics("LENIENT (θετικό = MALICIOUS ή SUSPICIOUS)",
+
+    print_metrics_lenient = print_metrics("LENIENT (positive = MALICIOUS or SUSPICIOUS)",
                                           *compute_confusion(reports, expected_labels, {"MALICIOUS", "SUSPICIOUS"}))
 
     if n_benign_labels == 0:
-        print("\n[!] ΚΑΝΕΝΑ 'benign' label στο expected_labels.json ακόμα - το Precision/F1 "
-              "παραπάνω είναι ΤΕΤΡΙΜΜΕΝΟ (FP πάντα 0, οπότε Precision=1.0 αυτόματα).")
-        print("    Χρειάζεσαι αποτελέσματα από το test_set/ (benign πακέτα) για ουσιαστικό Precision/F1.")
-        print("    Μέχρι τότε, το Accuracy παραπάνω ισοδυναμεί με Recall (True Positive Rate).")
+        print("\n[!] NO 'benign' label in expected_labels.json yet - the Precision/F1 above is "
+              "TRIVIAL (FP always 0, so Precision=1.0 automatically).")
+        print("    Results on benign packages are needed for a meaningful Precision/F1.")
+        print("    Until then, the Accuracy above equals the Recall (True Positive Rate).")
 
-    # --- 3. Similarity score ανά τελικό verdict (ανά chain) ---
+    # --- 3. Retrieval similarity score per chain verdict ---
     by_verdict = {"BENIGN": [], "SUSPICIOUS": [], "MALICIOUS": []}
     for r in reports.values():
         for c in r.get("chain_details", []):
@@ -237,8 +232,8 @@ def summarize(tag, expected_labels):
             if verdict in by_verdict and isinstance(sim, (int, float)):
                 by_verdict[verdict].append(sim)
 
-    print(f"\n=== Similarity score (RAG retrieval) ανά τελικό verdict (ανά chain) ===")
-    print(f"{'Verdict':15s} {'N':6s} {'Μέσος όρος':12s} {'Min':8s} {'Max':8s}")
+    print(f"\n=== Similarity score (RAG retrieval) per chain verdict ===")
+    print(f"{'Verdict':15s} {'N':6s} {'Mean':12s} {'Min':8s} {'Max':8s}")
     print("-" * 55)
     for verdict, sims in by_verdict.items():
         if not sims:
@@ -253,15 +248,15 @@ def summarize(tag, expected_labels):
 
     if benign_avg is not None and malicious_avg is not None:
         diff = malicious_avg - benign_avg
-        print(f"\nΔιαφορά μέσου όρου (MALICIOUS/SUSPICIOUS − BENIGN): {diff:+.4f}")
+        print(f"\nDifference of means (MALICIOUS/SUSPICIOUS − BENIGN): {diff:+.4f}")
         if abs(diff) < 0.05:
-            print("[!] Πολύ μικρή διαφορά - το similarity score ΔΕΝ φαίνεται να διακρίνει")
-            print("    ουσιαστικά benign από malicious. Η πραγματική διάκριση γίνεται")
-            print("    κυρίως από το LLM reasoning, όχι από το retrieval score.")
+            print("[!] Very small difference - the similarity score does NOT seem to separate")
+            print("    benign from malicious on its own. The real separation comes")
+            print("    mostly from the LLM reasoning, not from the retrieval score.")
         else:
-            print("[✓] Υπάρχει αισθητή διαφορά - το similarity ΕΧΕΙ κάποια διακριτική αξία.")
+            print("[✓] Noticeable difference - similarity DOES have some discriminative value.")
 
-    # --- 4. Αποθήκευση για αναφορά ---
+    # --- 4. Save for reporting ---
     summary = {
         "results_tag": tag,
         "total_reports": len(reports),
@@ -274,7 +269,7 @@ def summarize(tag, expected_labels):
     os.makedirs(SUMMARY_DIR, exist_ok=True)
     with open(summary_out, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
-    print(f"\n[✓] Περίληψη -> {summary_out}")
+    print(f"\n[✓] Summary -> {summary_out}")
 
 
 if __name__ == "__main__":

@@ -1,20 +1,19 @@
 """
 payload_scan.py
 
-Κριτήριο καθαρισμού του malware dataset, ΑΝΕΞΑΡΤΗΤΟ από το CodeQL (για να μην είναι
-κυκλικό): για κάθε δείγμα ελέγχεται με απλή σάρωση κειμένου αν ο πηγαίος κώδικάς του
-περιέχει ΟΠΟΙΟΔΗΠΟΤΕ σήμα που θα μπορούσε να υλοποιήσει κακόβουλη συμπεριφορά. Αν δεν
-βρεθεί ΚΑΝΕΝΑ, το δείγμα χαρακτηρίζεται "no_payload" (π.χ. placeholder, typosquat που απλώς
-εξαρτάται από το πραγματικό πακέτο, ή νόμιμη έκδοση καταχωρημένη ως malware) και εξαιρείται
-από το dataset (build_final_dataset.py) - δεν αποτελεί έγκυρο δείγμα για ανίχνευση από
-κώδικα. Σκόπιμα ΣΥΝΤΗΡΗΤΙΚΟ: αρκεί ΕΝΑ σήμα για να μείνει το δείγμα.
+Cleaning criterion for the malware dataset, INDEPENDENT of CodeQL (so that it is not circular): for
+every sample, a plain text scan checks whether its source code contains ANY signal that could
+implement malicious behaviour. If there is NONE, the sample is marked "no_payload" (e.g. a
+placeholder, a typosquat that merely depends on the real package, or a legitimate version registered
+as malware) and build_final_dataset.py excludes it - it is not a valid sample for code-based
+detection. Deliberately CONSERVATIVE: one signal is enough to keep the sample.
 
-Σήματα (αρκεί ένα):
-  python  κλήσεις δικτύου/διεργασιών/αρχείων/κωδικοποίησης/δυναμικής εκτέλεσης (βλ. PY_SIGNALS)
-  js      child_process, http/net/dns, fs εγγραφές, eval/Function, process.env
+Signals (one is enough):
+  python  network / process / file / encoding / dynamic-execution calls (see PY_SIGNALS)
+  js      child_process, http/net/dns, fs writes, eval/Function, process.env
   binary  .exe .dll .so .dylib .pyc .bin
   script  .sh .bat .ps1 .cmd .vbs, .pth
-  npm     package.json με preinstall/install/postinstall
+  npm     package.json with a preinstall/install/postinstall script
 
 Usage: python3 payload_scan.py [--out dataset/payload_scan.json] [--limit N]
 """
@@ -33,6 +32,8 @@ from rerun_chains import pick_analysis_root, DATASET_JSON  # noqa: E402
 from utils import resolve_source_path, source_name  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# Python signals: process / network / file / encoding / dynamic-execution / host-information APIs,
+# plus very long base64-like strings and long \x.. byte sequences (embedded payloads)
 PY_SIGNALS = re.compile(
     r"\bos\.(system|popen|exec\w*|spawn\w*|remove|unlink|rmdir|removedirs|rename|replace|chmod|chown|startfile|getenv|environ)\b"
     r"|\bsubprocess\b|\bpty\.spawn|\bmultiprocessing\.Process"
@@ -43,15 +44,18 @@ PY_SIGNALS = re.compile(
     r"|\bshutil\.(copy\w*|move|rmtree)|\bopen\s*\([^)]*['\"][wa]b?\+?['\"]|\.write_(text|bytes)\s*\(|\btempfile\b"
     r"|\bgetpass\b|\bplatform\.\w+\s*\(|\bpynput\b|\bpyperclip\b|ImageGrab"
     r"|[A-Za-z0-9+/=]{300,}|(\\x[0-9a-fA-F]{2}){60,}")
+# JavaScript signals: processes, network modules, file writes, dynamic code, environment, base64 buffers
 JS_SIGNALS = re.compile(
     r"child_process|require\s*\(\s*['\"](https?|net|dns|tls|dgram)['\"]|\bfs\.(write|append|unlink|rm)"
     r"|\beval\s*\(|new\s+Function\s*\(|process\.env|Buffer\.from\([^)]*base64")
+# file extensions that count as a signal by themselves
 BINARY = (".exe", ".dll", ".so", ".dylib", ".pyc", ".bin")
 SCRIPT = (".sh", ".bat", ".ps1", ".cmd", ".vbs", ".pth")
 ARCHIVE = (".tar.gz", ".tgz", ".tar", ".zip", ".whl")
 
 
 def scan(root):
+    """Sorted list of the signal kinds found anywhere under root (empty list = no payload)."""
     signals = set()
     for r, _, files in os.walk(root):
         for f in files:
@@ -83,6 +87,7 @@ def scan(root):
 
 
 def main():
+    """Scan every analysed sample (resumable, checkpoint every 250) and write the no_payload list + per-source summary."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "dataset", "payload_scan.json"))
     ap.add_argument("--limit", type=int)
@@ -102,6 +107,7 @@ def main():
         if not os.path.isdir(src):
             out[p] = {"has_payload": None, "signals": [], "note": "source_missing"}
             continue
+        # same analysis root as the CodeQL run; archives are extracted into a scratch copy first
         root = pick_analysis_root(src)
         has_arch = any(f.lower().endswith(ARCHIVE) for _, _, fs in os.walk(root) for f in fs)
         if has_arch:
@@ -116,7 +122,7 @@ def main():
             out[p] = {"has_payload": bool(sig), "signals": sig}
         except Exception as e:  # noqa: BLE001
             out[p] = {"has_payload": None, "signals": [], "note": f"error: {str(e)[:120]}"}
-        if n % 250 == 0:
+        if n % 250 == 0:  # periodic checkpoint, so an interrupted scan can resume
             json.dump({"packages": out}, open(args.out, "w"))
             print(f"  {n}/{len(pkgs)} ({(time.time() - t0) / 60:.0f} min)", flush=True)
     shutil.rmtree(work, ignore_errors=True)

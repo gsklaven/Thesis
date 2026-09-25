@@ -1,11 +1,11 @@
 """
-Αξιολόγηση ενός πακέτου με LLM: RAG + prompt ανά Behavior Chain -> απόφαση ανά chain ->
-συγκέντρωση σε απόφαση πακέτου -> results/<RESULTS_TAG>/report_<πακέτο>.json.
+LLM evaluation of one package (stage 3 of the system): RAG + prompt per Behavior Chain -> verdict per
+chain -> aggregation into the package verdict -> results/<RESULTS_TAG>/report_<package>.json.
 
-Ο πάροχος του LLM επιλέγεται στο .env (LLM_PROVIDER = deepseek | gemini | lmstudio | openrouter,
-βλ. llm_providers.py). ΟΛΑ τα υπόλοιπα είναι κοινά για κάθε πάροχο: ίδιο prompt, ίδια ανάγνωση της
-απάντησης, ίδιες επαναλήψεις για όσα chains αποτυγχάνουν, ίδια συγκέντρωση (INCOMPLETE αντί για
-BENIGN όταν λείπουν chains), ίδια μορφή αναφοράς. Τα πειράματα της εργασίας: deepseek (deepseek-flash).
+The LLM provider is selected in .env (LLM_PROVIDER = deepseek | gemini | lmstudio | openrouter, see
+llm_providers.py). EVERYTHING else is shared by all providers: the same prompt, the same parsing of the
+answer, the same retries for chains that fail, the same aggregation (INCOMPLETE instead of BENIGN when
+chains are missing) and the same report format. The thesis experiments use deepseek (deepseek-flash).
 
 Usage: python3 llm_evaluator.py /path/to/package_chains.json
 """
@@ -26,28 +26,27 @@ BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 RESULTS_DIR = os.path.join(_THESIS_ROOT, "results", RESULTS_TAG)
 TAGS_FILE = os.path.join(BASE_DIR, "attack_type_tags.json")
 
-# Μετά το πρώτο πέρασμα, όσα chains έδωσαν ERROR/PARSE_ERROR ξαναστέλνονται μέχρι τόσες
-# φορές, ώστε το τελικό verdict να βγαίνει από ΟΛΑ τα chains του πακέτου.
+# After the first pass, chains that returned ERROR/PARSE_ERROR are sent again up to this many times, so
+# that the final verdict is based on ALL chains of the package.
 CHAIN_RETRY_ROUNDS = 3
 FAILED_VERDICTS = ("ERROR", "PARSE_ERROR")
 
-# (όνομα, μοντέλο, κλήση, παράλληλες κλήσεις) - ελέγχει ήδη εδώ ότι υπάρχει το κλειδί του παρόχου
+# (name, model, call function, parallel calls) - this already checks that the provider's key exists
 PROVIDER, MODEL, evaluate_prompt, MAX_WORKERS = get_provider()
 _LABEL = {"deepseek": "DeepSeek", "gemini": "Gemini", "lmstudio": "LM Studio", "openrouter": "OpenRouter"}[PROVIDER]
 
 
 def aggregate_verdicts(chain_results):
     """
-    Συγκεντρωτικό verdict για ολόκληρο το πακέτο.
+    Aggregate verdict of the whole package.
 
-    ΛΟΓΙΚΗ: "any MALICIOUS chain = MALICIOUS package"
-    Αυτό διατηρεί πλήρη sensitivity — ένα malicious package με 1 μόνο
-    κακόβουλο chain θα εντοπιστεί. Δεν υπάρχει όριο chains ανά πακέτο· ο
-    θόρυβος περιορίζεται με την εξαίρεση των καθαρά vendor chains
-    (query_rag.py / utils.is_pure_vendor_chain) και με το v12 prompt.
+    RULE: "any MALICIOUS chain = MALICIOUS package". This keeps full sensitivity - a malicious package
+    with a single malicious chain is detected. There is no limit on chains per package; noise is reduced
+    by excluding pure vendor chains (query_rag.py / utils.is_pure_vendor_chain) and by the v12 prompt.
 
-    ΚΡΙΣΙΜΟ: έλεγχος EVALUATION_FAILED ΠΡΙΝ το all(BENIGN) για ασφάλεια
-    από κενά iterables όταν ΟΛΑ τα chains αποτύχουν (API quota κτλ.).
+    Order of precedence: MALICIOUS > SUSPICIOUS > EVALUATION_FAILED (no chain evaluated) >
+    INCOMPLETE (some chains failed) > BENIGN (all chains BENIGN) > UNKNOWN. EVALUATION_FAILED is checked
+    BEFORE all(BENIGN), which would be True for an empty list when ALL chains failed (API quota etc.).
     """
     verdicts = []
     for r in chain_results:
@@ -63,8 +62,8 @@ def aggregate_verdicts(chain_results):
     non_failed = [v for v in verdicts if v not in ("ERROR", "PARSE_ERROR", "UNKNOWN")]
     if not non_failed:
         return "EVALUATION_FAILED"
-    # Μερική αποτυχία χωρίς κανένα MALICIOUS: δεν ξέρουμε τι θα έλεγαν τα chains που
-    # απέτυχαν, οπότε ΔΕΝ δίνουμε BENIGN (βλ. v11: python-dotenv/gunicorn/flask).
+    # Partial failure without any MALICIOUS: what the failed chains would have said is unknown, so the
+    # package is NOT declared BENIGN.
     if len(non_failed) < len(verdicts):
         return "INCOMPLETE"
     if all(v == "BENIGN" for v in non_failed):
@@ -73,27 +72,30 @@ def aggregate_verdicts(chain_results):
 
 
 def _evaluate_one(idx, chain_result):
+    """Send one chain's prompt to the LLM (runs in a worker thread); returns (index, parsed answer)."""
     llm_result = evaluate_prompt(chain_result['prompt_for_llm'])
     return idx, llm_result
 
 
 def main(json_path):
+    """Evaluate every chain of one package in parallel (with retry rounds), aggregate and write the report."""
     if not os.path.exists(json_path):
-        print(f"[!] Το αρχείο {json_path} δεν υπάρχει.")
+        print(f"[!] The file {json_path} does not exist.")
         sys.exit(1)
 
     package_name = os.path.basename(json_path).replace(".json", "")
-    print(f"[*] Εκτέλεση RAG Pipeline για: {package_name}")
+    print(f"[*] Running the RAG pipeline for: {package_name}")
 
-    # Ο LLM κρίνει ΜΟΝΟ από το behavior chain και την ομοιότητα με γνωστά πακέτα: καμία
-    # προ-υπολογισμένη ένδειξη (π.χ. typosquatting) δεν περνάει στο prompt.
+    # The LLM judges ONLY from the behavior chain and the retrieved context: no pre-computed hint about
+    # the package (e.g. typosquatting) is passed in the prompt.
     extra_context = ""
 
     engine = RAGEngine()
     results = engine.analyze_package(json_path, extra_context=extra_context)
 
+    # no chain to evaluate: an explicit NO_CHAINS_FOUND report (never a silent BENIGN)
     if not results:
-        print("[-] Δεν βρέθηκαν behavior chains για ανάλυση.")
+        print("[-] No behavior chains found to analyse.")
         report = {
             "package_name": package_name, "prompt_version": "n/a",
             "llm_provider": PROVIDER, "llm_model": MODEL,
@@ -107,14 +109,15 @@ def main(json_path):
             json.dump(report, f, indent=2, ensure_ascii=False)
         return
 
-    print(f"[*] {len(results)} behavior chains βρέθηκαν. Αποστολή στο {_LABEL} ({MODEL}, "
-          f"{MAX_WORKERS} παράλληλα)...")
+    print(f"[*] {len(results)} behavior chains found. Sending to {_LABEL} ({MODEL}, "
+          f"{MAX_WORKERS} in parallel)...")
 
+    # round 0 sends every chain; each retry round re-sends only the chains that failed, with backoff
     pending = list(range(len(results)))
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         for round_no in range(1 + CHAIN_RETRY_ROUNDS):
             if round_no:
-                print(f"[*] Retry γύρος {round_no}/{CHAIN_RETRY_ROUNDS}: {len(pending)} chains απέτυχαν, ξανά...")
+                print(f"[*] Retry round {round_no}/{CHAIN_RETRY_ROUNDS}: {len(pending)} chains failed, again...")
                 time.sleep(INITIAL_RETRY_DELAY * 2 ** round_no)
             futures = {executor.submit(_evaluate_one, i, results[i]): i for i in pending}
             for future in as_completed(futures):
@@ -153,11 +156,11 @@ def main(json_path):
     output_path = os.path.join(RESULTS_DIR, f"report_{package_name}.json")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
-    print(f"[✓] ΤΕΛΙΚΟ VERDICT: {final_verdict} -> {output_path}")
+    print(f"[✓] FINAL VERDICT: {final_verdict} -> {output_path}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Χρήση: python3 llm_evaluator.py /path/to/sliced_behavior_chain.json")
+        print("Usage: python3 llm_evaluator.py /path/to/sliced_behavior_chain.json")
         sys.exit(1)
     main(sys.argv[1])

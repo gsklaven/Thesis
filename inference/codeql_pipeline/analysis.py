@@ -1,3 +1,18 @@
+"""
+Stage 1 of the static analysis: run the CodeQL queries on one package.
+
+For the package in CODEQL_TARGET_DIR:
+  1. find its third-party imports (AST scan of every .py file) - with CODEQL_NO_VENDOR=1 they are only
+     recorded by name in results/dependency_tree.json; otherwise each is pip-installed into vendor/
+     (no dependencies of dependencies) so that library code can be analysed too;
+  2. for each language (Python, JavaScript): create a CodeQL database and run the four queries
+     (find_flow = source->sink taint tracking to sensitive API calls, call_graph, backward_slice,
+     control_deps), decoding every result to a CSV file in results/.
+
+A language whose database or queries fail is skipped with the message "[!] Skipping language '<lang>'"
+(the scripts that run this one look for that exact text). build_behavior_chain.py then combines the CSV
+files into Behavior Chains.
+"""
 import ast
 import glob
 import json
@@ -8,7 +23,7 @@ import subprocess
 import sys
 import time
 
-# Βασικές ρυθμίσεις του προγράμματος
+# Basic settings: the CodeQL binary (PATH first, then common install locations)
 CODEQL_BIN = (
     shutil.which("codeql")
     or next(
@@ -24,37 +39,35 @@ _THESIS_ROOT = os.environ.get(
     "THESIS_BASE_DIR",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 )
+# the package to analyse (set by the calling script)
 TARGET_DIR = os.environ.get("CODEQL_TARGET_DIR", os.path.join(_THESIS_ROOT, "behavior_chain"))
 LANGUAGE = "python"
 VENDOR_FOLDER = "vendor"
 
-# ΚΡΙΣΙΜΟ: χωρίς αυτό, το CodeQL (JVM-based) δεν έχει ΚΑΝΕΝΑ όριο μνήμης - αν
-# ένα malware δείγμα (πιθανώς σκόπιμα, ως anti-analysis τέχνασμα) προκαλέσει
-# απότομη έκρηξη μνήμης, μπορεί να καταναλώσει ΟΛΗ τη RAM+swap του συστήματος,
-# προκαλώντας system-wide OOM που σκοτώνει ολόκληρη τη γραφική συνεδρίδα
-# (όχι μόνο το ίδιο το CodeQL process). Θέτουμε ένα ασφαλές ανώτατο όριο,
-# αρκετά χαμηλότερο από τη συνολική RAM του μηχανήματος ώστε να μένει πάντα
-# αρκετό περιθώριο για OS/desktop/browser.
+# CRITICAL: without this CodeQL (JVM-based) has NO memory limit. A malware sample that (possibly on
+# purpose, as an anti-analysis trick) makes memory use explode could consume ALL RAM + swap and cause
+# a system-wide out-of-memory condition that kills the whole desktop session, not only CodeQL. The cap
+# is well below the machine's total RAM, leaving room for the OS and other programs.
 CODEQL_MAX_RAM_MB = 4096
 
-# Χρονικά όρια ανά βήμα (δευτερόλεπτα) - ρυθμιζόμενα μέσω env, ώστε μεγάλα
-# πακέτα να μη χάνουν σιωπηλά το backward slice λόγω timeout (defaults = όπως πριν).
+# Time limits per step (seconds), configurable through the environment, so that large packages do not
+# silently lose e.g. the backward slice because of a timeout.
 DB_CREATE_TIMEOUT = int(os.environ.get("CODEQL_DB_TIMEOUT", "600"))
 QUERY_TIMEOUT = int(os.environ.get("CODEQL_QUERY_TIMEOUT", "300"))
 
-# CODEQL_NO_VENDOR=1: οι εξαρτήσεις εντοπίζονται αλλά ΔΕΝ εγκαθίστανται στο vendor/ - το
-# CodeQL αναλύει μόνο τον κώδικα του πακέτου (οι ευαίσθητες κλήσεις προς βιβλιοθήκες
-# αναγνωρίζονται από τα imports μέσω API graphs, χωρίς τον κώδικα της βιβλιοθήκης). Τα
-# ονόματα των εξαρτήσεων γράφονται στο dependency_tree.json (χωρίς υπο-εξαρτήσεις).
+# CODEQL_NO_VENDOR=1: dependencies are detected but NOT installed into vendor/ - CodeQL analyses only
+# the package's own code (sensitive calls into libraries are still recognised from the imports through
+# API graphs, without the library code). The dependency names are written to dependency_tree.json
+# (without sub-dependencies).
 NO_VENDOR = os.environ.get("CODEQL_NO_VENDOR") == "1"
 
-# Φάκελος για την αποθήκευση των αποτελεσμάτων
+# Folder of the results (CSV files, dependency tree)
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(PROJECT_DIR, "results")
 if not os.path.exists(RESULTS_DIR):
     os.makedirs(RESULTS_DIR)
 
-# Λεξικό για να βρίσκουμε το σωστό όνομα εγκατάστασης στο pip
+# import name -> pip distribution name, where the two differ
 IMPORT_TO_PACKAGE = {
     "yaml": "pyyaml", "cv2": "opencv-python", "PIL": "pillow",
     "bs4": "beautifulsoup4", "sklearn": "scikit-learn",
@@ -64,12 +77,14 @@ IMPORT_TO_PACKAGE = {
     "win32api": "pywin32",
 }
 
+# build/documentation tooling is not treated as a dependency of the package
 BUILD_TOOLING_EXCLUDE = {
     "pip", "setuptools", "wheel", "pkg_resources", "distutils",
     "build", "installer", "pep517", "pep621",
     "sphinx", "sphinx_rtd_theme", "docutils", "mkdocs",
 }
 
+# folders removed from installed vendor packages (documentation, tests, examples)
 NOISE_DIR_NAMES = {
     "docs", "doc", "_static", "static", "test", "tests",
     "examples", "example", "demo", "demos", ".egg-info",
@@ -78,20 +93,15 @@ NOISE_DIR_NAMES = {
 
 def run_with_hard_timeout(cmd, timeout, check=False, **kwargs):
     """
-    ΑΝΤΙ για subprocess.run(cmd, timeout=..., check=...). Το CODEQL_BIN είναι
-    ένα shell script που κάνει fork σε Java process - αν λήξει το timeout,
-    subprocess.run() σκοτώνει ΜΟΝΟ το άμεσο child (το codeql script), αφήνοντας
-    το Java process ΟΡΦΑΝΟ να τρέχει επ' άπειρον στο παρασκήνιο, καταναλώνοντας
-    CPU/μνήμη/δίσκο χωρίς κανείς να το ξέρει (ακριβώς αυτό προκάλεσε το
-    πρόβλημα δίσκου/ταχύτητας μιας εβδομάδας).
+    Replacement for subprocess.run(cmd, timeout=..., check=...). CODEQL_BIN is a shell script that
+    forks a Java process: on timeout, subprocess.run() kills ONLY the direct child (the codeql script)
+    and leaves the Java process ORPHANED, running in the background and consuming CPU/memory/disk.
 
-    Εδώ τρέχουμε το process σε ΔΙΚΟ ΤΟΥ process group (start_new_session=True),
-    και αν λήξει ο χρόνος, σκοτώνουμε ΟΛΟΚΛΗΡΟ το group (killpg) - αυτό
-    σκοτώνει και τα Java παιδιά/εγγόνια, όχι μόνο το άμεσο process.
+    Here the process runs in its OWN process group (start_new_session=True) and on timeout the WHOLE
+    group is killed (killpg), including the Java children and grandchildren.
 
-    FIX: το Popen() δεν καταλαβαίνει "capture_output" (μόνο το run() το
-    καταλαβαίνει) - το μεταφράζουμε σε stdout=PIPE/stderr=PIPE εμείς πριν
-    το Popen(), ώστε το pip install call (πιο κάτω) να συνεχίσει να δουλεύει.
+    Popen() does not understand "capture_output" (only run() does), so it is translated to
+    stdout=PIPE / stderr=PIPE before calling Popen() (used by the pip install call below).
     """
     if kwargs.pop("capture_output", False):
         kwargs.setdefault("stdout", subprocess.PIPE)
@@ -115,16 +125,22 @@ def run_with_hard_timeout(cmd, timeout, check=False, **kwargs):
 
 
 def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
+    """
+    Find the third-party packages imported by the package's own .py files (absolute imports that are
+    neither standard library, build tooling, nor modules of the package itself). With NO_VENDOR the
+    sorted distribution names are returned without installing anything; otherwise each is installed
+    into vendor/ (90 s timeout per package) and the list of installed ones is returned.
+    """
     vendor_path = os.path.join(source_directory, vendor_folder)
     if not NO_VENDOR and not os.path.exists(vendor_path):
         os.makedirs(vendor_path)
 
-    print("\nΑυτόματη Ανάλυση Εξαρτήσεων")
+    print("\nAutomatic dependency analysis")
 
     found_imports = []
-    # Ονόματα modules/packages που υπάρχουν ΜΕΣΑ στον ίδιο τον κώδικα: ένα `import boto3`
-    # μέσα στο boto3 δεν είναι εξάρτηση - χωρίς αυτό, το pip κατέβαζε το ίδιο το πακέτο
-    # (ή τον νόμιμο συνονόματό του, για malware) στο vendor/ και το αναλύαμε δύο φορές.
+    # Names of modules/packages that exist INSIDE the code itself: an `import boto3` inside boto3 is not
+    # a dependency - otherwise pip would download the package itself (or its legitimate namesake, for
+    # malware) into vendor/ and it would be analysed twice.
     local_names = set()
     for root, dirs, files in os.walk(source_directory):
         rel_parts = os.path.relpath(root, source_directory).split(os.sep)
@@ -141,6 +157,7 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
                         file_content = f.read()
                         tree = ast.parse(file_content)
 
+                    # top-level name of every absolute import
                     for node in ast.walk(tree):
                         if isinstance(node, ast.Import):
                             for alias in node.names:
@@ -151,8 +168,9 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
                                 package_name = node.module.split(".")[0]
                                 found_imports.append(package_name)
                 except Exception as e:
-                    print(f"Αδυναμία ανάλυσης του αρχείου {file}: {e}")
+                    print(f"Could not parse file {file}: {e}")
 
+    # keep third-party names only, in first-seen order, without duplicates
     external_packages = []
     for pkg in found_imports:
         if pkg in BUILD_TOOLING_EXCLUDE or pkg in local_names:
@@ -166,7 +184,7 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
 
     if NO_VENDOR:
         deps = sorted({IMPORT_TO_PACKAGE.get(p, p) for p in external_packages})
-        print(f"CODEQL_NO_VENDOR=1: {len(deps)} εξαρτήσεις καταγράφονται χωρίς εγκατάσταση: {deps[:15]}")
+        print(f"CODEQL_NO_VENDOR=1: {len(deps)} dependencies recorded without installation: {deps[:15]}")
         return deps
 
     installed_packages = []
@@ -176,13 +194,11 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
         else:
             dist_name = pkg
 
-        print(f"Κατέβασμα: {dist_name} -> vendor/")
+        print(f"Downloading: {dist_name} -> vendor/")
 
-        # --no-cache-dir: αυτά τα vendor installs είναι one-off - ο φάκελος
-        # vendor/ σβήνεται στο ΕΠΟΜΕΝΟ πακέτο ούτως ή άλλως (clean_staging()).
-        # Χωρίς αυτό, το pip cache μεγαλώνει επ' άπειρον σε χιλιάδες
-        # εγκαταστάσεις (ήδη είχε φτάσει τα 10GB μία φορά) - πιθανή αιτία
-        # των crashes γύρω στο ίδιο σημείο κάθε φορά.
+        # --no-cache-dir: these vendor installs are one-off - vendor/ is deleted before the NEXT package
+        # anyway (clean_staging()). Otherwise the pip cache grows without bound over thousands of
+        # installations.
         pip_command = [
             sys.executable, "-m", "pip", "install", dist_name,
             "--target", vendor_path, "--no-deps", "--no-cache-dir",
@@ -190,7 +206,7 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
         try:
             result = run_with_hard_timeout(pip_command, timeout=90, capture_output=True)
         except subprocess.TimeoutExpired:
-            print(f"  [!] Timeout (90s) κατά την εγκατάσταση {dist_name} - παράλειψη.")
+            print(f"  [!] Timeout (90s) while installing {dist_name} - skipped.")
             continue
 
         if result.returncode == 0:
@@ -202,6 +218,7 @@ def auto_fetch_dependencies(source_directory, vendor_folder=VENDOR_FOLDER):
 
 
 def strip_noise_dirs(vendor_path):
+    """Delete documentation/test/example folders (NOISE_DIR_NAMES) from the installed vendor packages."""
     if not os.path.exists(vendor_path):
         return
     removed = []
@@ -217,12 +234,16 @@ def strip_noise_dirs(vendor_path):
                     pass
             else:
                 keep_dirs.append(d)
-        dirs[:] = keep_dirs
+        dirs[:] = keep_dirs  # do not descend into removed folders
     if removed:
-        print(f"Αφαιρέθηκαν {len(removed)} 'θορυβώδεις' vendor φάκελοι (docs/tests/examples/static).")
+        print(f"Removed {len(removed)} 'noise' vendor folders (docs/tests/examples/static).")
 
 
 def generate_dependency_tree(source_directory, vendor_folder=VENDOR_FOLDER):
+    """
+    Write results/dependency_tree.json: {installed package: sorted Requires-Dist names}, read from the
+    METADATA file of every *.dist-info folder in vendor/.
+    """
     output_path = os.path.join(RESULTS_DIR, "dependency_tree.json")
     vendor_path = os.path.join(source_directory, vendor_folder)
 
@@ -240,11 +261,12 @@ def generate_dependency_tree(source_directory, vendor_folder=VENDOR_FOLDER):
                     if line.startswith("Name:"):
                         package_name = line.split(":", 1)[1].strip()
                     elif line.startswith("Requires-Dist:"):
+                        # "name (>=1.0); extra == 'x'" -> "name"
                         dependency = line.split(":", 1)[1].strip()
                         dependency_name = dependency.split(";")[0].split()[0]
                         requires.append(dependency_name)
         except Exception as e:
-            print(f"Πρόβλημα ανάγνωσης αρχείου {meta_file}: {e}")
+            print(f"Problem reading file {meta_file}: {e}")
 
         if package_name != "":
             dependency_tree[package_name] = sorted(list(set(requires)))
@@ -256,6 +278,7 @@ def generate_dependency_tree(source_directory, vendor_folder=VENDOR_FOLDER):
 
 
 def safe_remove_db(db_name, retries=5, delay=1.0):
+    """Delete an old CodeQL database folder, retrying (files may still be held briefly); raise if it survives."""
     if not os.path.exists(db_name):
         return
     last_err = None
@@ -269,11 +292,16 @@ def safe_remove_db(db_name, retries=5, delay=1.0):
     shutil.rmtree(db_name, ignore_errors=True)
     if os.path.exists(db_name):
         raise RuntimeError(
-            f"Δεν κατάφερα να διαγράψω την παλιά database {db_name} μετά από {retries} προσπάθειες: {last_err}"
+            f"Could not delete the old database {db_name} after {retries} attempts: {last_err}"
         )
 
 
 def run_codeql(target_dir, queries_list, language=LANGUAGE):
+    """
+    Create a fresh CodeQL database of target_dir for one language and run every (query, csv) pair:
+    query run -> .bqrs -> decoded to CSV. Any failure raises (the caller skips the language).
+    """
+    # databases live next to the analysed folder, never inside it
     db_root = os.path.join(os.path.dirname(os.path.normpath(target_dir)), "codeql_dbs")
     if not os.path.exists(db_root):
         os.makedirs(db_root)
@@ -282,7 +310,7 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
 
     safe_remove_db(db_name)
 
-    print(f"Δημιουργία βάσης δεδομένων CodeQL για {language}...")
+    print(f"Creating the CodeQL database for {language}...")
     create_cmd = [
         CODEQL_BIN, "database", "create", db_name,
         f"--language={language}",
@@ -292,7 +320,7 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
     run_with_hard_timeout(create_cmd, timeout=DB_CREATE_TIMEOUT, check=True)
 
     for query_file, csv_output in queries_list:
-        print(f"Εκτέλεση ερωτήματος: {os.path.basename(query_file)}")
+        print(f"Running query: {os.path.basename(query_file)}")
         raw_bqrs = os.path.splitext(csv_output)[0] + ".bqrs"
 
         run_cmd = [
@@ -301,6 +329,7 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
         ]
         run_with_hard_timeout(run_cmd, timeout=QUERY_TIMEOUT, check=True)
 
+        # binary query results -> CSV for build_behavior_chain.py
         decode_cmd = [CODEQL_BIN, "bqrs", "decode", raw_bqrs, "--format=csv", f"--output={csv_output}"]
         run_with_hard_timeout(decode_cmd, timeout=120, check=True)
 
@@ -310,6 +339,7 @@ def run_codeql(target_dir, queries_list, language=LANGUAGE):
 
 if __name__ == "__main__":
 
+    # 1. dependencies: recorded by name (NO_VENDOR) or installed into vendor/ with their metadata tree
     deps = auto_fetch_dependencies(TARGET_DIR)
     if NO_VENDOR:
         with open(os.path.join(RESULTS_DIR, "dependency_tree.json"), "w", encoding="utf-8") as f:
@@ -322,6 +352,7 @@ if __name__ == "__main__":
         "javascript": "js_queries"
     }
 
+    # (query file, CSV output) per language
     QUERIES_BY_LANGUAGE = {
         "python": [
             ("find_flow.ql", "final_codeql_results_python.csv"),
@@ -337,6 +368,7 @@ if __name__ == "__main__":
         ],
     }
 
+    # 2. one CodeQL pass per language; a failing language is skipped, the other still runs
     for lang in QUERIES_BY_LANGUAGE:
         print(f"\nCodeQL pass: {lang}")
 
@@ -351,7 +383,8 @@ if __name__ == "__main__":
         try:
             run_codeql(TARGET_DIR, queries_to_run, language=lang)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as e:
-            print(f"[!] Παράλειψη γλώσσας '{lang}': {e}")
+            # NOTE: rerun_chains.py and fetch_benign_test_set.py look for "Skipping language 'python'"
+            print(f"[!] Skipping language '{lang}': {e}")
             continue
 
-    print(f"\nΤα αποτελέσματα CodeQL αποθηκεύτηκαν στον φάκελο: {RESULTS_DIR}")
+    print(f"\nThe CodeQL results were saved in: {RESULTS_DIR}")

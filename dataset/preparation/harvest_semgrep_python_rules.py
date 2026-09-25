@@ -24,6 +24,7 @@ LICENSE = "Semgrep Rules License v1.0 - (c) Semgrep, Inc. - https://semgrep.dev/
 
 
 def main():
+    """Collect every Python rule with metadata.category == security from a clone of semgrep-rules (argument 1) into semgrep_rules.json (message + CWE, license noted on every rule)."""
     root = os.path.join(sys.argv[1], "python")
     rules, seen = [], set()
     for dp, _, files in os.walk(root):
@@ -36,6 +37,7 @@ def main():
                 continue
             for r in (data or {}).get("rules", []) or []:
                 md = r.get("metadata") or {}
+                # security rules for Python only
                 if str(md.get("category", "")).lower() != "security" or "python" not in (r.get("languages") or []):
                     continue
                 msg = re.sub(r"\s+", " ", str(r.get("message", ""))).strip()

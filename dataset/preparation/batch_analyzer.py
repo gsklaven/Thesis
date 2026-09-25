@@ -1,3 +1,15 @@
+"""
+Batch static analysis of the malware samples with the CodeQL pipeline, and the shared helpers that the
+other analysis scripts (rerun_chains.py, fetch_benign_test_set.py, payload_scan.py) import.
+
+For every entry of the dataset JSON the sample is copied to a staging folder, its archives are
+extracted safely (path-traversal / symlink / size checks, encrypted malware zips), and
+inference/codeql_pipeline/analysis.py + build_behavior_chain.py are run with hard timeouts. The result
+(sliced_behavior_chain.json) is stored as dataset/analyzed_chains/<package>.json.
+
+Resumable: packages with a result, or with an _oversized_ / _failed_ marker from a previous run, are
+skipped, so a restart never waits again on the same failing packages.
+"""
 import os
 import json
 import shutil
@@ -21,9 +33,8 @@ _MATCHED_JSON = os.path.join(_THESIS_ROOT, "dataset", "malware_dataset_matched.j
 DATASET_JSON = _DEDUPED_JSON if os.path.exists(_DEDUPED_JSON) else _MATCHED_JSON
 FINAL_JSON_DIR = os.path.join(_THESIS_ROOT, "dataset", "analyzed_chains")
 
-# ΝΕΟ: STAGING_DIR μπορεί τώρα να δείχνει οπουδήποτε (π.χ. σε στικάκι με
-# άφθονο ελεύθερο χώρο), μέσω env var - χρήσιμο όταν ο κύριος δίσκος δεν
-# έχει άλλο χώρο. Χωρίς να οριστεί, συνεχίζει να δουλεύει όπως πριν.
+# The staging folder can point anywhere (e.g. a disk with plenty of free space) through an
+# environment variable; by default it lives in the project folder.
 STAGING_DIR = os.environ.get(
     "BATCH_STAGING_DIR", os.path.join(_THESIS_ROOT, "temp_malware_analysis")
 )
@@ -35,11 +46,9 @@ ANALYSIS_SCRIPT = os.path.join(PIPELINE_DIR, "analysis.py")
 BUILD_SCRIPT = os.path.join(PIPELINE_DIR, "build_behavior_chain.py")
 RESULTS_JSON = os.path.join(PIPELINE_RESULTS_DIR, "sliced_behavior_chain.json")
 
-MAX_EXTRACT_PASSES = 3
-# ΝΕΟ: configurable μέσω env var, ώστε να μπορείς να τα μειώσεις άμεσα
-# (χωρίς αλλαγή κώδικα) όταν θες να "τρέξεις γρήγορα" το τελευταίο
-# κομμάτι ενός μεγάλου corpus - τα περισσότερα φυσιολογικά πακέτα
-# τελειώνουν σε δευτερόλεπτα, μόνο τα προβληματικά φτάνουν στο πλήρες όριο.
+MAX_EXTRACT_PASSES = 3  # archives inside archives are extracted up to this depth
+# Timeouts are configurable through environment variables, so they can be changed without code
+# changes; most packages finish in seconds, only problematic ones reach the full limit.
 ANALYSIS_TIMEOUT = int(os.environ.get("BATCH_ANALYSIS_TIMEOUT", "300"))
 BUILD_TIMEOUT = int(os.environ.get("BATCH_BUILD_TIMEOUT", "90"))
 MAX_STAGING_SIZE_MB = 50
@@ -47,14 +56,12 @@ MAX_STAGING_SIZE_BYTES = MAX_STAGING_SIZE_MB * 1024 * 1024
 MAX_SINGLE_FILE_SIZE = 100 * 1024 * 1024
 MIN_FREE_DISK_GB = 2
 
-# ΝΕΟ - κρίσιμο data-integrity fix: αν το CodeQL αποτύχει να βρει κώδικα για
-# ΟΠΟΙΑΔΗΠΟΤΕ γλώσσα (π.χ. "Processed 0 modules"), το analysis.py ΔΕΝ
-# επιστρέφει σφάλμα (απλά τυπώνει "Παράλειψη γλώσσας" και συνεχίζει κανονικά,
-# exit code 0). Αν δεν καθαρίσουμε τα ΕΝΔΙΑΜΕΣΑ CSV (final_codeql_results_*,
-# call_graph_*, backward_slice_*, control_deps_*) πριν από ΚΑΘΕ πακέτο, το
-# build_behavior_chain.py θα ξαναδιαβάσει ΠΑΛΙΑ CSV από το ΠΡΟΗΓΟΥΜΕΝΟ πακέτο
-# που πέτυχε - παράγοντας ένα "επιτυχές" αλλά ΛΑΘΟΣ αποτέλεσμα, με το όνομα
-# του τρέχοντος πακέτου αλλά το behavior ενός ΤΕΛΕΙΩΣ διαφορετικού.
+# Data-integrity safeguard: if CodeQL finds no code for a language (e.g. "Processed 0 modules"),
+# analysis.py does NOT fail - it prints "Skipping language" and exits with code 0. Unless the
+# INTERMEDIATE CSV files (final_codeql_results_*, call_graph_*, backward_slice_*, control_deps_*) are
+# removed before EVERY package, build_behavior_chain.py would re-read the OLD CSVs of the previous
+# successful package - a "successful" but WRONG result, with the current package's name and the
+# behaviour of a completely different one.
 CSV_GLOB_PATTERNS = [
     "final_codeql_results_*.csv", "call_graph_*.csv",
     "backward_slice_*.csv", "control_deps_*.csv",
@@ -62,6 +69,7 @@ CSV_GLOB_PATTERNS = [
 
 
 def get_dir_size(path):
+    """Total size in bytes of all files under path (unreadable files are ignored)."""
     total = 0
     for root, dirs, files in os.walk(path):
         for f in files:
@@ -75,11 +83,9 @@ def get_dir_size(path):
 
 def get_dir_size_capped(path, cap_bytes):
     """
-    ΝΕΟ: μετράει το μέγεθος ΠΡΙΝ οποιαδήποτε αντιγραφή, σταματώντας νωρίς
-    μόλις ξεπεραστεί το όριο - αποφεύγει να διαβάσει ΟΛΟΚΛΗΡΟ έναν τεράστιο
-    φάκελο μόνο και μόνο για να μετρήσει το μέγεθός του. Επιστρέφει το
-    μέγεθος (μπορεί να είναι ελαφρώς υποεκτιμημένο αν σταμάτησε νωρίς) και
-    True/False αν ξεπέρασε το cap.
+    Size of a folder measured BEFORE any copying, stopping as soon as the cap is exceeded, so a huge
+    folder is never read completely just to measure it. Returns (size, exceeded); the size may be an
+    underestimate when the walk stopped early.
     """
     total = 0
     for root, dirs, files in os.walk(path):
@@ -96,17 +102,19 @@ def get_dir_size_capped(path, cap_bytes):
 
 def run_with_hard_timeout(cmd, timeout, **kwargs):
     """
-    ΣΗΜΑΝΤΙΚΟ FIX: το subprocess.Popen() (σε αντίθεση με το subprocess.run())
-    ΔΕΝ καταλαβαίνει το "capture_output" - είναι convenience param ΜΟΝΟ του
-    run(), που εσωτερικά το μεταφράζει σε stdout=PIPE/stderr=PIPE. Αφού εδώ
-    καλούμε Popen() απευθείας (χρειαζόμαστε το για το killpg), κάνουμε ΕΜΕΙΣ
-    αυτή τη μετάφραση πρώτα, ώστε όλα τα call sites να συνεχίσουν να
-    δουλεύουν με το γνωστό capture_output=True χωρίς αλλαγές.
+    subprocess.run() replacement whose timeout kills the WHOLE process group (CodeQL starts Java
+    child processes that would otherwise survive). Returns a CompletedProcess; re-raises
+    TimeoutExpired after the kill.
+
+    subprocess.Popen() (unlike run()) does not understand "capture_output" - it is a convenience
+    parameter of run() that becomes stdout=PIPE / stderr=PIPE. Popen is needed here (for killpg), so
+    that translation is done first and every call site can keep using capture_output=True.
     """
     if kwargs.pop("capture_output", False):
         kwargs.setdefault("stdout", subprocess.PIPE)
         kwargs.setdefault("stderr", subprocess.PIPE)
 
+    # new session -> the child is the leader of its own process group
     proc = subprocess.Popen(cmd, start_new_session=True, **kwargs)
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
@@ -124,14 +132,17 @@ def run_with_hard_timeout(cmd, timeout, **kwargs):
 
 
 def clean_staging():
+    """
+    Start every package from a clean state: empty the staging folder, remove the previous result JSON
+    and intermediate CSVs, and delete stale pip temp folders left in /tmp by killed processes.
+    """
+    # safety guard: never delete an unexpected folder
     assert STAGING_DIR.endswith("temp_malware_analysis"), \
         f"Refusing to rmtree unexpected path: {STAGING_DIR}"
 
-    # ΝΕΟ FIX: σπάνιο race condition (πιθανό υπολειπόμενη διεργασία γράφει
-    # μέσα σε 'vendor/' ακριβώς τη στιγμή που γίνεται rmtree) μπορούσε να
-    # ρίξει ολόκληρο το batch_analyzer.py με OSError "Directory not empty".
-    # Retry με μικρή καθυστέρηση - αν επιμείνει, ignore_errors ώστε ΕΝΑ
-    # πεισματάρικο πακέτο να μη σταματήσει χιλιάδες υπόλοιπα.
+    # A rare race (a leftover process writing into 'vendor/' exactly during rmtree) could crash the
+    # whole batch with OSError "Directory not empty". Retry with a short delay; if it persists, use
+    # ignore_errors so that ONE stubborn package does not stop thousands of others.
     if os.path.exists(STAGING_DIR):
         for attempt in range(3):
             try:
@@ -139,30 +150,26 @@ def clean_staging():
                 break
             except OSError as e:
                 if attempt < 2:
-                    print(f"  [!] rmtree retry ({e}) - περιμένω 1s...")
+                    print(f"  [!] rmtree retry ({e}) - waiting 1s...")
                     time.sleep(1)
                 else:
-                    print(f"  [!] rmtree απέτυχε 3 φορές, συνεχίζω με ignore_errors: {e}")
+                    print(f"  [!] rmtree failed 3 times, continuing with ignore_errors: {e}")
                     shutil.rmtree(STAGING_DIR, ignore_errors=True)
     os.makedirs(STAGING_DIR, exist_ok=True)
 
     if os.path.exists(RESULTS_JSON):
         os.remove(RESULTS_JSON)
 
-    # ΝΕΟ: καθάρισε ΚΑΙ τα ενδιάμεσα CSV - βλ. σχόλιο πάνω. Χωρίς αυτό, ένα
-    # πακέτο όπου το CodeQL αποτυγχάνει σιωπηλά (0 modules) "κληρονομεί" τα
-    # behavior chains του ΠΡΟΗΓΟΥΜΕΝΟΥ πακέτου που πέτυχε.
+    # Remove the intermediate CSVs as well (see the comment at CSV_GLOB_PATTERNS). Without this, a
+    # package on which CodeQL silently fails (0 modules) "inherits" the chains of the previous package.
     for pattern in CSV_GLOB_PATTERNS:
         for stale_csv in glob.glob(os.path.join(PIPELINE_RESULTS_DIR, pattern)):
             os.remove(stale_csv)
 
-    # ΝΕΟ: καθάρισε ΠΑΛΙΟΥΣ (30+ λεπτά) προσωρινούς φακέλους του ίδιου του
-    # pip (pip-unpack-*, pip-target-*) μέσα στο /tmp. Όταν το run_with_hard_
-    # timeout() στέλνει SIGKILL σε αργή εγκατάσταση εξάρτησης, το pip ΔΕΝ
-    # προλαβαίνει να καθαρίσει τους δικούς του temp φακέλους (SIGKILL δεν
-    # πιάνεται) - χωρίς αυτό εδώ, αυτό συσσωρεύεται σε δεκάδες GB μέσα σε
-    # χιλιάδες πακέτα. Το +30 λεπτά αφήνει ανέγγιχτο ό,τι πιθανό
-    # χρησιμοποιεί ΤΩΡΑ ένα ενεργό, τρέχον install.
+    # Remove OLD (30+ minutes) temporary folders of pip (pip-unpack-*, pip-target-*) in /tmp. When
+    # run_with_hard_timeout() SIGKILLs a slow dependency installation, pip cannot clean its own temp
+    # folders (SIGKILL cannot be caught); over thousands of packages they add up to tens of GB. The
+    # 30-minute margin leaves alone anything an active installation may still be using.
     cutoff = time.time() - 30 * 60
     for prefix in ("pip-unpack-", "pip-target-"):
         for stale_dir in glob.glob(f"/tmp/{prefix}*"):
@@ -174,6 +181,7 @@ def clean_staging():
 
 
 def copy_recursive(src_dir, dest_dir):
+    """Copy the contents of src_dir into dest_dir (merging into existing folders)."""
     for item in os.listdir(src_dir):
         s = os.path.join(src_dir, item)
         d = os.path.join(dest_dir, item)
@@ -184,6 +192,7 @@ def copy_recursive(src_dir, dest_dir):
 
 
 def _safe_tar_extract(tar, dest_path):
+    """Extract a tar archive member by member, skipping path traversal, links and oversized files."""
     dest_real = os.path.realpath(dest_path)
     for member in tar.getmembers():
         member_path = os.path.join(dest_path, member.name)
@@ -199,18 +208,16 @@ def _safe_tar_extract(tar, dest_path):
         tar.extract(member, dest_path)
 
 
-# ΝΕΟ FIX: τα malware samples αυτού του dataset (pypi_malregistry κλπ.) είναι
-# σχεδόν πάντα zip-αρισμένα με τον καθιερωμένο κωδικό "infected" (σύμβαση
-# malware-research corpora, ώστε να μην τα ανοίγει/σαρώνει κατά λάθος AV).
-# Το zipfile.ZipFile.extract() ΑΓΝΟΕΙ σιωπηλά το pwd για μη-κρυπτογραφημένα
-# entries, οπότε είναι ασφαλές να το περνάμε ΠΑΝΤΑ - χωρίς αυτό, ΚΑΘΕ
-# κρυπτογραφημένο πακέτο έριχνε RuntimeError στο ΠΡΩΤΟ του entry, η
-# εξαγωγή θεωρούνταν αποτυχημένη, το staging έμενε άδειο (μόνο το ίδιο το
-# .zip), και το CodeQL έβλεπε "0 modules" -> ψευδές "0 behavior chains".
+# Malware samples of these datasets (pypi_malregistry etc.) are usually zipped with the conventional
+# password "infected" (a malware-research convention, so that antivirus software does not open or scan
+# them by accident). zipfile.ZipFile.extract() silently IGNORES pwd for unencrypted entries, so it is
+# safe to retry with it; without it, every encrypted sample failed on its first entry, the staging
+# folder stayed empty and CodeQL reported "0 modules" -> a false "0 behavior chains".
 ZIP_MALWARE_PASSWORD = b"infected"
 
 
 def _safe_zip_extract(zf, dest_path, pwd=None):
+    """Extract a zip archive entry by entry, skipping path traversal and oversized files."""
     dest_real = os.path.realpath(dest_path)
     for info in zf.infolist():
         target = os.path.join(dest_path, info.filename)
@@ -224,13 +231,14 @@ def _safe_zip_extract(zf, dest_path, pwd=None):
 
 
 def _try_extract_as_tar(fpath, root):
-    # "r:*" αυτόματα ανιχνεύει gzip/bz2/xz/χωρίς συμπίεση - πιο ανθεκτικό
-    # από το πριν "r:gz" (που απαιτούσε ΑΠΟΚΛΕΙΣΤΙΚΑ gzip).
+    """Extract fpath as a tar archive of any compression into root."""
+    # "r:*" detects gzip/bz2/xz/uncompressed automatically (more robust than "r:gz")
     with tarfile.open(fpath, "r:*") as tar:
         _safe_tar_extract(tar, root)
 
 
 def _try_extract_as_zip(fpath, root):
+    """Extract fpath as a zip archive into root, retrying with the malware password if it is encrypted."""
     with zipfile.ZipFile(fpath, "r") as z:
         try:
             _safe_zip_extract(z, root)
@@ -241,6 +249,10 @@ def _try_extract_as_zip(fpath, root):
 
 
 def extract_archives(directory):
+    """
+    Extract every archive (.tar.gz, .tgz, .tar, .zip, .whl) under directory in place and delete the
+    archive, repeating up to MAX_EXTRACT_PASSES times for nested archives.
+    """
     for _ in range(MAX_EXTRACT_PASSES):
         found_archive = False
         for root, dirs, files in os.walk(directory):
@@ -251,11 +263,9 @@ def extract_archives(directory):
                 if not lower.endswith((".tar.gz", ".tgz", ".tar", ".zip", ".whl")):
                     continue
 
-                # ΝΕΟ FIX: μερικά αρχεία στο πηγαίο dataset έχουν ΛΑΘΟΣ
-                # επέκταση (π.χ. πραγματικό .whl αποθηκευμένο ως ".tar.gz" -
-                # δίνει "not a gzip file"). Δοκιμάζουμε ΠΡΩΤΑ τη μέθοδο που
-                # υποδεικνύει η επέκταση, και αν αποτύχει με σφάλμα ΜΟΡΦΗΣ,
-                # δοκιμάζουμε την ΑΛΛΗ πριν τα παρατήσουμε εντελώς.
+                # Some files of the source datasets have the WRONG extension (e.g. a real .whl saved
+                # as ".tar.gz" -> "not a gzip file"). The method suggested by the extension is tried
+                # FIRST and, if it fails with a format error, the OTHER one before giving up.
                 prefers_tar = lower.endswith((".tar.gz", ".tgz", ".tar"))
                 strategies = (
                     [_try_extract_as_tar, _try_extract_as_zip] if prefers_tar
@@ -272,10 +282,9 @@ def extract_archives(directory):
                     except Exception as e:
                         last_error = e
 
-                # ΝΕΟ FIX: αρχεία της μορφής <pkg>/<hash>/<pkg>-<hash>.tar.gz περιέχουν
-                # φάκελο με ΙΔΙΟ όνομα με το ίδιο το αρχείο -> η εξαγωγή στον ίδιο
-                # φάκελο συγκρούεται με το αρχείο, αποτυγχάνει, και το CodeQL βλέπει
-                # 0 modules (ψευδές "0 chains"). Δεύτερη προσπάθεια σε ξεχωριστό φάκελο.
+                # Archives like <pkg>/<hash>/<pkg>-<hash>.tar.gz contain a folder with the SAME name
+                # as the archive itself -> extracting into the same folder collides with the file and
+                # fails (and CodeQL sees 0 modules). Second attempt into a separate folder.
                 if not extracted:
                     alt_root = fpath + ".x"
                     os.makedirs(alt_root, exist_ok=True)
@@ -293,12 +302,13 @@ def extract_archives(directory):
                     os.remove(fpath)
                     found_archive = True
                 else:
-                    print(f"  [!] Αδυναμία αποσυμπίεσης {fname} (δοκιμάστηκαν tar ΚΑΙ zip): {last_error}")
+                    print(f"  [!] Could not extract {fname} (tried tar AND zip): {last_error}")
         if not found_archive:
             break
 
 
 def main():
+    """Analyse every dataset entry that has no result or marker yet; print a final summary."""
     if not os.path.exists(FINAL_JSON_DIR):
         os.makedirs(FINAL_JSON_DIR)
 
@@ -313,81 +323,71 @@ def main():
 
     for idx, item in enumerate(dataset):
         pkg_name = item["package_name"]
-        src_path = resolve_source_path(item["source_code_path"])   # βλ. utils.resolve_source_path
+        src_path = resolve_source_path(item["source_code_path"])   # see utils.resolve_source_path
         final_dest = os.path.join(FINAL_JSON_DIR, f"{pkg_name}.json")
 
         oversized_marker = os.path.join(FINAL_JSON_DIR, f"_oversized_{pkg_name}.marker")
-        # ΝΕΟ: ξεχωριστό marker για ΟΠΟΙΑΔΗΠΟΤΕ άλλη αποτυχία (timeout,
-        # σφάλμα CodeQL/Builder, κενό αποτέλεσμα) - πριν, ΚΑΝΕΝΑ από αυτά
-        # δεν άφηνε μόνιμο ίχνος, οπότε ΚΑΘΕ restart ξαναπερίμενε ολόκληρο
-        # το timeout (μέχρι 10 λεπτά) στα ΙΔΙΑ πακέτα, ξανά και ξανά.
+        # a separate marker for ANY other failure (timeout, CodeQL/builder error, no result), so a
+        # restart does not wait for the full timeout again on the same packages
         failed_marker = os.path.join(FINAL_JSON_DIR, f"_failed_{pkg_name}.marker")
 
         if os.path.exists(final_dest):
-            print(f"[{idx+1}/{total}] Παράλειψη (έχει ήδη αναλυθεί): {pkg_name}")
+            print(f"[{idx+1}/{total}] Skipped (already analysed): {pkg_name}")
             skipped += 1
             continue
 
-        # ΝΕΟ: αν ήδη ξέρουμε από προηγούμενο run ότι είναι πολύ μεγάλο,
-        # μην το ξαναδοκιμάσεις καθόλου - ΧΩΡΙΣ αυτό, κάθε μελλοντικό run
-        # θα ξανααντέγραφε/ξαναμετρούσε το ίδιο τεράστιο πακέτο για πάντα.
+        # already known to be too large from a previous run: never copy/measure it again
         if os.path.exists(oversized_marker):
-            print(f"[{idx+1}/{total}] Παράλειψη (γνωστό ως πολύ μεγάλο): {pkg_name}")
+            print(f"[{idx+1}/{total}] Skipped (known to be too large): {pkg_name}")
             skipped += 1
             continue
 
         if os.path.exists(failed_marker):
-            print(f"[{idx+1}/{total}] Παράλειψη (γνωστή προηγούμενη αποτυχία): {pkg_name}")
+            print(f"[{idx+1}/{total}] Skipped (known previous failure): {pkg_name}")
             skipped += 1
             continue
 
-        # ΝΕΟ: γρήγορος έλεγχος μεγέθους ΤΗΣ ΠΗΓΗΣ πριν από ΟΠΟΙΑΔΗΠΟΤΕ
-        # αντιγραφή - αν είναι ήδη προφανώς τεράστιο, μην το αντιγράψεις
-        # καν (γλιτώνει χρόνο ΚΑΙ χώρο δίσκου). Δεν είναι 100% ακριβές
-        # (η αποσυμπίεση μπορεί να το μεγαλώσει/μικρύνει), αλλά πιάνει τις
-        # προφανείς περιπτώσεις φθηνά - ο μετά-αποσυμπίεσης έλεγχος παρακάτω
-        # παραμένει ως τελικό, ακριβές φίλτρο.
+        # Quick size check of the SOURCE before any copying: an obviously huge sample is not copied at
+        # all (saves time AND disk space). Extraction may change the size, so the exact check after
+        # extraction below remains the final filter.
         if os.path.exists(src_path):
             src_size, src_over = get_dir_size_capped(src_path, MAX_STAGING_SIZE_BYTES)
             if src_over:
-                print(f"[{idx+1}/{total}] Παράλειψη ΠΡΙΝ την αντιγραφή "
-                      f"(πηγή ήδη >{MAX_STAGING_SIZE_MB}MB): {pkg_name}")
+                print(f"[{idx+1}/{total}] Skipped BEFORE copying "
+                      f"(source already >{MAX_STAGING_SIZE_MB}MB): {pkg_name}")
                 with open(oversized_marker, "w", encoding="utf-8") as f:
                     f.write(f"source_size_at_least={src_size}\n")
                 failed += 1
                 continue
 
-        # ΝΕΟ FIX: έλεγχος ΚΑΙ των δύο δίσκων (όχι μόνο του FINAL_JSON_DIR) -
-        # αν το STAGING_DIR έχει ανακατευθυνθεί (π.χ. σε στικάκι μέσω
-        # BATCH_STAGING_DIR), πρέπει να ελέγχουμε ΚΑΙ εκεί. Χωρίς αυτό, ένα
-        # redirect δεν βοηθάει καθόλου - ο έλεγχος έβλεπε ΠΑΝΤΑ μόνο τον
-        # κύριο δίσκο όπου ζει το FINAL_JSON_DIR, ανεξάρτητα από πού
-        # δείχνει πραγματικά το staging.
+        # Check BOTH disks: the output disk and the (possibly redirected, BATCH_STAGING_DIR) staging
+        # disk. Checking only the output disk would make a staging redirect useless.
         final_free_gb = shutil.disk_usage(FINAL_JSON_DIR).free / (1024 ** 3)
         staging_disk_path = STAGING_DIR if os.path.exists(STAGING_DIR) else os.path.dirname(STAGING_DIR)
         staging_free_gb = shutil.disk_usage(staging_disk_path).free / (1024 ** 3)
         free_gb = min(final_free_gb, staging_free_gb)
         if free_gb < MIN_FREE_DISK_GB:
-            print(f"\n[!] ΣΤΑΜΑΤΑΩ: Μόνο {free_gb:.1f}GB ελεύθερα "
+            print(f"\n[!] STOPPING: only {free_gb:.1f}GB free "
                   f"(output disk: {final_free_gb:.1f}GB, staging disk: {staging_free_gb:.1f}GB) "
                   f"< {MIN_FREE_DISK_GB}GB.")
             break
 
-        print(f"\n[{idx+1}/{total}] === Ανάλυση: {pkg_name} ===")
+        print(f"\n[{idx+1}/{total}] === Analysing: {pkg_name} ===")
         clean_staging()
         copy_recursive(src_path, STAGING_DIR)
 
-        print("  [-] Αποσυμπίεση αρχείων (αν υπάρχουν)...")
+        print("  [-] Extracting archives (if any)...")
         extract_archives(STAGING_DIR)
 
         staged_size = get_dir_size(STAGING_DIR)
         if staged_size > MAX_STAGING_SIZE_BYTES:
-            print(f"  [!] Παράλειψη: {staged_size/1e6:.0f}MB > {MAX_STAGING_SIZE_MB}MB όριο.")
+            print(f"  [!] Skipped: {staged_size/1e6:.0f}MB > {MAX_STAGING_SIZE_MB}MB limit.")
             with open(oversized_marker, "w", encoding="utf-8") as f:
                 f.write(f"staged_size_after_extract={staged_size}\n")
             failed += 1
             continue
 
+        # the CodeQL pipeline reads the folder to analyse from this variable
         env = os.environ.copy()
         env["CODEQL_TARGET_DIR"] = STAGING_DIR
 
@@ -397,7 +397,7 @@ def main():
                 capture_output=True, text=True,
             )
         except subprocess.TimeoutExpired:
-            print(f"  [!] TIMEOUT (10 λεπτά). Προχωράμε...")
+            print(f"  [!] TIMEOUT (analysis). Moving on...")
             with open(failed_marker, "w", encoding="utf-8") as f:
                 f.write("reason=timeout_analysis_py\n")
             failed += 1
@@ -409,8 +409,8 @@ def main():
                 f.write(res1.stdout or "")
                 f.write(res1.stderr or "")
             with open(failed_marker, "w", encoding="utf-8") as f:
-                f.write(f"reason=codeql_error, βλ. {log_path}\n")
-            print(f"  [!] Σφάλμα CodeQL — πλήρες log στο: {log_path}")
+                f.write(f"reason=codeql_error, see {log_path}\n")
+            print(f"  [!] CodeQL error - full log in: {log_path}")
             failed += 1
             continue
 
@@ -420,25 +420,23 @@ def main():
                 capture_output=True, text=True,
             )
         except subprocess.TimeoutExpired:
-            print(f"  [!] TIMEOUT (3 λεπτά). Προχωράμε...")
+            print(f"  [!] TIMEOUT (chain builder). Moving on...")
             with open(failed_marker, "w", encoding="utf-8") as f:
                 f.write("reason=timeout_build_behavior_chain\n")
             failed += 1
             continue
 
         if res2.returncode != 0:
-            print(f"  [!] Σφάλμα Builder")
+            print(f"  [!] Builder error")
             with open(failed_marker, "w", encoding="utf-8") as f:
                 f.write("reason=builder_error\n")
             failed += 1
             continue
 
         if os.path.exists(RESULTS_JSON):
-            # ΝΕΟ: έλεγχος ότι το αποτέλεσμα δεν είναι κενό - αν το CodeQL
-            # δεν βρήκε ΚΑΝΕΝΑ module (0 modules και στις δύο γλώσσες), το
-            # sliced_behavior_chain.json θα έχει total_behavior_chains == 0.
-            # Το καταγράφουμε ξεχωριστά (δεν είναι "λάθος" per se, αλλά
-            # χρήσιμο να ξέρεις πόσα πακέτα δεν έδωσαν κανένα εύρημα).
+            # An empty result is counted separately: if CodeQL found no module at all (0 modules in both
+            # languages), sliced_behavior_chain.json has total_behavior_chains == 0. Not an error as
+            # such, but useful to know how many packages gave no finding.
             try:
                 with open(RESULTS_JSON, "r", encoding="utf-8") as rf:
                     result_data = json.load(rf)
@@ -458,24 +456,24 @@ def main():
                 n_chains = _try_heuristic_scanner(STAGING_DIR, RESULTS_JSON)
                 shutil.copy2(RESULTS_JSON, final_dest)   # re-copy (heuristic or original)
                 if n_chains == 0:
-                    print(f"  [~] Επιτυχία, αλλά 0 behavior chains (CodeQL + heuristic scanner).")
+                    print(f"  [~] Success, but 0 behavior chains (CodeQL + heuristic scanner).")
                     empty_result += 1
                 else:
-                    print(f"  [✓] Επιτυχία! ({n_chains} heuristic chains)")
+                    print(f"  [✓] Success! ({n_chains} heuristic chains)")
             elif n_chains == 0:
-                print(f"  [~] Επιτυχία, αλλά 0 behavior chains (CodeQL).")
+                print(f"  [~] Success, but 0 behavior chains (CodeQL).")
                 empty_result += 1
             else:
-                print(f"  [✓] Επιτυχία! ({n_chains} behavior chains)")
+                print(f"  [✓] Success! ({n_chains} behavior chains)")
             success += 1
         else:
-            print(f"  [!] Δεν δημιουργήθηκε αποτέλεσμα (καμία εύρημα;)")
+            print(f"  [!] No result was created (no finding?)")
             with open(failed_marker, "w", encoding="utf-8") as f:
                 f.write("reason=no_result_produced\n")
             failed += 1
 
-    print(f"\n[*] Ολοκληρώθηκε. Επιτυχείς: {success} (εκ των οποίων {empty_result} με 0 chains) | "
-          f"Αποτυχίες: {failed} | Παραλείψεις: {skipped}")
+    print(f"\n[*] Done. Succeeded: {success} (of which {empty_result} with 0 chains) | "
+          f"Failed: {failed} | Skipped: {skipped}")
 
 
 # ── Heuristic scanner fallback ───────────────────────────────────────────────
@@ -489,7 +487,7 @@ def _try_heuristic_scanner(staging_dir: str, results_json: str) -> int:
     if not os.path.exists(SCANNER_SCRIPT):
         return 0
 
-    print("  [~] 0 CodeQL chains — εκτελώ heuristic scanner...")
+    print("  [~] 0 CodeQL chains - running the heuristic scanner...")
     try:
         res = run_with_hard_timeout(
             ["python3", SCANNER_SCRIPT, staging_dir],
@@ -504,7 +502,7 @@ def _try_heuristic_scanner(staging_dir: str, results_json: str) -> int:
 
     if res.returncode != 0:
         stderr_snippet = (res.stderr or "").strip()[:120]
-        print(f"  [!] Heuristic scanner απέτυχε: {stderr_snippet}")
+        print(f"  [!] Heuristic scanner failed: {stderr_snippet}")
         return 0
 
     # Scanner writes to its own RESULTS_DIR which IS the same pipeline results
@@ -514,7 +512,7 @@ def _try_heuristic_scanner(staging_dir: str, results_json: str) -> int:
             scan_data = json.load(rf)
         n = scan_data.get("summary", {}).get("total_behavior_chains", 0)
         if n:
-            print(f"  [~] Heuristic scanner: {n} pattern(s) βρέθηκαν.")
+            print(f"  [~] Heuristic scanner: {n} pattern(s) found.")
         return n
     except Exception:
         return 0

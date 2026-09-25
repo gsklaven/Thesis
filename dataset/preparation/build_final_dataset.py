@@ -1,9 +1,20 @@
 """
-Τελική επιλογή ισορροπημένου dataset για το RAG.
+Final, code-aware selection of the malware samples used by the RAG (index + evaluation).
 
-Ποικιλία με βάση τον κώδικα: ένα πακέτο ανά payload_signature (κανονικοποιημένος κώδικας των
-Behavior Chains) σε όλο το σύνολο, έως MAX_PER_CAMPAIGN ανά πραγματική καμπάνια, και τα πακέτα
-χωρίς chains με την αναλογία του πληθυσμού (βλ. σχόλιο στις σταθερές παρακάτω).
+Selection rules (see the comment at the constants below):
+  - at most MAX_PER_PAYLOAD package per payload_signature (normalised code of the package's
+    Behavior Chains) in the WHOLE set, so no piece of malicious code appears twice;
+  - at most MAX_PER_CAMPAIGN packages per real campaign (same OSV report text);
+  - report texts that cover >= HETEROGENEOUS_MIN_PAYLOADS different payloads are generic boilerplate
+    and are not treated as campaigns;
+  - packages without Behavior Chains (static misses) are kept at their population rate.
+Excluded beforehand: MalwareBench samples labelled false_positive (legitimate packages) and samples
+without any payload code (payload_scan.py).
+
+Inputs : dataset/analyzed_chains/*.json, attack_type_tags.json, payload_scan.json,
+         excluded_malwarebench_false_positive.json
+Outputs: final_diverse_subset/ (copies), final_diverse_subset_packages.json, final_diverse_subset_meta.json
+         (read by split_train_test.py), final_dataset_report.json, excluded_no_payload_packages.json
 """
 
 import collections
@@ -30,64 +41,67 @@ EXCLUDED_NO_PAYLOAD_OUT = os.path.join(_DATASET_DIR, "excluded_no_payload_packag
 
 MAX_PER_CAMPAIGN = 5
 
-# 2026-09-24 - επιλογή με βάση τον ΚΩΔΙΚΑ, όχι μόνο το κείμενο της αναφοράς:
-# Το campaign_signature είναι hash του κειμένου της αναφοράς OSV. (α) Ο ίδιος κακόβουλος
-# κώδικας σε 44-55 πακέτα είχε 44-55 διαφορετικά κείμενα -> 44-55 "καμπάνιες", που
-# σκορπίζονταν σε train/test (26% του test είχε πανομοιότυπο payload στο train).
-# (β) Η μεγαλύτερη "καμπάνια" (1.638 πακέτα, 864 διαφορετικά payloads) ήταν απλώς το κενό
-# boilerplate του OSV ("Malicious code in X (PyPI)") και το όριο των 30 πετούσε ~1.000
-# διαφορετικά δείγματα. Τώρα:
-#   - το πολύ MAX_PER_PAYLOAD πακέτο ανά payload_signature σε ΟΛΟ το σύνολο,
-#   - "καμπάνιες" με >= HETEROGENEOUS_MIN_PAYLOADS διαφορετικά payloads είναι γενικό
-#     κείμενο και ΔΕΝ λειτουργούν ως καμπάνιες (ούτε για όριο ούτε για το split),
-#   - πακέτα χωρίς chains (static misses) μπαίνουν με την ΠΡΑΓΜΑΤΙΚΗ τους αναλογία,
-#     ώστε η end-to-end ανάκληση να μην είναι αισιόδοξη.
-# Το split_train_test.py χωρίζει ανά οικογένεια (καμπάνια Ή ίδιος κώδικας) από το META_OUT.
+# Selection is based on the CODE, not only on the report text:
+# the campaign signature is a hash of the OSV report text. (a) The same malicious code in dozens of
+# packages often had a different report text per package, i.e. dozens of "campaigns" that spread
+# across train and test (a test sample could have an identical payload in the index). (b) The
+# largest "campaign" was just the empty OSV boilerplate ("Malicious code in X (PyPI)"), covering
+# hundreds of unrelated payloads, and a per-campaign cap would drop most of them. Therefore:
+#   - at most MAX_PER_PAYLOAD package per payload_signature in the WHOLE set,
+#   - "campaigns" with >= HETEROGENEOUS_MIN_PAYLOADS different payloads are generic text and do NOT
+#     act as campaigns (neither for the cap nor for the split),
+#   - packages without chains (static misses) are included at their REAL rate, so that end-to-end
+#     recall is not optimistic.
+# split_train_test.py splits by family (campaign OR identical code) using META_OUT.
 HETEROGENEOUS_MIN_PAYLOADS = 30
 MAX_PER_PAYLOAD = 1
 SEED = 42
 META_OUT = os.path.join(_DATASET_DIR, "final_diverse_subset_meta.json")
 
-# Ήταν 2MB: έκοβε σιωπηλά ~1.700 πακέτα (12%) - σχεδόν όλα φουσκωμένα από το (πλέον
-# διορθωμένο) call graph. Μετά το compact_chains.py το μέγεθος δεν είναι πια ένδειξη
-# bloat· ένα μικρό όριο θα απέκλειε πραγματικά μεγάλα malware (ενώ τα benign δεν έχουν
-# κανένα όριο -> ασυμμετρία που μπορεί να λειτουργήσει ως shortcut). Μένει μόνο ως
-# δίχτυ ασφαλείας μνήμης.
+# Only a memory safety net. After chain compaction, file size no longer indicates bloat; a small
+# limit would exclude genuinely large malware (while benign packages have no limit -> an asymmetry
+# that could act as a shortcut).
 MAX_FILE_SIZE_MB = 200
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 
 PAYLOAD_SCAN = os.path.join(_DATASET_DIR, "payload_scan.json")
 
-# 2026-09-24: η πηγή MalwareBench (pypi/packages) περιέχει ΚΑΙ πακέτα που επισημάνθηκαν αλλά
-# είναι ΝΟΜΙΜΑ (threat_type = false_positive στο pypi_package_info.csv της πηγής): 3.252 από
-# τα 3.430 δείγματά της στο dataset (apprise, dbt, paramiko, requests...). Μετρούσαν ως malware
-# (~45% του train και του test). Εξαιρούνται, μαζί με 2 ονόματα με ανάμεικτες εκδόσεις.
+# The MalwareBench source (pypi/packages) also contains packages that were reported but are
+# LEGITIMATE (threat_type = false_positive in the source's pypi_package_info.csv), e.g. apprise, dbt,
+# paramiko, requests. They are excluded, together with 2 names that have versions of both labels
+# (list written by malwarebench_false_positives.py).
 FALSE_POSITIVE_LIST = os.path.join(_DATASET_DIR, "excluded_malwarebench_false_positive.json")
 
 
 def load_false_positive():
+    """Names of the MalwareBench packages to exclude (false_positive + mixed_versions); the list is required."""
     if not os.path.exists(FALSE_POSITIVE_LIST):
-        raise SystemExit(f"[!] Λείπει {FALSE_POSITIVE_LIST}: χωρίς αυτό τα νόμιμα πακέτα του "
-                         f"MalwareBench θα μετρούσαν ως malware.")
+        raise SystemExit(f"[!] {FALSE_POSITIVE_LIST} is missing: without it the legitimate packages of "
+                         f"MalwareBench would count as malware.")
     d = json.load(open(FALSE_POSITIVE_LIST, encoding="utf-8"))
     return set(d.get("false_positive", [])) | set(d.get("mixed_versions", []))
 
 
 def load_no_payload():
     """
-    Δείγματα χωρίς ΚΑΝΕΝΑ σήμα κακόβουλου κώδικα (payload_scan.py - κριτήριο ανεξάρτητο
-    από το CodeQL): placeholders, typosquats που απλώς εξαρτώνται από το πραγματικό πακέτο,
-    νόμιμες εκδόσεις καταχωρημένες ως malware. Δεν είναι έγκυρα δείγματα για ανίχνευση από
-    κώδικα και εξαιρούνται ΚΑΙ από το train ΚΑΙ από το test.
+    Samples without ANY signal of malicious code (payload_scan.py - a criterion independent of
+    CodeQL): placeholders, typosquats that merely depend on the real package, legitimate versions
+    registered as malware. They are not valid samples for code-based detection and are excluded from
+    BOTH train and test.
     """
     if not os.path.exists(PAYLOAD_SCAN):
-        print(f"[!] ΠΡΟΣΟΧΗ: δεν βρέθηκε {PAYLOAD_SCAN} - ΚΑΝΕΝΑ δείγμα δεν εξαιρείται ως no_payload.")
+        print(f"[!] WARNING: {PAYLOAD_SCAN} not found - NO sample is excluded as no_payload.")
         return set()
     return set(json.load(open(PAYLOAD_SCAN, encoding="utf-8")).get("no_payload", []))
 
 
 def load_analyzed_samples():
+    """
+    Signatures of every analysed sample that passes the exclusions:
+    {package: {technique_signature, payload_signature, n_chains}}. Also writes the lists of
+    oversized and no-payload packages.
+    """
     samples = {}
     skipped_oversized = []
     skipped_total_bytes = 0
@@ -114,8 +128,8 @@ def load_analyzed_samples():
             skipped_total_bytes += size_bytes
             continue
 
-        # Κρατάμε ΜΟΝΟ τις υπογραφές, όχι ολόκληρο το JSON: μετά το compaction τα ~13k
-        # αρχεία είναι ~15GB, που φορτωμένα όλα μαζί ξεπερνούν πολύ τη RAM.
+        # Keep ONLY the signatures, not the whole JSON: all chains files together are many GB,
+        # far more than the available RAM.
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -126,26 +140,31 @@ def load_analyzed_samples():
             }
             del data
         except UnicodeDecodeError as e:
-            print(f"[!] Αγνοήθηκε {fname}: μη έγκυρο UTF-8 στη θέση {e.start}")
+            print(f"[!] Skipped {fname}: invalid UTF-8 at position {e.start}")
         except Exception as e:
-            print(f"[!] Αγνοήθηκε {fname}: {e}")
+            print(f"[!] Skipped {fname}: {e}")
 
     if skipped_oversized:
-        print(f"\n[*] Παραλείφθηκαν {len(skipped_oversized)} πακέτα > {MAX_FILE_SIZE_MB}MB "
-              f"(πιθανό vendor-bloat) - σύνολο {skipped_total_bytes / 1e9:.2f}GB.")
+        print(f"\n[*] Skipped {len(skipped_oversized)} packages > {MAX_FILE_SIZE_MB}MB "
+              f"(likely vendor bloat) - {skipped_total_bytes / 1e9:.2f}GB in total.")
         skipped_oversized.sort(key=lambda x: -x["size_mb"])
         with open(SKIPPED_OVERSIZED_OUT, "w", encoding="utf-8") as f:
             json.dump(skipped_oversized, f, indent=4, ensure_ascii=False)
-        print(f"    Πλήρης λίστα -> {SKIPPED_OVERSIZED_OUT}")
+        print(f"    Full list -> {SKIPPED_OVERSIZED_OUT}")
 
-    print(f"\n[*] Εξαιρέθηκαν {excluded_fp} νόμιμα πακέτα του MalwareBench (threat_type=false_positive).")
-    print(f"[*] Εξαιρέθηκαν {len(excluded_no_payload)} δείγματα χωρίς payload (payload_scan.py).")
+    print(f"\n[*] Excluded {excluded_fp} legitimate MalwareBench packages (threat_type=false_positive).")
+    print(f"[*] Excluded {len(excluded_no_payload)} samples without payload (payload_scan.py).")
     with open(EXCLUDED_NO_PAYLOAD_OUT, "w", encoding="utf-8") as f:
         json.dump(sorted(excluded_no_payload), f, indent=1, ensure_ascii=False)
     return samples
 
 
 def normalize_text(text):
+    """
+    Normalise a code snippet for the payload signature: versions, numbers, long base64/hex blobs,
+    paths and string literals are replaced by placeholders, whitespace is collapsed. Two copies of
+    the same code with different URLs/keys/paths get the same text.
+    """
     if not isinstance(text, str):
         return ""
     t = text
@@ -159,6 +178,10 @@ def normalize_text(text):
 
 
 def technique_signature(data):
+    """
+    Hash of the SHAPE of a package's chains (language, category, flow boundary, number of flows and
+    nodes, gating conditions) - used to prefer structurally different packages within a campaign.
+    """
     chains = data.get("behavior_chains", [])
     shape = []
     for c in sorted(chains, key=lambda x: x.get("category", "")):
@@ -179,6 +202,11 @@ def technique_signature(data):
 
 
 def payload_signature(data):
+    """
+    Hash of the normalised CODE of a package: the set of normalised texts of all data-flow slice
+    nodes and of the source/sink of all confirmed flows. Packages with the same malicious code get
+    the same signature regardless of name, version or report text.
+    """
     chains = data.get("behavior_chains", [])
     texts = []
     for c in chains:
@@ -187,31 +215,33 @@ def payload_signature(data):
         for flow in c.get("confirmed_source_flows", []):
             texts.append(normalize_text(flow.get("source", {}).get("node", "")))
             texts.append(normalize_text(flow.get("sink_node", "")))
+    # a sorted set: independent of chain order and of repeated nodes
     canonical = "|".join(sorted(set(texts)))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 def main():
+    """Apply the selection rules and write the final subset, its metadata and the report."""
     analyzed = load_analyzed_samples()
     with open(ATTACK_TAGS_JSON, "r", encoding="utf-8") as f:
         attack_tags = json.load(f)
 
-    print(f"\n[*] {len(analyzed)} behavior-chain δείγματα (μετά το size filter), "
-          f"{len(attack_tags)} attack-type tagged πακέτα.")
+    print(f"\n[*] {len(analyzed)} behavior-chain samples (after the size filter), "
+          f"{len(attack_tags)} packages with attack-type tags.")
 
     untagged = [p for p in analyzed if p not in attack_tags]
     if untagged:
-        print(f"\n[!] ΠΡΟΕΙΔΟΠΟΙΗΣΗ: {len(untagged)} analyzed πακέτα δεν έχουν attack-type tag!")
-        print(f"    Παραδείγματα: {untagged[:5]}")
+        print(f"\n[!] WARNING: {len(untagged)} analysed packages have no attack-type tag!")
+        print(f"    Examples: {untagged[:5]}")
 
     missing_analysis = sum(1 for p in attack_tags if p not in analyzed)
-    print(f"[*] {missing_analysis} πακέτα με attack-type tag αλλά χωρίς analyzed_chain - αγνοήθηκαν.")
+    print(f"[*] {missing_analysis} packages with an attack-type tag but no analysed chains - ignored.")
     pkgs = sorted(p for p in attack_tags if p in analyzed)
     raw_camp = {p: attack_tags[p].get("campaign_signature") for p in pkgs}
     pay = lambda p: analyzed[p]["payload_signature"]
     has_chains = lambda p: analyzed[p]["n_chains"] > 0
 
-    # "Καμπάνιες" που είναι γενικό κείμενο (πολλά διαφορετικά payloads) -> χωρίς καμπάνια.
+    # "Campaigns" that are generic text (many different payloads) -> no campaign.
     members = collections.defaultdict(list)
     for p in pkgs:
         if raw_camp[p]:
@@ -223,14 +253,15 @@ def main():
     for p in pkgs:
         if camp[p]:
             real[camp[p]].append(p)
-    print(f"[*] {len(real)} πραγματικές καμπάνιες, {len(heterogeneous)} γενικά κείμενα αναφοράς "
-          f"({sum(len(members[c]) for c in heterogeneous)} πακέτα) που αντιμετωπίζονται ως χωρίς καμπάνια.")
+    print(f"[*] {len(real)} real campaigns, {len(heterogeneous)} generic report texts "
+          f"({sum(len(members[c]) for c in heterogeneous)} packages) treated as no campaign.")
 
     selected = []
     per_camp = collections.Counter()
     used_payloads = collections.Counter()
 
     def take(p):
+        """Select p unless its campaign or its payload has reached the cap; returns True if selected."""
         if camp[p] and per_camp[camp[p]] >= MAX_PER_CAMPAIGN:
             return False
         if has_chains(p):
@@ -242,13 +273,14 @@ def main():
         selected.append(p)
         return True
 
-    # 1. Πραγματικές καμπάνιες: round-robin σε διακριτά technique_signature (ποικιλία σχημάτων),
-    #    με το όριο ανά καμπάνια και το όριο ανά payload.
+    # 1. Real campaigns: round-robin over distinct technique signatures (variety of shapes),
+    #    subject to the per-campaign and per-payload caps.
     campaign_report = []
     for c in sorted(real):
         entries = [p for p in real[c] if has_chains(p)]
         seen_tech, ordered, remaining = set(), [], list(entries)
         while remaining:
+            # each round takes one package per not-yet-seen technique signature
             round_, rest = [], []
             for p in remaining:
                 t = analyzed[p]["technique_signature"]
@@ -268,13 +300,13 @@ def main():
             "kept_packages": kept,
         })
 
-    # 2. Χωρίς καμπάνια (και γενικά κείμενα): ένα πακέτο ανά διαφορετικό κώδικα.
+    # 2. No campaign (including generic texts): one package per distinct code.
     no_campaign = [p for p in pkgs if not camp[p] and has_chains(p)]
     for p in no_campaign:
         take(p)
     n_with_chains = len(selected)
 
-    # 3. Static misses (0 chains, αλλά με payload): ίδια αναλογία με τον πληθυσμό.
+    # 3. Static misses (0 chains, but with payload): same rate as in the population.
     available_with_chains = sum(1 for p in pkgs if has_chains(p))
     zero = [p for p in pkgs if not has_chains(p)]
     target_zero = round(len(zero) * n_with_chains / max(available_with_chains, 1))
@@ -285,10 +317,11 @@ def main():
             break
         if take(p):
             n_zero += 1
-    print(f"[*] Επιλέχθηκαν {n_with_chains} πακέτα με chains ({len(used_payloads)} διαφορετικά payloads, "
-          f"από {len({pay(p) for p in pkgs if has_chains(p)})} διαθέσιμα) + {n_zero} χωρίς chains "
-          f"(αναλογία {100 * len(zero) / max(len(pkgs), 1):.1f}% στον πληθυσμό).")
+    print(f"[*] Selected {n_with_chains} packages with chains ({len(used_payloads)} distinct payloads, "
+          f"out of {len({pay(p) for p in pkgs if has_chains(p)})} available) + {n_zero} without chains "
+          f"(rate {100 * len(zero) / max(len(pkgs), 1):.1f}% in the population).")
 
+    # per-package metadata for split_train_test.py (effective campaign, payload, number of chains)
     with open(META_OUT, "w", encoding="utf-8") as f:
         json.dump({p: {"campaign": camp[p], "payload_signature": pay(p), "n_chains": analyzed[p]["n_chains"]}
                    for p in selected}, f, indent=1, ensure_ascii=False)
@@ -318,6 +351,7 @@ def main():
     with open(FINAL_LIST_OUT, "w", encoding="utf-8") as f:
         json.dump(sorted(set(selected)), f, indent=4, ensure_ascii=False)
 
+    # fresh copy of the selected chains files
     if os.path.exists(FINAL_SUBSET_DIR):
         shutil.rmtree(FINAL_SUBSET_DIR)
     os.makedirs(FINAL_SUBSET_DIR)
@@ -327,18 +361,18 @@ def main():
         if os.path.exists(src):
             shutil.copy2(src, dst)
 
-    print(f"\n[+] Πριν: {len(analyzed)} πακέτα -> Μετά: {len(set(selected))} πακέτα")
-    print("\n[+] Top 10 μεγαλύτερες καμπάνιες (πριν/μετά):")
+    print(f"\n[+] Before: {len(analyzed)} packages -> After: {len(set(selected))} packages")
+    print("\n[+] Top 10 largest campaigns (before/after):")
     for r in campaign_report[:10]:
         print(f"    {r['total_in_campaign']:4d} -> {r['kept']:2d} | distinct payloads={r['distinct_payload_signatures']} | {r['campaign_signature_preview']}")
 
-    print("\n[+] Τελική κατανομή attack-type (μετά την επιλογή):")
+    print("\n[+] Final attack-type distribution (after selection):")
     for tag, count in sorted(final_attack_type_counts.items(), key=lambda x: -x[1]):
         print(f"    {tag:28s} {count}")
 
-    print(f"\n[+] Πλήρης αναφορά -> {REPORT_OUT}")
-    print(f"[+] Λίστα επιλεγμένων -> {FINAL_LIST_OUT}")
-    print(f"[+] Αντίγραφα -> {FINAL_SUBSET_DIR}/")
+    print(f"\n[+] Full report -> {REPORT_OUT}")
+    print(f"[+] List of selected packages -> {FINAL_LIST_OUT}")
+    print(f"[+] Copies -> {FINAL_SUBSET_DIR}/")
 
 
 if __name__ == "__main__":

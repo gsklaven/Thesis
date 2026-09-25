@@ -1,196 +1,203 @@
-# Οδηγός εκτέλεσης: `run_pipeline.sh`
+# Execution guide: `run_pipeline.sh`
 
-Το `run_pipeline.sh` εκτελεί όλο το pipeline σε στάδια. **Κάθε στάδιο συνεχίζει από εκεί που
-σταμάτησε**: ό,τι έχει ήδη αποτέλεσμα παραλείπεται, οπότε μια διακοπή (ρεύμα, αποσύνδεση δίσκου,
-Ctrl+C) δεν χάνει δουλειά. Αρκεί να ξανατρέξεις την ίδια εντολή.
+`run_pipeline.sh` runs the whole pipeline in stages. **Every stage resumes where it stopped**: anything
+that already has a result is skipped, so an interruption (power, disconnected disk, Ctrl+C) loses no
+work. Just run the same command again.
 
-Το μόνο που πρέπει να δώσεις εσύ είναι **πού βρίσκονται οι πηγές** (ο δίσκος ή φάκελος με τους
-κλώνους των datasets malware) και, για την αξιολόγηση, **το κλειδί του LLM**. Γράφονται μία φορά
-στο `.env` (δεν ανεβαίνει στο git).
+The only things you provide are **where the sources are** (the disk or folder with the clones of the
+malware datasets) and, for the evaluation, **the LLM key**. They are written once in `.env` (never
+committed to git).
 
-## 0. Τι υπάρχει στο git και τι στο GitHub Release
+## 0. What is in git and what is in the GitHub Release
 
-| Στο git (κλώνος του αποθετηρίου) | Στο GitHub Release (`./run_pipeline.sh pack`) |
+| In git (clone of the repository) | In the GitHub Release (`./run_pipeline.sh pack`) |
 |---|---|
-| όλος ο κώδικας, `run_pipeline.sh`, οδηγοί, `requirements.txt` | `dataset/analyzed_chains/` - Behavior Chains όλων των malware (~10 GB) |
-| τα μικρά JSON του `dataset/`: λίστες δειγμάτων (`malware_dataset*.json`), ετικέτες, `payload_scan`, εξαιρέσεις, επιλογή (`final_diverse_subset_*.json`), `policy_rules.json` | `dataset/benign_test_set/` - Behavior Chains των νόμιμων πακέτων |
-| `dataset/preparation/policy_sources/` (χωρίς τους κανόνες Semgrep) | `dataset/rag_train/`, `dataset/rag_test/`, `dataset/indexes/` (με τα διανύσματα) |
-| `expected_labels.json`, συνόψεις αποτελεσμάτων (`results/*_summaries/`) | αναφορές LLM ανά πακέτο (`results/v12_*/`) + ξανά τα JSON του `dataset/` και το `expected_labels.json` |
+| all the code, `run_pipeline.sh`, guides, `requirements.txt` | `dataset/analyzed_chains/` - Behavior Chains of all malware (~10 GB) |
+| the small JSON files of `dataset/`: sample lists (`malware_dataset*.json`), labels, `payload_scan`, exclusions, selection (`final_diverse_subset_*.json`), `policy_rules.json` | `dataset/benign_test_set/` - Behavior Chains of the benign packages |
+| `dataset/preparation/policy_sources/` (without the Semgrep rules) | `dataset/rag_train/`, `dataset/rag_test/`, `dataset/indexes/` (with the vectors) |
+| `expected_labels.json`, result summaries (`results/*_summaries/`, `results/analysis/`) | LLM reports per package (`results/v12_*/`) + again the JSON files of `dataset/` and `expected_labels.json` |
 
-Ο κλώνος είναι μικρός. Τα μεγάλα δεδομένα κατεβαίνουν μία φορά από το Release (σενάριο Α).
+The clone is small. The large data is downloaded once from the Release (scenario A).
 
-## 1. Εγκατάσταση σε νέο μηχάνημα
+## 1. Installation on a new machine
 
-Χρειάζονται: Python 3.14, git (+ `git-lfs` για την πηγή MalwareBench) και το
-[CodeQL CLI 2.27.0](https://github.com/github/codeql-action/releases) στο `PATH` (macOS: `brew install codeql`).
+Requirements: Python 3.14, git (+ `git-lfs` for the MalwareBench source) and the
+[CodeQL CLI 2.27.0](https://github.com/github/codeql-action/releases) in the `PATH` (macOS: `brew install codeql`).
 
 ```bash
-git clone <αυτό το αποθετήριο> Thesis && cd Thesis
-./run_pipeline.sh setup    # ρωτά τη θέση των πηγών -> .env, φτιάχνει venv, εγκαθιστά τα πακέτα CodeQL
-./run_pipeline.sh check    # επιβεβαιώνει venv, CodeQL, πηγές, κλειδί
+git clone <this repository> Thesis && cd Thesis
+./run_pipeline.sh setup    # asks for the sources location -> .env, creates the venv, installs the CodeQL packs
+./run_pipeline.sh check    # confirms venv, CodeQL, sources, key
 ```
 
-Ρυθμίσεις στο `.env` (υπόδειγμα: `.env.example`). Το διαβάζουν **και** το `run_pipeline.sh` **και** κάθε
-script Python μόνο του (μέσω του `dataset/preparation/utils.py`), οπότε π.χ. το
-`python3 results/check_test_set.py dataset/rag_test` βρίσκει το κλειδί χωρίς `export`. Ό,τι έχει οριστεί
-στο τερματικό υπερισχύει του `.env`. Τιμές με κενά μπαίνουν σε εισαγωγικά.
+Settings live in `.env` (template: `.env.example`). It is read **both** by `run_pipeline.sh` **and** by
+every Python script on its own (through `dataset/preparation/utils.py`), so e.g.
+`python3 results/check_test_set.py dataset/rag_test` finds the key without `export`. Anything set in the
+shell overrides `.env`. Values with spaces go in quotes.
 
-| Μεταβλητή | Τι είναι |
+| Variable | What it is |
 |---|---|
-| `THESIS_SOURCES_DIR` | φάκελος με τους κλώνους των πηγών (π.χ. `/Volumes/USB`). Χρειάζεται για `sources`, `collect`, `analyze`, `rag` |
-| `LLM_PROVIDER` | ποιο LLM για το `evaluate`: `deepseek` (προεπιλογή), `gemini`, `lmstudio`, `openrouter` (βλ. σενάριο Ε) |
-| `DEEPSEEK_API_KEY` | μόνο για το `evaluate` με `deepseek` (αντίστοιχα `GEMINI_API_KEY`, `OPENROUTER_API_KEY`) |
-| `WORKERS` | παράλληλες αναλύσεις CodeQL (προεπιλογή 4· ~4 GB RAM η καθεμία) |
+| `THESIS_SOURCES_DIR` | folder with the clones of the sources (e.g. `/Volumes/USB`). Needed for `sources`, `collect`, `analyze`, `rag` |
+| `LLM_PROVIDER` | which LLM `evaluate` uses: `deepseek` (default), `gemini`, `lmstudio`, `openrouter` (see scenario E) |
+| `DEEPSEEK_API_KEY` | only for `evaluate` with `deepseek` (likewise `GEMINI_API_KEY`, `OPENROUTER_API_KEY`) |
+| `WORKERS` | parallel CodeQL analyses (default 4; ~4 GB RAM each) |
 
-Οι διαδρομές των δειγμάτων στο `dataset/malware_dataset_matched.json` έχουν καταγραφεί σε άλλο
-μηχάνημα. Όλα τα scripts τις μεταφράζουν αυτόματα στο `THESIS_SOURCES_DIR`
-(`utils.resolve_source_path`), άρα **δεν χρειάζεται καμία αλλαγή σε κώδικα ή δεδομένα**.
+The sample paths in `dataset/malware_dataset_matched.json` were recorded on another machine. All scripts
+map them automatically to `THESIS_SOURCES_DIR` (`utils.resolve_source_path`), so **no change to code or
+data is needed**.
 
-### Πηγές
+### Sources
 
 ```bash
-./run_pipeline.sh sources  # clone όσων λείπουν στο THESIS_SOURCES_DIR, git pull στα υπάρχοντα
+./run_pipeline.sh sources  # clone the missing ones into THESIS_SOURCES_DIR, git pull the existing ones
 ```
 
-| Φάκελος | Αποθετήριο | Σημείωση |
+| Folder | Repository | Note |
 |---|---|---|
-| `malicious-packages/` | github.com/ossf/malicious-packages | αναφορές OSV (περιγραφές, καμπάνιες) |
-| `pypi_malregistry/` | github.com/lxyeternal/pypi_malregistry | κύρια πηγή δειγμάτων PyPI |
-| `pypi/` | github.com/MalwareBench/pypi | git-lfs· μόνο `threat_type = malware`, τα `false_positive` είναι νόμιμα πακέτα και εξαιρούνται |
-| `malicious-software-packages-dataset/` | github.com/DataDog/malicious-software-packages-dataset | κρυπτογραφημένα zip (κωδικός `infected`), αποσυμπιέζονται από το `collect` στο `malware_samples/` |
-| `maloss-samples/` | github.com/osssanitizer/maloss-samples | μπορεί να απαιτεί αίτημα πρόσβασης στους δημιουργούς |
+| `malicious-packages/` | github.com/ossf/malicious-packages | OSV reports (descriptions, campaigns) |
+| `pypi_malregistry/` | github.com/lxyeternal/pypi_malregistry | main source of PyPI samples |
+| `pypi/` | github.com/MalwareBench/pypi | git-lfs; only `threat_type = malware` - the `false_positive` ones are legitimate packages and are excluded |
+| `malicious-software-packages-dataset/` | github.com/DataDog/malicious-software-packages-dataset | encrypted zips (password `infected`), extracted by `collect` into `malware_samples/` |
+| `maloss-samples/` | github.com/osssanitizer/maloss-samples | access may have to be requested from its authors |
 
-> Οι πηγές περιέχουν **πραγματικό κακόβουλο κώδικα**. Το pipeline δεν τον εκτελεί ποτέ (μόνο στατική
-> ανάλυση, χωρίς `pip install`). Μην τις ανοίγεις/εκτελείς εκτός pipeline και μην τις ανεβάζεις πουθενά.
+> The sources contain **real malicious code**. The pipeline never executes it (static analysis only,
+> no `pip install`). Do not open/run the samples outside the pipeline and never upload them anywhere.
 
-## 2. Σενάρια
+## 2. Scenarios
 
-### Α. Αναπαραγωγή των αποτελεσμάτων χωρίς ξανά CodeQL (το πιο γρήγορο)
+### A. Reproducing the results without re-running CodeQL (the fastest)
 
-Τα Behavior Chains, το train/test και τα ευρετήρια δημοσιεύονται ως GitHub Release (βλ. Δ).
-Δεν χρειάζονται οι πηγές malware.
+The Behavior Chains, the train/test sets and the indexes are published as a GitHub Release (see D).
+The malware sources are not needed.
 
 ```bash
-gh release download <tag> -p 'behavior_chains*' -p SHA256SUMS -D dist   # ή λήψη από τη σελίδα του Release
-./run_pipeline.sh unpack          # έλεγχος checksums + επαναφορά στο dataset/
-./run_pipeline.sh evaluate        # MODES="sum samples policy llm" (προεπιλογή)
+# download behavior_chains.tar.gz.part-* and SHA256SUMS from the Release page into dist/
+# (or: gh release download <tag> -p 'behavior_chains*' -p SHA256SUMS -D dist)
+./run_pipeline.sh unpack          # checksum check + restore into dataset/ and results/
+./run_pipeline.sh evaluate        # MODES="sum samples policy llm" (default)
 ```
 
-### Β. Συνέχεια από εκεί που σταματήσαμε / ενημέρωση με νέα πακέτα
+### B. Resuming / updating with new packages
 
 ```bash
-./run_pipeline.sh unpack          # (αν ξεκινάς από Release) τα ήδη αναλυμένα, για να μην ξανατρέξει το CodeQL
+./run_pipeline.sh unpack          # (when starting from the Release) the already analysed samples, so CodeQL does not run again
 ./run_pipeline.sh update          # = sources -> collect -> analyze -> rag
 RESULTS_SUFFIX=_update1 ./run_pipeline.sh evaluate
 ```
 
-- `sources` τραβά (git pull) τα νέα κακόβουλα πακέτα των πηγών.
-- `collect` ξαναφτιάχνει τη λίστα δειγμάτων (κρατά backup της προηγούμενης στο `work/`).
-- `analyze` τρέχει το CodeQL **μόνο για τα νέα πακέτα**: ό,τι έχει ήδη αποτέλεσμα στο
-  `dataset/analyzed_chains/` παραλείπεται, όπως και όσα έχουν ήδη αποτύχει (`RETRY_FAILED=1` για
-  να ξαναδοκιμαστούν) και τα νόμιμα πακέτα του MalwareBench. Ακολουθεί η σάρωση payload, επίσης μόνο για τα νέα.
-- `rag` ξαναχτίζει επιλογή, διαχωρισμό και ευρετήριο (~5 λεπτά). Η επιλογή (ένα πακέτο ανά
-  διαφορετικό κώδικα) και ο διαχωρισμός ανά οικογένεια γίνονται **σε όλο** το σύνολο, οπότε το νέο
-  train/test διαφέρει από το προηγούμενο: τα αποτελέσματα είναι **νέα έκδοση** και δεν συγκρίνονται
-  απευθείας με το v12. Γι' αυτό το `RESULTS_SUFFIX`.
+- `sources` pulls (git pull) the new malicious packages of the sources.
+- `collect` rebuilds the sample list (a backup of the previous one is kept in `work/`).
+- `analyze` runs CodeQL **only for the new packages**: anything that already has a result in
+  `dataset/analyzed_chains/` is skipped, as are packages that already failed (`RETRY_FAILED=1` to retry
+  them) and the legitimate MalwareBench packages. The payload scan follows, also only for the new ones.
+- `rag` rebuilds the selection, the split and the index (~5 minutes). The selection (one package per
+  distinct code) and the family split are made over the **whole** set, so the new train/test differs
+  from the previous one: the results are a **new version** and are not directly comparable with v12.
+  Hence the `RESULTS_SUFFIX`.
 
-### Γ. Από την αρχή
+### C. From scratch
 
 ```bash
 ./run_pipeline.sh all             # collect -> analyze -> benign -> rag -> evaluate
 ```
 
-Ενδεικτικοί χρόνοι (Apple M5, 10 πυρήνες, 24 GB):
+Indicative times (Apple M5, 10 cores, 24 GB):
 
-| Στάδιο | Χρόνος |
+| Stage | Time |
 |---|---|
-| `analyze` (~14.500 malware, 4–6 workers) | ~3–4 ημέρες |
-| `benign` (170 πακέτα) | ~2 ώρες |
-| `rag` | ~10 λεπτά |
-| `evaluate` (~16.500 κλήσεις LLM ανά ablation) | ~8 ώρες ανά ablation |
+| `analyze` (~14,500 malware, 4–6 workers) | ~3–4 days |
+| `benign` (170 packages) | ~2 hours |
+| `rag` | ~10 minutes |
+| `evaluate` (~16,500 LLM calls per ablation) | ~2.5 hours per ablation with `PARALLEL_SETS=1` |
 
-`./run_pipeline.sh status` δείχνει ανά πάσα στιγμή πόσα έχουν γίνει και τι λείπει.
+`./run_pipeline.sh status` shows at any time how much is done and what is missing.
 
-### Δ. Δημοσίευση των Behavior Chains (GitHub Release)
+### D. Publishing the Behavior Chains (GitHub Release)
 
 ```bash
 ./run_pipeline.sh pack            # -> dist/behavior_chains.tar.gz.part-aa, -ab, ... + SHA256SUMS
-gh release create chains-v12 dist/behavior_chains.tar.gz.part-* dist/SHA256SUMS \
-  --title "Behavior Chains v12" --notes "Βλ. PIPELINE.md, σενάριο Α"
 ```
 
-- Το GitHub δέχεται αρχεία έως 100 MB μέσα στο αποθετήριο, αλλά έως **2 GB ανά αρχείο σε Release**.
-  Γι' αυτό το `pack` κόβει το αρχείο σε κομμάτια των 1,9 GB. Για μόνιμη αρχειοθέτηση με DOI, τα ίδια
-  αρχεία μπορούν να ανέβουν και στο Zenodo.
-- Περιέχει: `analyzed_chains/`, `benign_test_set/`, `rag_train/`, `rag_test/`, `indexes/`, τα JSON του `dataset/`,
-  τις αναφορές LLM `results/v12_*/` (όχι τα `*_smoke`) και το `expected_labels.json`. Τρέξ' το **αφού**
-  ολοκληρωθεί το `evaluate`, ώστε να περιέχει και τα αποτελέσματα.
-- Τα Behavior Chains είναι περιγραφές κώδικα (ονόματα κλήσεων, αποσπάσματα, URLs), όχι εκτελέσιμα
-  πακέτα. **Μην ανεβάζεις** τις πηγές malware ούτε το `policy_sources/semgrep_rules.json`
-  (άδεια Semgrep Rules: μόνο εσωτερική χρήση).
-
-### Ε. Αξιολόγηση με άλλο LLM
-
-Όλοι οι πάροχοι χρησιμοποιούν **τον ίδιο** evaluator (`inference/llm_evaluator.py`): ίδιο prompt, ίδια
-ανάγνωση της απάντησης, ίδιες επαναλήψεις για chains που αποτυγχάνουν, ίδια συγκέντρωση και μορφή
-αναφοράς. Αλλάζει μόνο η κλήση του μοντέλου (`inference/llm_providers.py`). Στο `.env`:
-
-| `LLM_PROVIDER` | Τι χρειάζεται | Αποτελέσματα στο |
-|---|---|---|
-| `deepseek` (προεπιλογή, πειράματα της εργασίας) | `DEEPSEEK_API_KEY` (+ `DEEPSEEK_MODEL`, προεπιλογή `deepseek-flash`) | `results/v12_<mode>/` |
-| `gemini` | `GEMINI_API_KEY` (+ `GEMINI_MODEL`) | `results/v12_<mode>_gemini/` |
-| `lmstudio` (τοπικά, τίποτα δεν φεύγει από τον υπολογιστή) | LM Studio με ανοιχτό server (+ `LM_STUDIO_URL`, `LM_STUDIO_MODEL`) | `results/v12_<mode>_lmstudio/` |
-| `openrouter` | `OPENROUTER_API_KEY` και `OPENROUTER_MODEL` (συγκεκριμένο μοντέλο) | `results/v12_<mode>_openrouter/` |
+Then create the Release, either from the GitHub web page (Releases → Draft a new release → tag
+`chains-v12` → attach every file of `dist/` → Publish release) or with the GitHub CLI:
 
 ```bash
-LLM_PROVIDER=gemini MODES=sum ./run_pipeline.sh evaluate   # ή μόνιμα: LLM_PROVIDER=gemini στο .env
+gh release create chains-v12 dist/behavior_chains.tar.gz.part-* dist/SHA256SUMS \
+  --title "Behavior Chains v12" --notes "See PIPELINE.md, scenario A"
 ```
 
-Κάθε αναφορά γράφει `llm_provider`/`llm_model`, και κάθε απόφαση chain το `model_used`. Δεν γίνεται
-ποτέ σιωπηλή αλλαγή μοντέλου: αν ένας πάροχος αποτύχει ή εξαντλήσει το όριό του, το chain
-ξαναδοκιμάζεται και, αν αποτύχει οριστικά, το πακέτο μένει `INCOMPLETE` για επόμενη εκτέλεση.
+- GitHub accepts files of up to 100 MB inside the repository, but up to **2 GB per file in a Release**.
+  That is why `pack` splits the archive into parts of 1.9 GB. For permanent archiving with a DOI, the
+  same files can also be uploaded to Zenodo.
+- Contents: `analyzed_chains/`, `benign_test_set/`, `rag_train/`, `rag_test/`, `indexes/`, the JSON files of
+  `dataset/`, the LLM reports `results/v12_*/` (not the `*_smoke` ones) and `expected_labels.json`. Run it
+  **after** `evaluate` has finished, so that it also contains the results.
+- Behavior Chains are descriptions of code (call names, snippets, URLs), not executable packages.
+  **Do not upload** the malware sources or `policy_sources/semgrep_rules.json` (Semgrep Rules License:
+  internal use only).
 
-## 3. Όλες οι εντολές
+### E. Evaluation with another LLM
 
-| Εντολή | Τι κάνει |
+All providers use **the same** evaluator (`inference/llm_evaluator.py`): the same prompt, the same parsing
+of the answer, the same retries for failing chains, the same aggregation and report format. Only the model
+call changes (`inference/llm_providers.py`). In `.env`:
+
+| `LLM_PROVIDER` | What it needs | Results in |
+|---|---|---|
+| `deepseek` (default, the thesis experiments) | `DEEPSEEK_API_KEY` (+ `DEEPSEEK_MODEL`, default `deepseek-flash`) | `results/v12_<mode>/` |
+| `gemini` | `GEMINI_API_KEY` (+ `GEMINI_MODEL`) | `results/v12_<mode>_gemini/` |
+| `lmstudio` (local, nothing leaves the computer) | LM Studio with its server running (+ `LM_STUDIO_URL`, `LM_STUDIO_MODEL`) | `results/v12_<mode>_lmstudio/` |
+| `openrouter` | `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (a specific model) | `results/v12_<mode>_openrouter/` |
+
+```bash
+LLM_PROVIDER=gemini MODES=sum ./run_pipeline.sh evaluate   # or permanently: LLM_PROVIDER=gemini in .env
+```
+
+Every report records `llm_provider`/`llm_model`, and every chain verdict its `model_used`. The model is
+never switched silently: if a provider fails or runs out of quota, the chain is retried and, if it fails
+for good, the package stays `INCOMPLETE` for the next run.
+
+## 3. All commands
+
+| Command | What it does |
 |---|---|
-| `setup` | `.env`, venv + `requirements.txt`, `codeql pack install` για τα queries |
-| `check` | έλεγχος προαπαιτούμενων |
-| `status` | αναλυμένα / σε εκκρεμότητα / αποτυχημένα, μέγεθος RAG, πρόοδος αποτελεσμάτων |
-| `sources` | clone όσων πηγών λείπουν + git pull |
+| `setup` | `.env`, venv + `requirements.txt`, `codeql pack install` for the queries |
+| `check` | check of the prerequisites |
+| `status` | analysed / pending / failed, RAG size, progress of the results |
+| `sources` | clone the missing sources + git pull |
 | `collect` | `prepare_dataset_diverse` → `collect_all_samples` → `extract_samples` → `malwarebench_false_positives` |
-| `analyze` | CodeQL (χωρίς εγκατάσταση εξαρτήσεων) για όσα malware λείπουν, με `WORKERS` παράλληλα + `payload_scan` |
-| `benign` | λήψη sdists από το PyPI JSON API (χωρίς pip) + CodeQL για όσα νόμιμα πακέτα λείπουν |
-| `policy` | **νέο** snapshot της βάσης γνώσης (τρέχουσες εκδόσεις MITRE/CWE/CAPEC και κανόνων). Δεν περιλαμβάνεται στα `all`/`update`, για να μένει ίδια η βάση των πειραμάτων |
-| `rag` | `rebuild_rag.py` (περιγραφές, ετικέτες, επιλογή, διαχωρισμός, ευρετήριο) + `audit_leakage.py` |
-| `evaluate` | για κάθε `RAG_MODE` του `MODES`: `check_test_set` σε malware και benign, και `evaluation_summary` |
+| `analyze` | CodeQL (without installing dependencies) for the missing malware, `WORKERS` in parallel + `payload_scan` |
+| `benign` | download of sdists from the PyPI JSON API (no pip) + CodeQL for the missing benign packages |
+| `policy` | a **new** snapshot of the knowledge base (current versions of MITRE/CWE/CAPEC and of the rules). Not part of `all`/`update`, so that the knowledge base of the experiments stays the same |
+| `rag` | `rebuild_rag.py` (descriptions, tags, selection, split, index) + `audit_leakage.py` |
+| `evaluate` | for every `RAG_MODE` in `MODES`: `check_test_set` on malware and benign, and `evaluation_summary`; then `confusion_matrix_by_category` and `results_analysis` |
 | `update` | `sources` → `collect` → `analyze` → `rag` |
 | `all` | `collect` → `analyze` → `benign` → `rag` → `evaluate` |
-| `pack` / `unpack [DIR]` | συσκευασία / επαναφορά για GitHub Release |
+| `pack` / `unpack [DIR]` | packing / restoring for the GitHub Release |
 
-Επιπλέον ρυθμίσεις: `BENIGN_WORKERS` (2), `RETRY_FAILED=1`, `MODES`, `PARALLEL_SETS=1` (malware και
-benign test ταυτόχρονα στο `evaluate`), `RESULTS_SUFFIX`, `CODEQL_QUERY_TIMEOUT` / `CODEQL_DB_TIMEOUT` /
-`BATCH_ANALYSIS_TIMEOUT` (δευτερόλεπτα).
+More settings: `BENIGN_WORKERS` (2), `RETRY_FAILED=1`, `MODES`, `PARALLEL_SETS=1` (malware and benign test
+sets at the same time in `evaluate`), `RESULTS_SUFFIX`, `CODEQL_QUERY_TIMEOUT` / `CODEQL_DB_TIMEOUT` /
+`BATCH_ANALYSIS_TIMEOUT` (seconds).
 
-## 4. Πού γράφονται τα αρχεία
+## 4. Where files are written
 
-| Φάκελος | Περιεχόμενο |
+| Folder | Contents |
 |---|---|
-| `logs/` | `pipeline.log` (όλα τα στάδια), `analyze_w*.log`, `benign_b*.log`, `eval_<mode>_*.log` |
-| `work/` | προσωρινοί φάκελοι των workers και backups των λιστών (σβήνονται/ξαναφτιάχνονται) |
-| `dist/` | αρχεία του `pack` |
-| `results/` | βλ. `results/README.md` |
+| `logs/` | `pipeline.log` (all stages), `analyze_w*.log`, `benign_b*.log`, `eval_<mode>_*.log` |
+| `work/` | temporary worker folders and backups of the lists (deleted/recreated) |
+| `dist/` | files of `pack` |
+| `results/` | see `results/README.md` |
 
-Τα `logs/`, `work/`, `dist/`, `old/` και `.env` είναι στο `.gitignore`.
+`logs/`, `work/`, `dist/`, `old/` and `.env` are in `.gitignore`.
 
-## 5. Συνήθη προβλήματα
+## 5. Common problems
 
-- **Ο υπολογιστής κοιμήθηκε / αποσυνδέθηκε ο δίσκος**: ξανατρέξε την ίδια εντολή, συνεχίζει. Σε macOS
-  το script κρατά τον υπολογιστή ξύπνιο (`caffeinate`), αλλά το κλείσιμο του καπακιού τον κοιμίζει.
-- **`python_pass_skipped` / `oversized` / `timeout_*` στο `status`**: πακέτα που το CodeQL δεν μπόρεσε
-  να αναλύσει (π.χ. >50 MB κώδικα). Καταγράφονται και δεν ξαναδοκιμάζονται, εκτός αν `RETRY_FAILED=1`
-  (π.χ. με μεγαλύτερα `CODEQL_QUERY_TIMEOUT` / `BATCH_ANALYSIS_TIMEOUT`).
-- **`EVALUATION_FAILED` / `INCOMPLETE` στο `evaluate`**: αποτυχίες του API· ξανατρέξε το `evaluate`,
-  δοκιμάζονται ξανά μόνο αυτά.
-- **Χωρίς πρόσβαση σε μια πηγή** (π.χ. `maloss-samples`): το pipeline συνεχίζει με όσες υπάρχουν. Τα
-  δείγματα που λείπουν εμφανίζονται στο `status`.
+- **The computer went to sleep / the disk was disconnected**: run the same command again, it resumes. On
+  macOS the script keeps the computer awake (`caffeinate`), but closing the lid still puts it to sleep.
+- **`python_pass_skipped` / `oversized` / `timeout_*` in `status`**: packages CodeQL could not analyse
+  (e.g. >50 MB of code). They are recorded and not retried unless `RETRY_FAILED=1` (e.g. with larger
+  `CODEQL_QUERY_TIMEOUT` / `BATCH_ANALYSIS_TIMEOUT`).
+- **`EVALUATION_FAILED` / `INCOMPLETE` in `evaluate`**: API failures; run `evaluate` again, only these are
+  retried.
+- **No access to a source** (e.g. `maloss-samples`): the pipeline continues with the available ones. The
+  missing samples show up in `status`.

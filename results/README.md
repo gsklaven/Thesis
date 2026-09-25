@@ -1,27 +1,29 @@
 # results/
 
-| Θέση | Περιεχόμενο | Παράγεται από |
+| Location | Contents | Produced by |
 |---|---|---|
-| `<έκδοση>/report_<πακέτο>.json` | πλήρης αναφορά ανά πακέτο: τελική απόφαση, απόφαση του LLM ανά Behavior Chain, ανακτημένα δείγματα και εγγραφές ασφάλειας, prompt | `inference/llm_evaluator.py` (μέσω του `check_test_set.py`) |
-| `test_set_summaries/test_set_summary_<έκδοση>_<test set>.json` | απόφαση ανά πακέτο, false positives/negatives, static misses, ασαφή | `check_test_set.py` |
-| `analysis/<έκδοση>.md`, `analysis/confusion_<έκδοση>.svg` / `.tex`, `analysis/ablations.md` | confusion matrix (γράφημα + πίνακας LaTeX), μετρικές με 95% διάστημα εμπιστοσύνης, ανάλυση ανά ζώνη ομοιότητας, λίστες FP/FN, σύγκριση ablations· ερμηνεία στο `analysis/notes.md` | `results_analysis.py` |
-| `evaluation_summaries/evaluation_summary_<έκδοση>.json` | confusion matrix, accuracy/precision/recall/F1/FPR (end-to-end και μόνο στάδιο LLM) | `evaluation_summary.py` |
+| `<version>/report_<package>.json` | full report per package: final verdict, LLM verdict per Behavior Chain, retrieved samples and security entries, prompt | `inference/llm_evaluator.py` (through `check_test_set.py`) |
+| `test_set_summaries/test_set_summary_<version>_<test set>.json` | verdict per package, false positives/negatives, static misses, unclear | `check_test_set.py` |
+| `analysis/<version>.md`, `analysis/confusion_<version>.svg` / `.tex`, `analysis/ablations.md` | confusion matrix (chart + LaTeX table), metrics with 95% confidence intervals, results per similarity stratum, FP/FN lists, comparison of the ablations; interpretation in `analysis/notes.md` | `results_analysis.py` |
+| `analysis/latex/*.tex` | LaTeX tables and figures of Chapters 4-5 of the thesis (datasets, metrics, ablations, strata, McNemar, SSVC, comparison, confusion matrices), in Greek; copied to `Thesis_text/chapters/generated/` | `thesis_tables.py` |
+| `evaluation_summaries/evaluation_summary_<version>.json` | confusion matrix, accuracy/precision/recall/F1/FPR (end-to-end and LLM stage only) | `evaluation_summary.py` |
 
-Η `<έκδοση>` είναι `PROMPT_VERSION_RAG_MODE[_πάροχος][RESULTS_SUFFIX]` (π.χ. `v12_sum`, `v12_llm`,
-`v12_sum_gemini`, `v12_sum_smoke`). Ο πάροχος προστίθεται μόνο όταν δεν είναι ο `deepseek` (βλ. `LLM_PROVIDER`).
-Οι φάκελοι `v1`–`v11` είναι προηγούμενες εκδόσεις του prompt/pipeline και δεν είναι συγκρίσιμοι με το v12.
+The `<version>` is `PROMPT_VERSION_RAG_MODE[_provider][RESULTS_SUFFIX]` (e.g. `v12_sum`, `v12_llm`,
+`v12_sum_gemini`, `v12_sum_smoke`). The provider is added only when it is not `deepseek` (see `LLM_PROVIDER`).
+The folders `v1`–`v11` are earlier versions of the prompt/pipeline and are not comparable with v12.
 
 ## Scripts
 
 ```bash
-RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test          # malware του test
-RAG_MODE=sum python3 results/check_test_set.py dataset/benign_test_set   # νόμιμα πακέτα
-python3 results/evaluation_summary.py [v12_samples ...]                  # μετρικές (χωρίς όρισμα: όλα τα v12_*)
-python3 results/confusion_matrix_by_category.py                          # recall ανά κατηγορία επίθεσης, όλες οι εκδόσεις
-python3 results/results_analysis.py                                      # αναλυτικά αποτελέσματα + confusion matrix -> results/analysis/
+RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test          # malware of the test set
+RAG_MODE=sum python3 results/check_test_set.py dataset/benign_test_set   # benign packages
+python3 results/evaluation_summary.py [v12_samples ...]                  # metrics (without an argument: every v12_*)
+python3 results/confusion_matrix_by_category.py                          # recall per attack category, all versions
+python3 results/results_analysis.py                                      # detailed results + confusion matrix -> results/analysis/
+python3 results/thesis_tables.py                                         # LaTeX tables/figures of the thesis -> results/analysis/latex/
 ```
 
-- `check_test_set.py` ξανατρέχει αυτόματα τα `EVALUATION_FAILED` / `INCOMPLETE` / `UNKNOWN` και παραλείπει
-  όσα έχουν ήδη τελική απόφαση (μπορεί να διακοπεί και να συνεχιστεί).
-- Τα `NO_CHAINS_FOUND` (καμία ευαίσθητη κλήση στη στατική ανάλυση) εξαιρούνται από τις μετρικές του σταδίου LLM
-  και για τις δύο κλάσεις, και μετρούν στις end-to-end.
+- `check_test_set.py` automatically re-runs `EVALUATION_FAILED` / `INCOMPLETE` / `UNKNOWN` packages and skips
+  the ones that already have a final verdict (it can be interrupted and resumed).
+- `NO_CHAINS_FOUND` packages (no sensitive call in the static analysis) are excluded from the LLM-stage metrics
+  for both classes, and are counted in the end-to-end ones.

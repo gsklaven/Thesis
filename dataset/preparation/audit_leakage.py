@@ -34,19 +34,22 @@ DS = os.path.join(ROOT, "dataset")
 sys.path.insert(0, os.path.join(ROOT, "inference"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-MAX_PARSE_MB = 200  # μετά το compact_chains.py όλα τα αρχεία είναι < 70MB
+MAX_PARSE_MB = 200  # after compaction every chains file is < 70 MB; larger files are skipped
 
 
 def names(d):
+    """Package names of a folder of <package>.json files."""
     return {os.path.basename(f)[:-5] for f in glob.glob(os.path.join(d, "*.json"))}
 
 
 def benign_names():
+    """Packages labelled 'benign' in expected_labels.json."""
     exp = json.load(open(os.path.join(ROOT, "expected_labels.json")))
     return {p for p, v in exp.items() if v == "benign"}
 
 
 def auc(pos, neg):
+    """ROC AUC as the probability that a positive score exceeds a negative one (ties count 1/2)."""
     if not pos or not neg:
         return float("nan")
     return sum((p > n) + 0.5 * (p == n) for p in pos for n in neg) / (len(pos) * len(neg))
@@ -54,14 +57,20 @@ def auc(pos, neg):
 
 # ---------------------------------------------------------------- A
 def structure(train, test, benign, index_pkgs, tags):
-    # Ίδιος ορισμός καμπάνιας με το split (final_diverse_subset_meta.json): τα "γενικά κείμενα
-    # αναφοράς" (π.χ. το κενό boilerplate του OSV, εκατοντάδες άσχετα payloads) ΔΕΝ είναι καμπάνιες.
+    """
+    Structural checks of the split: disjoint train/test, index built only from train, no benign
+    package anywhere in the malware sets, and no campaign or identical code shared by train and test.
+    """
+    # Same campaign definition as the split (final_diverse_subset_meta.json): generic report texts
+    # (e.g. the empty OSV boilerplate, covering hundreds of unrelated payloads) are NOT campaigns.
     meta_path = os.path.join(DS, "final_diverse_subset_meta.json")
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
     eff = lambda p: meta[p]["campaign"] if p in meta else tags.get(p, {}).get("campaign_signature")
     camp = lambda S: {eff(p) for p in S} - {None, ""}
     shared = camp(train) & camp(test)
+    # raw OSV text signatures, reported for information only
     raw = lambda S: {tags.get(p, {}).get("campaign_signature") for p in S} - {None, ""}
+    # payload signatures of packages that have chains (identical code)
     pay = lambda S: {meta[p]["payload_signature"] for p in S if p in meta and meta[p]["n_chains"] > 0}
     shared_payloads = pay(train) & pay(test)
     return {
@@ -78,6 +87,7 @@ def structure(train, test, benign, index_pkgs, tags):
 
 
 # ---------------------------------------------------------------- B
+# lines of an OSV report that are shared by many reports (not specific to one package)
 BOILERPLATE = re.compile(r"^(---|_-=|## Source:|Malicious code in|Category:|Campaign:|Reasons \(based)", re.I)
 
 
@@ -89,6 +99,11 @@ def distinctive_snippet(desc):
 
 
 def prompt_scan(engine, packages, tags, matched, own_dir):
+    """
+    Build the real prompts of the first chains of each package (no LLM call) and look for hints
+    about the package itself. Text that also appears in a retrieved neighbour is reported separately
+    (it means the neighbour belongs to the same campaign text, not that the package leaked).
+    """
     problems, overlaps, checked = [], [], 0
     for pkg, path in packages:
         try:
@@ -118,10 +133,11 @@ def prompt_scan(engine, packages, tags, matched, own_dir):
 
 # ---------------------------------------------------------------- C
 def chain_texts(path, k, rng):
+    """Embedding texts of up to k (randomly sampled) chains of a package; None if the file is too big."""
     from utils import flatten_chain_to_text, is_pure_vendor_chain
     if os.path.getsize(path) > MAX_PARSE_MB * 1024 * 1024:
         return None
-    # ίδιο φίλτρο με το query_rag.py, ώστε τα strata να μετρούν ό,τι βλέπει πραγματικά το σύστημα
+    # same filter as query_rag.py, so the strata measure what the system actually retrieves for
     chains = [c for c in json.load(open(path)).get("behavior_chains", []) if not is_pure_vendor_chain(c)]
     if len(chains) > k:
         chains = rng.sample(chains, k)
@@ -129,6 +145,7 @@ def chain_texts(path, k, rng):
 
 
 def strata(model, index_vecs, groups, k, rng):
+    """Per group: packages bucketed by their best (top-1) cosine similarity to any index chain."""
     out = {}
     for label, items in groups.items():
         tops, skipped, twins = [], 0, []
@@ -139,6 +156,7 @@ def strata(model, index_vecs, groups, k, rng):
                 continue
             if not texts:
                 continue
+            # normalised embeddings -> dot product = cosine similarity
             q = model.encode(texts, normalize_embeddings=True, batch_size=64)
             best = float((q @ index_vecs.T).max())
             tops.append(best)
@@ -156,6 +174,7 @@ def strata(model, index_vecs, groups, k, rng):
 
 
 # ---------------------------------------------------------------- D
+# byte-level regexes, so large chains files are scanned without parsing the JSON
 CAT = re.compile(rb'"category":\s*"([a-z_]+)"')
 LOC = re.compile(rb'"location":\s*"([^"]*)"')
 N_CH = re.compile(rb'"total_behavior_chains":\s*(\d+)')
@@ -164,7 +183,9 @@ FEATURES = ["log_chains", "anchored_frac", "vendor_frac", "n_categories", "log_k
 
 
 def artifact_features(path):
+    """Behaviour-free features of one chains file (see FEATURES), or None if it has no chains."""
     data = open(path, "rb").read()
+    # the totals are written at the top of the file
     n = int(N_CH.search(data[:2000]).group(1)) if N_CH.search(data[:2000]) else 0
     if n == 0:
         return None
@@ -178,6 +199,7 @@ def artifact_features(path):
 
 
 def artifacts(mal, ben):
+    """Per-feature AUC and a cross-validated logistic regression on the behaviour-free features."""
     X, y = [], []
     for label, items in ((1, mal), (0, ben)):
         for _, path in items:
@@ -195,6 +217,7 @@ def artifacts(mal, ben):
         from sklearn.metrics import roc_auc_score
         from sklearn.pipeline import make_pipeline
         from sklearn.preprocessing import StandardScaler
+        # at most 5 folds, and never more folds than samples of the smaller class
         k = min(5, int((y == 0).sum()), int((y == 1).sum()))
         if k >= 2:
             clf = make_pipeline(StandardScaler(), LogisticRegression(class_weight="balanced", max_iter=1000))
@@ -207,6 +230,7 @@ def artifacts(mal, ben):
 
 
 def main():
+    """Run the four audits (A, D, B, C - cheapest first) and write the JSON report."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, help="limit packages per group (for quick tests)")
     ap.add_argument("--chains-per-pkg", type=int, default=20)
@@ -237,6 +261,7 @@ def main():
     report["D_artifacts"] = artifacts(mal_items, ben_items)
     print(json.dumps(report["D_artifacts"], indent=1))
 
+    # B and C need the embedding model and the RAG engine (loaded only now)
     from sentence_transformers import SentenceTransformer
     import query_rag
     print("[B] prompt scan ...")

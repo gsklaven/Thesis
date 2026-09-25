@@ -75,19 +75,19 @@ module SensitiveFlowConfig implements DataFlow::ConfigSig {
 module SensitiveFlow = TaintTracking::Global<SensitiveFlowConfig>;
 
 /**
- * Ανακατασκευάζει ανθρώπινα-αναγνώσιμο κείμενο για DataFlow::Node source/sink.
- * Κρίσιμο αφού η πρόταση "Data flows from X into Y" εμφανίζεται
- * σε κάθε chain με επιβεβαιωμένη ροή, νωρίς μέσα στο prompt.
+ * Rebuilds human-readable text for a source/sink DataFlow::Node.
+ * Important because the sentence "Data flows from X into Y" appears
+ * early in the prompt of every chain with a confirmed flow.
  *
- * Καλύπτει:
- *   - Attribute  : "obj.attr" (recursive, fixes nested π.χ. os.path.join)
- *   - Name       : αναγνωριστικό μεταβλητής
- *   - StringLiteral: πραγματική τιμή literal
- *   - Fallback   : n.toString() για όλα τα άλλα (BinaryExpr, Subscript...)
+ * Covers:
+ *   - Attribute  : "obj.attr" (recursive, handles nested ones e.g. os.path.join)
+ *   - Name       : variable identifier
+ *   - StringLiteral: actual literal value
+ *   - Fallback   : n.toString() for everything else (BinaryExpr, Subscript...)
  */
 
-/** Recursive helper — δουλεύει πάνω σε Expr, όχι DataFlow::Node. */
-/** Σύμβολο τελεστή για αναγνώσιμο κείμενο (binary / unary expressions). */
+/** Recursive helper - works on Expr, not on DataFlow::Node. */
+/** Operator symbol for readable text (binary / unary expressions). */
 private string opSym(Operator o) {
   o instanceof Add and result = "+"
   or

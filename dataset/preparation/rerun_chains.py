@@ -37,10 +37,12 @@ from utils import resolve_source_path  # noqa: E402
 DATASET_JSON = os.path.join(_ROOT, "dataset", "malware_dataset_matched.json")
 LOG_PATH = os.path.join(_ROOT, "dataset", "preparation", "rerun_chains.log")
 DEFER_FILE = os.path.join(_ROOT, "dataset", "preparation", "deferred_packages.json")
-SKIP_MARK = "Παράλειψη γλώσσας 'python'"
+# Printed by analysis.py when the CodeQL pass of a language fails (must match that message).
+SKIP_MARK = "Skipping language 'python'"
 
 
 def log(msg):
+    """Print a timestamped line and append it to the log file."""
     line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
     print(line, flush=True)
     with open(LOG_PATH, "a", encoding="utf-8") as f:
@@ -48,19 +50,15 @@ def log(msg):
 
 
 VERSION_DIR_RE = re.compile(r"^\d+(\.\d+)+$")
-MULTIVERSION_MIN_DIRS = 3  # πάνω από πόσους αριθμημένους υποφακέλους θεωρούμε "πολλαπλές εκδόσεις"
+MULTIVERSION_MIN_DIRS = 3  # from how many numbered sub-folders on a sample counts as "many versions"
 
 
 def pick_analysis_root(src_path):
     """
-    Ορισμένα raw samples (κυρίως pypi/packages/ και malware_samples/) δεν είναι
-    ένα πακέτο, αλλά ΟΛΟΚΛΗΡΟ το ιστορικό εκδόσεών του, μαζεμένο σε αριθμημένους
-    υποφακέλους (π.χ. 1.0/, 1.1/, ..., 5.1/ - βλ. automslc: 41 εκδόσεις,
-    ai-labs-snippets-sdk: 12). Αν αναλυθούν όλες μαζί, το CodeQL "βλέπει" έναν
-    πολλαπλάσιο, τεχνητά διογκωμένο κώδικα (πολλαπλά σχεδόν-πανομοιότυπα
-    αντίγραφα του ίδιου πακέτου), με αποτέλεσμα δεκάδες φορές περισσότερα
-    anchors και τεράστια, αργά αρχεία (π.χ. automslc: 8,4GB - 2026-09-23).
-    Αναλύουμε μόνο την πιο πρόσφατη έκδοση σε τέτοιες περιπτώσεις.
+    Some raw samples (mostly pypi/packages/ and malware_samples/) are not one package but its WHOLE
+    version history, in numbered sub-folders (e.g. 1.0/, 1.1/, ..., 5.1/ - automslc has 41 versions).
+    Analysed together, CodeQL would see many near-identical copies of the same code: dozens of times
+    more anchors and huge, slow chains files. In that case only the latest version is analysed.
     """
     try:
         subs = os.listdir(src_path)
@@ -78,9 +76,9 @@ CODE_EXTS = (".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx")
 
 def code_size(path):
     """
-    Μέγεθος ΜΟΝΟ των αρχείων κώδικα. Το όριο μεγέθους μετρούσε ΟΛΑ τα bytes, οπότε
-    πακέτα με λίγο κώδικα αλλά μεγάλα binaries/δεδομένα (π.χ. driftdb: 416MB στον δίσκο,
-    4,6MB κώδικας) αποκλείονταν ως "oversized", ενώ το CodeQL αναλύει μόνο τον κώδικα.
+    Size of the CODE files only. Counting all bytes would reject packages with little code but large
+    binaries/data (e.g. driftdb: 416 MB on disk, 4.6 MB of code) as "oversized", although CodeQL only
+    analyses the code.
     """
     total = 0
     for root, _, files in os.walk(path):
@@ -94,6 +92,7 @@ def code_size(path):
 
 
 def has_python_files(path):
+    """True if there is at least one .py file anywhere under path."""
     for _, _, files in os.walk(path):
         if any(f.endswith(".py") for f in files):
             return True
@@ -102,11 +101,10 @@ def has_python_files(path):
 
 def site_packages_root(path):
     """
-    Ορισμένα samples είναι Windows bdist (.win-amd64.zip) όπου ΟΛΟΣ ο κώδικας βρίσκεται κάτω από
-    "Program Files/Python311/Lib/site-packages/". Ο Python extractor του CodeQL θεωρεί τα
-    site-packages κώδικα βιβλιοθήκης και τα παραλείπει -> "no source code seen" (exit 32) και
-    python_pass_skipped σε ~5s (pydetectmouse, mousemovement, pyflakesy, pyvmdec - 2026-09-24).
-    Αν όλα τα .py είναι μέσα σε ΕΝΑ site-packages, η ανάλυση ξεκινά από εκεί.
+    Some samples are Windows bdists (.win-amd64.zip) where ALL the code lives under
+    "Program Files/Python311/Lib/site-packages/". The CodeQL Python extractor treats site-packages as
+    library code and skips it -> "no source code seen" (exit 32) and a skipped Python pass. If all .py
+    files are inside ONE site-packages folder, the analysis starts from that folder instead.
     """
     sp_dirs, outside = set(), False
     for root, _, files in os.walk(path):
@@ -121,6 +119,12 @@ def site_packages_root(path):
 
 
 def process_one(src_path, out_path):
+    """
+    Stage one sample (copy + extract archives), run analysis.py and build_behavior_chain.py with
+    hard timeouts, and copy the chains file to out_path. Returns (status, number of chains);
+    status is "ok" or the failure reason (oversized, timeout_*, codeql_error, python_pass_skipped,
+    builder_error).
+    """
     src_path = pick_analysis_root(src_path)
     ba.clean_staging()
     ba.copy_recursive(src_path, ba.STAGING_DIR)
@@ -139,6 +143,7 @@ def process_one(src_path, out_path):
     if r1.returncode != 0:
         return "codeql_error", -1
 
+    # a skipped Python pass on a package that HAS Python code gives a silently partial result
     if SKIP_MARK in (r1.stdout or "") and has_python_files(ba.STAGING_DIR):
         return "python_pass_skipped", -1
 
@@ -157,6 +162,7 @@ def process_one(src_path, out_path):
 
 
 def main():
+    """Analyse every package of the list that has no result yet (optionally one shard), logging progress and failures."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--packages-file", required=True)
     ap.add_argument("--key", help="key to read if the JSON file is a dict")
@@ -167,7 +173,7 @@ def main():
     ap.add_argument("--shard", help="I/N: process only every N-th package starting at I (0-based)")
     ap.add_argument("--log", help="log file (default rerun_chains.log)")
     ap.add_argument("--include-deferred", action="store_true",
-                    help="μην παραλείπεις όσα είναι στο deferred_packages.json (τελευταία προσπάθεια)")
+                    help="do not skip the packages of deferred_packages.json (last attempt)")
     args = ap.parse_args()
 
     global LOG_PATH
@@ -196,10 +202,10 @@ def main():
         if p in deferred:
             continue
         src = pm.get(p)
-        src = resolve_source_path(src)   # διαδρομή άλλου μηχανήματος -> THESIS_SOURCES_DIR
+        src = resolve_source_path(src)   # path of another machine -> THESIS_SOURCES_DIR
         if not src or not os.path.isdir(src):
             unmappable.append(p)
-        elif not os.path.exists(os.path.join(args.out_dir, f"{p}.json")):
+        elif not os.path.exists(os.path.join(args.out_dir, f"{p}.json")):  # resumable
             todo.append((p, src))
     if args.shard:
         i, n = map(int, args.shard.split("/"))
@@ -230,9 +236,8 @@ def main():
                 f"| avg {avg:.0f}s/pkg | ETA {avg * (len(todo) - i) / 3600:.1f}h --")
     log(f"=== DONE ok={ok} (0-chain: {zero}) failed={ {k: len(v) for k, v in fails.items()} } ===")
     if fails:
-        # Το όνομα της λίστας μπαίνει στο όνομα αρχείου: αλλιώς δύο διαφορετικές λίστες με
-        # ίδιο sharding (π.χ. clean2 και heavy_size, και οι δύο --shard i/4) σβήνουν η μία
-        # τις αποτυχίες της άλλης.
+        # The name of the list is part of the file name: otherwise two different lists with the same
+        # sharding (both --shard i/4) would overwrite each other's failures.
         tag = os.path.splitext(os.path.basename(args.packages_file))[0]
         fp = os.path.join(args.out_dir, f"_rerun_failures_{tag}.json" if not args.shard else
                           f"_rerun_failures_{tag}_%sof%s.json" % tuple(args.shard.split("/")))

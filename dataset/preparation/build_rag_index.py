@@ -1,17 +1,16 @@
 """
-Χτίζει το RAG index ΜΟΝΟ από το rag_train/ (ΠΟΤΕ από το rag_test/).
+Build the malware-examples index of the Hybrid RAG, ONLY from rag_train/ (NEVER from rag_test/).
 
-I8 FIX (πλήρες, και στις 2 πλευρές): το query_rag.py δεν περνάει
-attack_type_tags στο flatten_chain_to_text() γιατί είναι άγνωστα για ένα νέο
-πακέτο - για ΠΡΑΓΜΑΤΙΚΗ συμμετρία, ούτε εδώ (index-building) πρέπει να τα
-περνάμε στο ΙΔΙΟ ΚΕΙΜΕΝΟ ΤΟΥ EMBEDDING. Τα tags παραμένουν διαθέσιμα στο
-metadata.json για εμφάνιση/φιλτράρισμα - απλά δεν μπαίνουν πια ΜΕΣΑ στο
-vector, ώστε train και query embeddings να παράγονται από επακριβώς το ίδιο
-είδος κειμένου. ΙΔΙΟ σκεπτικό ισχύει για το description παρακάτω: μπαίνει
-ΜΟΝΟ στο metadata (για εμφάνιση στο LLM prompt ως πλαίσιο για τους
-ανακτημένους ΓΕΙΤΟΝΕΣ), ΠΟΤΕ μέσα στο ίδιο το embedding text - ένα νέο,
-υπό εξέταση πακέτο δεν έχει description (δεν είναι ακόμα γνωστό αν είναι
-malware), οπότε η συμμετρία train/query παραμένει ανέπαφη.
+For every Behavior Chain of every training package (except pure-vendor chains) the compact text
+(utils.flatten_chain_to_text) is embedded with all-MiniLM-L6-v2, and one metadata row is stored
+next to each vector: package, category, attack-type tags, OSV description, location, text.
+
+Index/query symmetry: query_rag.py cannot know the attack-type tags or the description of a new
+package, so they are NOT part of the embedded text here either - train and query vectors are made
+from exactly the same kind of text. Tags and description stay in the metadata, where they are shown
+to the LLM as context about the retrieved NEIGHBOURS (Section B of the prompt).
+
+Output: dataset/indexes/rag_index/vectors.npy + metadata.json (row i of both = the same chain).
 """
 
 import json
@@ -31,8 +30,8 @@ BASE_DIR = os.path.join(_THESIS_ROOT, "dataset")
 TRAIN_DIR = os.path.join(BASE_DIR, "rag_train")
 ATTACK_TAGS_JSON = os.path.join(BASE_DIR, "attack_type_tags.json")
 
-# ΝΕΟ: πηγή για το OSV description ανά πακέτο (ίδιο fallback pattern με
-# αλλού στο project - deduped αν υπάρχει, αλλιώς matched).
+# Source of the OSV description of each package: the de-duplicated dataset if it exists,
+# otherwise the matched one (same fallback as elsewhere in the project).
 _DEDUPED_JSON = os.path.join(BASE_DIR, "malware_dataset_deduped.json")
 _MATCHED_JSON = os.path.join(BASE_DIR, "malware_dataset_matched.json")
 DATASET_JSON = _DEDUPED_JSON if os.path.exists(_DEDUPED_JSON) else _MATCHED_JSON
@@ -46,18 +45,17 @@ MODEL_NAME = "all-MiniLM-L6-v2"
 
 def load_descriptions():
     """
-    Χτίζει lookup package_name -> description από το πηγαίο dataset json.
-    Defensive: αν κάτι λείπει/είναι διαφορετικού σχήματος, απλά επιστρέφει
-    άδειο string για εκείνο το πακέτο - ΠΟΤΕ δεν σταματάει το index build.
+    Lookup package_name -> OSV description from the dataset JSON. Defensive: if the file is missing
+    or has another shape, packages simply get an empty description - the index build never stops.
     """
     if not os.path.exists(DATASET_JSON):
-        print(f"  [!] Δεν βρέθηκε {DATASET_JSON} - όλα τα descriptions θα είναι κενά.")
+        print(f"  [!] {DATASET_JSON} not found - all descriptions will be empty.")
         return {}
     try:
         with open(DATASET_JSON, "r", encoding="utf-8") as f:
             dataset = json.load(f)
     except Exception as e:
-        print(f"  [!] Αδυναμία φόρτωσης {DATASET_JSON}: {e}")
+        print(f"  [!] Could not load {DATASET_JSON}: {e}")
         return {}
 
     by_pkg = {}
@@ -70,22 +68,24 @@ def load_descriptions():
 
 
 def main():
+    """Embed every training chain and write vectors.npy + metadata.json."""
     os.makedirs(INDEX_DIR, exist_ok=True)
 
     with open(ATTACK_TAGS_JSON, "r", encoding="utf-8") as f:
         attack_tags = json.load(f)
 
     descriptions = load_descriptions()
-    print(f"[*] {len(descriptions)} πακέτα με πραγματικό OSV description βρέθηκαν "
-          f"(από {os.path.basename(DATASET_JSON)}).")
+    print(f"[*] {len(descriptions)} packages with a real OSV description found "
+          f"(from {os.path.basename(DATASET_JSON)}).")
 
-    print(f"[*] Φόρτωση μοντέλου embeddings: {MODEL_NAME}...")
+    print(f"[*] Loading embedding model: {MODEL_NAME}...")
     model = SentenceTransformer(MODEL_NAME)
 
     texts = []
     metadata = []
     vendor_skipped = 0
 
+    # sorted file order -> deterministic row order of the index
     for fname in sorted(os.listdir(TRAIN_DIR)):
         if not fname.endswith(".json"):
             continue
@@ -97,12 +97,12 @@ def main():
         pkg_description = descriptions.get(pkg_name, "")
 
         for idx, chain in enumerate(data.get("behavior_chains", [])):
-            # Κώδικας νόμιμων βιβλιοθηκών (vendor/) ΔΕΝ είναι παράδειγμα malware - βλ. utils.
+            # code of legitimate libraries (vendor/) is NOT a malware example - see utils
             if is_pure_vendor_chain(chain):
                 vendor_skipped += 1
                 continue
-            # I8 FIX: ΧΩΡΙΣ attack_type_tags στο embedding text - συμμετρικό
-            # με το query_rag.py, που ΔΕΝ μπορεί να τα ξέρει για νέο πακέτο.
+            # no attack_type_tags in the embedded text: symmetric with query_rag.py,
+            # which cannot know them for a new package
             text = flatten_chain_to_text(chain)
             texts.append(text)
             metadata.append({
@@ -110,28 +110,26 @@ def main():
                 "chain_index": idx,
                 "category": chain.get("category"),
                 "language": chain.get("language"),
-                # Τα tags ΠΑΡΑΜΕΝΟΥΝ εδώ - χρήσιμα για εμφάνιση/φιλτράρισμα
-                # αποτελεσμάτων, απλά όχι πια ΜΕΣΑ στο ίδιο το vector.
+                # tags are kept here, for display in the prompt - just not inside the vector
                 "attack_type_tags": tag_info.get("attack_type_tags", []),
                 "campaign_signature_preview": (tag_info.get("campaign_signature") or "")[:100],
                 "location": chain.get("location"),
-                # ΝΕΟ: πραγματικό OSV description (κενό string αν δεν
-                # υπάρχει - bulk-source πακέτα θα παραμείνουν κενά, όπως
-                # πριν, απλά τώρα τα OSV-sourced ΘΑ έχουν πραγματικό κείμενο).
+                # real OSV description (empty string when the package has none)
                 "description": pkg_description,
                 "text": text,
             })
 
-    print(f"[*] {len(texts)} behavior-chain κομμάτια (chunks) προς embedding "
-          f"({vendor_skipped} καθαρά vendor chains εξαιρέθηκαν).")
+    print(f"[*] {len(texts)} behavior-chain chunks to embed "
+          f"({vendor_skipped} pure vendor chains excluded).")
 
+    # normalised vectors: a dot product is the cosine similarity (used by query_rag.py)
     embeddings = model.encode(texts, show_progress_bar=True, normalize_embeddings=True)
     np.save(VECTORS_FILE, embeddings)
 
     with open(METADATA_FILE, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-    print(f"\n[+] Index χτίστηκε: {len(texts)} vectors -> {VECTORS_FILE}")
+    print(f"\n[+] Index built: {len(texts)} vectors -> {VECTORS_FILE}")
     print(f"[+] Metadata -> {METADATA_FILE}")
 
 

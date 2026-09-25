@@ -9,9 +9,10 @@ sanity report. Run after the static analysis (dataset/analyzed_chains/ must hold
   1. backfill_osv_descriptions.py   (PEP 503 name normalisation, fills empty descriptions)
   2. attack_type_tagger.py          (tags + campaign signatures come from the descriptions)
   3. build_final_dataset.py         (balanced subset from analyzed_chains)
-  4. split_train_test.py            (campaign-level split, seed 42)
+  4. split_train_test.py            (family-level split: campaign OR identical code, seed 42)
   5. build_rag_index.py             (venv python: needs sentence_transformers)
-  6. sanity report: train/test disjoint, index built only from train, description coverage
+  6. expected_labels.json sync (rag_test -> malicious, benign_test_set -> benign)
+  7. sanity report: train/test disjoint, index built only from train, description coverage
 
 Usage: python3 dataset/preparation/rebuild_rag.py [--dry-run] [--from-step N] [--skip-check]
 """
@@ -29,6 +30,7 @@ DS = os.path.join(ROOT, "dataset")
 PREP = os.path.join(DS, "preparation")
 VENV_PY = os.path.join(ROOT, "venv", "bin", "python")
 
+# (name, python interpreter, script) of each step, run with cwd=dataset/preparation/
 STEPS = [
     ("backfill descriptions", sys.executable, "backfill_osv_descriptions.py"),
     ("attack-type tags + campaigns", sys.executable, "attack_type_tagger.py"),
@@ -36,6 +38,7 @@ STEPS = [
     ("train/test split", sys.executable, "split_train_test.py"),
     ("RAG index", VENV_PY, "build_rag_index.py"),
 ]
+# small dataset files copied into the backup; the folders in RENAME are moved there
 SMALL_FILES = ["malware_dataset_matched.json", "attack_type_tags.json", "final_dataset_report.json",
                "final_diverse_subset_packages.json", "final_diverse_subset_meta.json", "skipped_oversized_packages.json",
                "excluded_no_payload_packages.json", "excluded_malwarebench_false_positive.json"]
@@ -43,17 +46,18 @@ RENAME = ["final_diverse_subset", "rag_train", "rag_test", os.path.join("indexes
 
 
 def busy():
+    """Command lines of pipeline processes that are still running (the rebuild must not overlap them)."""
     out = subprocess.run("ps -eo command | grep -E 'rerun_chains|fetch_benign|codeql_pipeline/analysis|batch_analyzer' | grep -v grep",
                          shell=True, capture_output=True, text=True).stdout.strip()
     return [l[:90] for l in out.splitlines() if "rebuild_rag" not in l]
 
 
 def backup(dry):
-    """Η προηγούμενη έκδοση (μικρά JSON + φάκελοι) μεταφέρεται στο old/rag_rebuild_<stamp>/,
-    ώστε το dataset/ να περιέχει μόνο την τρέχουσα και οι επαναλήψεις να μη συγκρούονται."""
+    """The previous version (small JSON files + folders) is moved to old/rag_rebuild_<stamp>/, so that
+    dataset/ holds only the current version and repeated rebuilds do not collide."""
     stamp = time.strftime("%Y%m%d_%H%M%S")
     bdir = os.path.join(ROOT, "old", f"rag_rebuild_{stamp}")
-    print(f"[0] backup της προηγούμενης έκδοσης -> {bdir}")
+    print(f"[0] backup of the previous version -> {bdir}")
     if dry:
         return
     os.makedirs(bdir)
@@ -70,10 +74,10 @@ def backup(dry):
 
 def sync_expected_labels(dry):
     """
-    Το split αλλάζει τη σύνθεση του rag_test, αλλά κανένα άλλο script δεν ενημερώνει τα
-    malicious labels του expected_labels.json - πακέτα χωρίς label δεν βαθμολογούνται
-    καθόλου (σιωπηλά) στο check_test_set.py. Εδώ: κάθε πακέτο του rag_test -> "malicious",
-    malicious labels πακέτων που δεν είναι πια στο rag_test αφαιρούνται, τα benign μένουν.
+    The split changes the composition of rag_test, but no other script updates the malicious labels
+    of expected_labels.json - packages without a label are (silently) not scored at all by
+    check_test_set.py. Here: every rag_test package -> "malicious", malicious labels of packages that
+    are no longer in rag_test are removed, and every benign_test_set package -> "benign".
     """
     path = os.path.join(ROOT, "expected_labels.json")
     labels = json.load(open(path)) if os.path.exists(path) else {}
@@ -84,12 +88,12 @@ def sync_expected_labels(dry):
     print(f"\n[labels] rag_test {len(test)} | +{len(added)} malicious | -{len(stale)} stale malicious | "
           f"benign kept {sum(v == 'benign' for v in labels.values())}")
     if conflicts:
-        print(f"[labels] ΠΡΟΣΟΧΗ: {len(conflicts)} πακέτα του rag_test είχαν label benign: {conflicts[:10]}")
-    # Τα benign ορίζονται από τον φάκελο dataset/benign_test_set/ και ΔΕΝ αντικαθίστανται ποτέ
-    # (π.χ. το νόμιμο requests είχε γίνει "malicious" λόγω συνονόματου malware - 2026-09-24).
+        print(f"[labels] WARNING: {len(conflicts)} rag_test packages had the label benign: {conflicts[:10]}")
+    # Benign labels are defined by the folder dataset/benign_test_set/ and are NEVER overwritten
+    # (a malware sample with the same name as a benign package would otherwise flip its label).
     benign = {os.path.basename(f)[:-5] for f in glob.glob(os.path.join(DS, "benign_test_set", "*.json"))}
     if test & benign:
-        raise SystemExit(f"[labels] ΣΥΓΚΡΟΥΣΗ ονομάτων rag_test/benign_test_set: {sorted(test & benign)[:10]}")
+        raise SystemExit(f"[labels] NAME CONFLICT rag_test/benign_test_set: {sorted(test & benign)[:10]}")
     if dry:
         return
     for p in stale:
@@ -102,6 +106,7 @@ def sync_expected_labels(dry):
 
 
 def sanity():
+    """Print the sanity report of the rebuilt RAG (disjoint sets, index only from train, no raw CodeQL node texts)."""
     names = lambda d: {os.path.basename(f)[:-5] for f in glob.glob(os.path.join(DS, d, "*.json"))}
     train, test = names("rag_train"), names("rag_test")
     meta = json.load(open(os.path.join(DS, "indexes", "rag_index", "metadata.json")))
@@ -112,6 +117,7 @@ def sanity():
     print(f"rag_train {len(train)} | rag_test {len(test)} | index chunks {len(meta)} from {len(idx_pk)} packages")
     print(f"train/test overlap: {len(train & test)} (must be 0) | index packages outside train: {len(idx_pk - train)} (must be 0)")
     print(f"no description: train {nodesc(train)}/{len(train)} | test {nodesc(test)}/{len(test)}")
+    # raw CodeQL node texts would mean an old, unnormalised chains file slipped in
     bad = sum(1 for f in glob.glob(os.path.join(DS, "rag_train", "*.json")) if b"ControlFlowNode for " in open(f, "rb").read())
     print(f"rag_train files still containing 'ControlFlowNode for': {bad} (must be 0)")
     ok = not (train & test) and not (idx_pk - train) and bad == 0
@@ -119,6 +125,7 @@ def sanity():
 
 
 def main():
+    """Run the rebuild steps in order (optionally from a given step), then sync the labels and check."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--from-step", type=int, default=0)

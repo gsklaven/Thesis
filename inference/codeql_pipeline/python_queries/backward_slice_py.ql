@@ -59,18 +59,18 @@ module BackwardSliceConfig implements DataFlow::ConfigSig {
 module BackwardSlice = TaintTracking::Global<BackwardSliceConfig>;
 
 /**
- * Ανακατασκευάζει ανθρώπινα-αναγνώσιμο κείμενο για κόμβους DataFlow που
- * διαφορετικά θα εμφανίζονταν ως "ControlFlowNode for X".
+ * Rebuilds human-readable text for DataFlow nodes that would otherwise
+ * appear as "ControlFlowNode for X".
  *
- * Καλύπτει τους τέσσερις πιο συχνούς τύπους:
- *   - Attribute  : "obj.attr" (recursive, fixes nested π.χ. os.path.join)
- *   - Name       : επιστρέφει το αναγνωριστικό μεταβλητής (π.χ. "data")
- *   - StringLiteral: επιστρέφει την τιμή του literal (π.χ. "https://...")
- *   - Fallback   : n.toString() για οτιδήποτε άλλο (BinaryExpr, Subscript...)
+ * Covers the four most common kinds:
+ *   - Attribute  : "obj.attr" (recursive, handles nested ones e.g. os.path.join)
+ *   - Name       : returns the variable identifier (e.g. "data")
+ *   - StringLiteral: returns the literal's value (e.g. "https://...")
+ *   - Fallback   : n.toString() for anything else (BinaryExpr, Subscript...)
  */
 
-/** Recursive helper — δουλεύει πάνω σε Expr, όχι DataFlow::Node. */
-/** Σύμβολο τελεστή για αναγνώσιμο κείμενο (binary / unary expressions). */
+/** Recursive helper - works on Expr, not on DataFlow::Node. */
+/** Operator symbol for readable text (binary / unary expressions). */
 private string opSym(Operator o) {
   o instanceof Add and result = "+"
   or
@@ -108,15 +108,15 @@ private string unarySym(Unaryop o) {
 }
 
 private string readableExpr(Expr e) {
-  // Attribute (recursive): os.path.join, self.foo, κλπ.
+  // Attribute (recursive): os.path.join, self.foo, etc.
   exists(Attribute attr | attr = e |
     result = readableExpr(attr.getObject()) + "." + attr.getName()
   )
   or
-  // Name: απλή αναφορά μεταβλητής (data, key, meta_dir, κλπ.)
+  // Name: plain variable reference (data, key, meta_dir, etc.)
   exists(Name nm | nm = e | result = nm.getId())
   or
-  // StringLiteral: δείχνει την πραγματική τιμή αντί για "StringLiteral"
+  // StringLiteral: shows the actual value instead of "StringLiteral"
   exists(StringLiteral lit | lit = e | result = lit.getS())
   or
   exists(IntegerLiteral i | i = e | result = i.getN())
@@ -150,19 +150,17 @@ private string readableExpr(Expr e) {
 }
 
 string getReadableText(DataFlow::Node n) {
-  // Αν ο κόμβος αντιστοιχεί σε expression, χρήση του recursive helper
+  // if the node corresponds to an expression, use the recursive helper
   result = readableExpr(n.asExpr())
   or
-  // Fallback αν δεν υπάρχει asExpr() (π.χ. parameter nodes)
+  // fallback when there is no asExpr() (e.g. parameter nodes)
   not exists(n.asExpr()) and result = n.toString()
 }
 
 /**
- * ΝΕΟ FIX: το "anchor_api" (sensitive_api στο τελικό JSON) χρησιμοποιούσε
- * call.toString() - ακριβώς το ίδιο πρόβλημα με τα υπόλοιπα πεδία (π.χ.
- * "ControlFlowNode for Attribute()" αντί για "requests.get"), απλά δεν
- * είχε καλυφθεί από το προηγούμενο fix. Ανακατασκευάζει "callee(...)"
- * (π.χ. "requests.get(...)", "os.system(...)") από το Call expression.
+ * Readable text of the anchor call ("anchor_api", sensitive_api in the final JSON): call.toString()
+ * would give "ControlFlowNode for Attribute()" instead of "requests.get". Rebuilds "callee(...)"
+ * (e.g. "requests.get(...)", "os.system(...)") from the Call expression.
  */
 string getReadableCallText(DataFlow::CallCfgNode call) {
   exists(Expr func | func = call.asExpr().(Call).getFunc() | result = readableExpr(func) + "(...)")

@@ -1,105 +1,106 @@
-# Behavioral RAG για την Ανίχνευση Κακόβουλων Πακέτων
+# Behavioral RAG for Malicious Package Detection
 
-Σύστημα που ανιχνεύει κακόβουλα πακέτα Python (PyPI) με τρία στάδια:
+A system that detects malicious Python (PyPI) packages in three stages:
 
-1. **Στατική ανάλυση (CodeQL)**: για κάθε ευαίσθητη κλήση (δίκτυο, εκτέλεση εντολών, αρχεία,
-   κωδικοποίηση) εξάγεται ένα *Behavior Chain*: οι ροές δεδομένων προς την κλήση, οι συνθήκες
-   ελέγχου και οι κλήσεις βιβλιοθηκών γύρω της.
-2. **Υβριδικό RAG**: κάθε Behavior Chain συγκρίνεται (all-MiniLM-L6-v2, ομοιότητα συνημιτόνου)
-   με (α) Behavior Chains γνωστών κακόβουλων πακέτων και (β) μια βάση γνώσης ασφάλειας
+1. **Static analysis (CodeQL)**: for every sensitive call (network, command execution, files,
+   encoding) a *Behavior Chain* is extracted: the data flows into the call, the gating conditions
+   and the library calls around it.
+2. **Hybrid RAG**: every Behavior Chain is compared (all-MiniLM-L6-v2, cosine similarity) with
+   (a) Behavior Chains of known malicious packages and (b) a security knowledge base
    (MITRE ATT&CK, CAPEC, CWE, Semgrep, Bandit, GuardDog, SLSA, OWASP).
-3. **LLM (DeepSeek)**: δομημένο prompt τριών ερωτημάτων → απόφαση `MALICIOUS`/`BENIGN` ανά
-   Behavior Chain → συγκέντρωση σε απόφαση πακέτου (ένα `MALICIOUS` chain αρκεί).
+3. **LLM (DeepSeek)**: a structured prompt with three questions → a `MALICIOUS`/`BENIGN` verdict per
+   Behavior Chain → aggregated into a package verdict (one `MALICIOUS` chain is enough).
 
-## Δομή
+## Layout
 
 ```
 dataset/
-  preparation/               όλα τα scripts προετοιμασίας (βλ. ροή παρακάτω)
-    policy_sources/          στατικές πηγές της βάσης γνώσης (Semgrep, Bandit, GuardDog, OWASP, SLSA ...)
-  malware_dataset*.json      λίστα δειγμάτων malware και θέση του κώδικά τους
-  analyzed_chains/           Behavior Chains όλων των malware (ένα JSON ανά πακέτο)
-  benign_test_set/           Behavior Chains των νόμιμων πακέτων του test (sdists από το PyPI)
-  final_diverse_subset/      επιλεγμένα δείγματα (ένα ανά διαφορετικό κώδικα) + _meta/_packages.json
-  rag_train/  rag_test/      διαχωρισμός ανά οικογένεια (καμία κοινή καμπάνια ή κοινός κώδικας)
-  indexes/rag_index/         διανύσματα των Behavior Chains του rag_train
-  indexes/policy_index/      διανύσματα της βάσης γνώσης ασφάλειας
+  preparation/               all preparation scripts (see the flow below)
+    policy_sources/          local sources of the knowledge base (Semgrep, Bandit, GuardDog, OWASP, SLSA ...)
+  malware_dataset*.json      list of malware samples and the location of their code
+  analyzed_chains/           Behavior Chains of all malware (one JSON per package)
+  benign_test_set/           Behavior Chains of the benign test packages (sdists from PyPI)
+  final_diverse_subset/      selected samples (one per distinct code) + _meta/_packages.json
+  rag_train/  rag_test/      family-level split (no shared campaign or code)
+  indexes/rag_index/         vectors of the rag_train Behavior Chains
+  indexes/policy_index/      vectors of the security knowledge base
   payload_scan.json, excluded_*.json, attack_type_tags.json, policy_rules.json, audit_leakage_v12.json
 inference/
   codeql_pipeline/           analysis.py, build_behavior_chain.py, python_queries/, js_queries/
-  query_rag.py               ανάκτηση + κατασκευή του prompt (RAG_MODE για τα ablations)
-  llm_evaluator.py           αξιολόγηση ενός πακέτου (κοινή λογική για κάθε LLM)
-  llm_providers.py           κλήση του LLM: deepseek | gemini | lmstudio | openrouter (LLM_PROVIDER στο .env)
+  query_rag.py               retrieval + prompt construction (RAG_MODE for the ablations)
+  llm_evaluator.py           evaluation of one package (shared logic for every LLM)
+  llm_providers.py           LLM call: deepseek | gemini | lmstudio | openrouter (LLM_PROVIDER in .env)
 results/
-  <έκδοση>/report_*.json     αναφορά ανά πακέτο (π.χ. v12_sum/, v12_llm/)
-  test_set_summaries/        test_set_summary_<έκδοση>_<test set>.json
-  evaluation_summaries/      evaluation_summary_<έκδοση>.json
-  check_test_set.py, evaluation_summary.py, confusion_matrix_by_category.py
-expected_labels.json         ετικέτες αξιολόγησης (malicious για το rag_test, benign για το benign_test_set)
-run_pipeline.sh              αυτοματοποιημένη εκτέλεση όλων των σταδίων (οδηγός: PIPELINE.md)
-requirements.txt             εκδόσεις των πακέτων Python
-.env.example         υπόδειγμα τοπικών ρυθμίσεων (θέση πηγών, κλειδί LLM) -> .env
-old/                         ό,τι δεν χρησιμοποιεί πλέον το pipeline (εκτός git)
+  <version>/report_*.json    report per package (e.g. v12_sum/, v12_llm/)
+  test_set_summaries/        test_set_summary_<version>_<test set>.json
+  evaluation_summaries/      evaluation_summary_<version>.json
+  analysis/                  metrics, confusion matrices, strata, ablations, LaTeX of the thesis
+  check_test_set.py, evaluation_summary.py, confusion_matrix_by_category.py, results_analysis.py, thesis_tables.py
+expected_labels.json         evaluation labels (malicious for rag_test, benign for benign_test_set)
+run_pipeline.sh              automated execution of all stages (guide: PIPELINE.md)
+requirements.txt             versions of the Python packages
+.env.example                 template of the local settings (sources location, LLM key) -> .env
+old/                         everything the pipeline no longer uses (not in git)
 ```
 
-## Γρήγορη εκκίνηση
+## Quick start
 
 ```bash
-./run_pipeline.sh setup      # θέση πηγών -> .env, venv, πακέτα CodeQL
+./run_pipeline.sh setup      # sources location -> .env, venv, CodeQL packs
 ./run_pipeline.sh check
-./run_pipeline.sh status     # τι έχει γίνει και τι λείπει
-./run_pipeline.sh all        # ή μεμονωμένα στάδια: sources, collect, analyze, benign, rag, evaluate
+./run_pipeline.sh status     # what has been done and what is missing
+./run_pipeline.sh all        # or single stages: sources, collect, analyze, benign, rag, evaluate
 ```
 
-Αναλυτικά σενάρια (νέο μηχάνημα, αναπαραγωγή από GitHub Release χωρίς ξανά CodeQL, ενημέρωση με νέα
-πακέτα, δημοσίευση των Behavior Chains): **[PIPELINE.md](PIPELINE.md)**. Οι ενότητες παρακάτω
-περιγράφουν τι κάνει κάθε στάδιο και ποιο script καλεί.
+Detailed scenarios (new machine, reproduction from the GitHub Release without re-running CodeQL,
+update with new packages, publishing the Behavior Chains): **[PIPELINE.md](PIPELINE.md)**. The sections
+below describe what each stage does and which script it calls.
 
-## Προαπαιτούμενα
+## Prerequisites
 
-- Python 3.14 και `venv/` με τα πακέτα του `requirements.txt` (το `./run_pipeline.sh setup` τα εγκαθιστά).
-- CodeQL CLI 2.27.0 στο `PATH` και τα πακέτα των queries (`codeql pack install`, επίσης από το `setup`).
-- Οι κλώνοι των πηγών malware σε έναν φάκελο ή δίσκο, δηλωμένο ως `THESIS_SOURCES_DIR` στο `.env`
-  (`./run_pipeline.sh sources` τους κατεβάζει). Οι αποθηκευμένες διαδρομές των δειγμάτων μεταφράζονται
-  αυτόματα σε αυτόν τον φάκελο (`utils.resolve_source_path`).
-- `DEEPSEEK_API_KEY` για το στάδιο του LLM.
+- Python 3.14 and a `venv/` with the packages of `requirements.txt` (`./run_pipeline.sh setup` installs them).
+- CodeQL CLI 2.27.0 in the `PATH` and the query packs (`codeql pack install`, also done by `setup`).
+- The clones of the malware sources in one folder or disk, declared as `THESIS_SOURCES_DIR` in `.env`
+  (`./run_pipeline.sh sources` downloads them). The stored sample paths are mapped automatically to
+  this folder (`utils.resolve_source_path`).
+- `DEEPSEEK_API_KEY` for the LLM stage.
 
-## Ροή εκτέλεσης
+## Execution flow
 
-Αυτό κάνει το `run_pipeline.sh`, στάδιο προς στάδιο. Οι εντολές τρέχουν από τη ρίζα του έργου, με
-ενεργό το `venv`. Τη θέση των πηγών και τα κλειδιά τα διαβάζουν όλα από το `.env` (`utils.load_env_file`).
+This is what `run_pipeline.sh` does, stage by stage. Commands run from the project root, with the
+`venv` active. Every script reads the sources location and the keys from `.env` (`utils.load_env_file`).
 
-### 1. Συλλογή δειγμάτων malware
+### 1. Collection of malware samples
 
 ```bash
 python3 dataset/preparation/prepare_dataset_diverse.py   # OSV malicious-packages -> dataset/malware_dataset.json
 python3 dataset/preparation/collect_all_samples.py       # + Datadog, MalwareBench, pypi_malregistry, maloss -> malware_dataset_all_sources.json
-python3 dataset/preparation/extract_samples.py           # αντιστοίχιση με τον κώδικα στον δίσκο -> malware_dataset_matched.json
-python3 dataset/preparation/malwarebench_false_positives.py  # νόμιμα πακέτα του MalwareBench (threat_type=false_positive)
+python3 dataset/preparation/extract_samples.py           # matching with the code on disk -> malware_dataset_matched.json
+python3 dataset/preparation/malwarebench_false_positives.py  # legitimate MalwareBench packages (threat_type=false_positive)
 ```
 
-### 2. Στατική ανάλυση (Behavior Chains)
+### 2. Static analysis (Behavior Chains)
 
-Χωρίς εγκατάσταση εξαρτήσεων (`CODEQL_NO_VENDOR=1`). Τα πακέτα που έχουν ήδη αποτέλεσμα παραλείπονται,
-οπότε μια διακοπείσα εκτέλεση συνεχίζει από εκεί που σταμάτησε.
+Without installing dependencies (`CODEQL_NO_VENDOR=1`). Packages that already have a result are
+skipped, so an interrupted run resumes where it stopped.
 
 ```bash
-# malware -> dataset/analyzed_chains/ (λίστα: {"targets": [ονόματα πακέτων]})
+# malware -> dataset/analyzed_chains/ (list: {"targets": [package names]})
 python3 -c "import json; json.dump({'targets': [i['package_name'] for i in json.load(open('dataset/malware_dataset_matched.json')) if i.get('package_name')]}, open('/tmp/targets.json', 'w'))"
 CODEQL_NO_VENDOR=1 CODEQL_QUERY_TIMEOUT=600 CODEQL_DB_TIMEOUT=900 BATCH_ANALYSIS_TIMEOUT=1200 \
   python3 dataset/preparation/rerun_chains.py --packages-file /tmp/targets.json --key targets
-#   παράλληλα: N διεργασίες με --shard i/N, --pipeline-dir <ιδιωτικό αντίγραφο του inference/codeql_pipeline>
-#   και BATCH_STAGING_DIR=<ιδιωτικός φάκελος> ανά διεργασία
+#   in parallel: N processes with --shard i/N, --pipeline-dir <private copy of inference/codeql_pipeline>
+#   and BATCH_STAGING_DIR=<private folder> per process
 
-# νόμιμα πακέτα: sdists από το PyPI JSON API (χωρίς pip) -> dataset/benign_test_set/
-python3 dataset/preparation/select_extra_benign.py       # επιλογή (benign_extra_selection.json)
+# benign packages: sdists from the PyPI JSON API (no pip) -> dataset/benign_test_set/
+python3 dataset/preparation/select_extra_benign.py       # selection (benign_extra_selection.json)
 CODEQL_NO_VENDOR=1 python3 dataset/preparation/fetch_benign_test_set.py
 
-# σάρωση για κακόβουλο κώδικα, ανεξάρτητη από το CodeQL -> dataset/payload_scan.json
+# scan for malicious code, independent of CodeQL -> dataset/payload_scan.json
 python3 dataset/preparation/payload_scan.py
 ```
 
-### 3. Βάση γνώσης ασφάλειας
+### 3. Security knowledge base
 
 ```bash
 python3 dataset/preparation/harvest_semgrep_python_rules.py    # -> policy_sources/*.json
@@ -110,55 +111,57 @@ python3 dataset/preparation/build_policy_dataset.py            # + MITRE ATT&CK,
 python3 dataset/preparation/build_policy_index.py              # -> dataset/indexes/policy_index/
 ```
 
-### 4. RAG: επιλογή, διαχωρισμός, ευρετήριο
+### 4. RAG: selection, split, index
 
 ```bash
-python3 dataset/preparation/rebuild_rag.py            # --dry-run για προεπισκόπηση, --from-step N για συνέχεια
+python3 dataset/preparation/rebuild_rag.py            # --dry-run to preview, --from-step N to resume
 python3 dataset/preparation/audit_leakage.py --out dataset/audit_leakage_v12.json
 ```
 
-Το `rebuild_rag.py` εκτελεί με τη σειρά:
+`rebuild_rag.py` runs, in order:
 
-| Βήμα | Script | Τι κάνει |
+| Step | Script | What it does |
 |---|---|---|
-| 1 | `backfill_osv_descriptions.py` | συμπληρώνει τις περιγραφές OSV |
-| 2 | `attack_type_tagger.py` | ετικέτες επίθεσης και υπογραφές καμπάνιας |
-| 3 | `build_final_dataset.py` | εξαιρεί false positives/no_payload, κρατά ένα πακέτο ανά διαφορετικό κώδικα (≤5 ανά καμπάνια), static misses με την αναλογία του πληθυσμού |
-| 4 | `split_train_test.py` | 80/20 ανά οικογένεια (καμπάνια ή ίδιος κώδικας), seed 42 |
-| 5 | `build_rag_index.py` | διανύσματα των Behavior Chains του rag_train |
-| — | (ενσωματωμένο) | ενημέρωση `expected_labels.json` και έλεγχος ορθότητας |
+| 1 | `backfill_osv_descriptions.py` | fills in the OSV descriptions |
+| 2 | `attack_type_tagger.py` | attack-type tags and campaign signatures |
+| 3 | `build_final_dataset.py` | excludes false positives/no_payload, keeps one package per distinct code (≤5 per campaign), static misses at the population rate |
+| 4 | `split_train_test.py` | 80/20 by family (campaign or identical code), seed 42 |
+| 5 | `build_rag_index.py` | vectors of the rag_train Behavior Chains |
+| — | (built in) | update of `expected_labels.json` and sanity check |
 
-Το `audit_leakage.py` ελέγχει: μηδενική επικάλυψη train/test, κανένα κοινό κώδικα, κανένα prompt με
-πληροφορία για το ίδιο το πακέτο, ζώνες ομοιότητας (γνωστή παραλλαγή / κοντινό / νέο) και shortcuts.
+`audit_leakage.py` checks: no train/test overlap, no shared code, no prompt with information about the
+package itself, similarity strata (known variant / close / novel) and shortcuts.
 
-### 5. Αξιολόγηση με LLM (4 ablations)
+### 5. LLM evaluation (4 ablations)
 
 ```bash
-# DEEPSEEK_API_KEY στο .env
-for MODE in sum samples policy llm; do     # sum = πλήρες σύστημα, llm = χωρίς ανάκτηση
+# DEEPSEEK_API_KEY in .env
+for MODE in sum samples policy llm; do     # sum = full system, llm = no retrieval
   RAG_MODE=$MODE python3 results/check_test_set.py dataset/rag_test
   RAG_MODE=$MODE python3 results/check_test_set.py dataset/benign_test_set
   RAG_MODE=$MODE python3 results/evaluation_summary.py
 done
 python3 results/confusion_matrix_by_category.py
+python3 results/results_analysis.py       # metrics, confusion matrices, strata, ablations -> results/analysis/
+python3 results/thesis_tables.py          # LaTeX tables and figures of the thesis -> results/analysis/latex/
 ```
 
-- Αναφορές ανά πακέτο: `results/v12_<mode>/report_<πακέτο>.json`, συνόψεις στα `results/test_set_summaries/`
-  και `results/evaluation_summaries/`.
-- Το `check_test_set.py` ξανατρέχει αυτόματα ό,τι είναι `EVALUATION_FAILED`/`INCOMPLETE`/`UNKNOWN`
-  και παραλείπει όσα έχουν ήδη τελική απόφαση.
-- `RESULTS_SUFFIX=_smoke` για δοκιμαστικές εκτελέσεις που δεν αναμειγνύονται με τα πραγματικά αποτελέσματα.
+- Reports per package: `results/v12_<mode>/report_<package>.json`, summaries in `results/test_set_summaries/`
+  and `results/evaluation_summaries/`.
+- `check_test_set.py` automatically re-runs whatever is `EVALUATION_FAILED`/`INCOMPLETE`/`UNKNOWN`
+  and skips packages that already have a final verdict.
+- `RESULTS_SUFFIX=_smoke` for test runs that are never mixed with the real results.
 
-## Μεταβλητές περιβάλλοντος
+## Environment variables
 
-| Μεταβλητή | Χρήση |
+| Variable | Use |
 |---|---|
-| `CODEQL_NO_VENDOR=1` | οι εξαρτήσεις καταγράφονται κατ' όνομα και δεν εγκαθίστανται |
-| `CODEQL_QUERY_TIMEOUT`, `CODEQL_DB_TIMEOUT`, `BATCH_ANALYSIS_TIMEOUT`, `BENIGN_ANALYSIS_TIMEOUT` | χρονικά όρια (δευτερόλεπτα) |
-| `BATCH_STAGING_DIR` | προσωρινός φάκελος ανάλυσης (ένας ανά παράλληλη διεργασία) |
-| `THESIS_SOURCES_DIR` | φάκελος με τους κλώνους των πηγών (στο `.env`) |
-| `THESIS_OSV_DIR`, `THESIS_BASE_DIR` | προαιρετικά: άλλη θέση για το OSV / τη ρίζα του έργου |
+| `CODEQL_NO_VENDOR=1` | dependencies are recorded by name and not installed |
+| `CODEQL_QUERY_TIMEOUT`, `CODEQL_DB_TIMEOUT`, `BATCH_ANALYSIS_TIMEOUT`, `BENIGN_ANALYSIS_TIMEOUT` | time limits (seconds) |
+| `BATCH_STAGING_DIR` | temporary analysis folder (one per parallel process) |
+| `THESIS_SOURCES_DIR` | folder with the clones of the sources (in `.env`) |
+| `THESIS_OSV_DIR`, `THESIS_BASE_DIR` | optional: another location for OSV / the project root |
 | `RAG_MODE` | `sum` \| `samples` \| `policy` \| `llm` |
-| `RESULTS_SUFFIX` | επίθημα του φακέλου αποτελεσμάτων (π.χ. `_smoke`) |
-| `LLM_PROVIDER` | `deepseek` (προεπιλογή) \| `gemini` \| `lmstudio` \| `openrouter` - ίδιος evaluator για όλους |
-| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | πρόσβαση στο LLM (προεπιλογή `deepseek-flash`)· αντίστοιχα `GEMINI_*`, `LM_STUDIO_*`, `OPENROUTER_*` |
+| `RESULTS_SUFFIX` | suffix of the results folder (e.g. `_smoke`) |
+| `LLM_PROVIDER` | `deepseek` (default) \| `gemini` \| `lmstudio` \| `openrouter` - the same evaluator for all |
+| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | LLM access (default `deepseek-flash`); likewise `GEMINI_*`, `LM_STUDIO_*`, `OPENROUTER_*` |

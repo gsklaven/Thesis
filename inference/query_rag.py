@@ -1,5 +1,17 @@
 """
-Multi-Hop RAG Query System & LLM Prompt Generator (SSVC Ready).
+Hybrid RAG query engine and LLM prompt builder (stage 2 of the system).
+
+For every Behavior Chain of a package (except pure-vendor chains) the engine:
+  1. embeds the compact chain text (utils.flatten_chain_to_text) with all-MiniLM-L6-v2;
+  2. retrieves the MALWARE_TOP_K most similar chains of known malware (Section B) and the POLICY_TOP_K
+     most similar security-knowledge entries, plus up to POLICY_API_TOP_K entries retrieved by the name
+     of the sensitive API alone (Section C);
+  3. fills SSVC_COT_PROMPT with the full chain text (Section A), the retrieved context and the
+     package's third-party dependency names.
+The result per chain (prompt + retrieved evidence) is evaluated by llm_evaluator.py.
+
+RAG_MODE selects the ablation configuration (sum | samples | policy | llm); RESULTS_TAG names the
+results folder of the configuration.
 """
 import json
 import re
@@ -27,59 +39,34 @@ POLICY_METADATA_FILE = os.path.join(POLICY_INDEX_DIR, "policy_metadata.json")
 MODEL_NAME = "all-MiniLM-L6-v2"
 MALWARE_TOP_K = 5
 POLICY_TOP_K = 4
-# Δεύτερο στάδιο ανάκτησης policies: ερώτημα ΜΟΝΟ με το όνομα του sensitive API
-# (το πλήρες κείμενο του chain σπάνια φέρνει τον κανόνα που αναφέρει το API).
-# Τα αποτελέσματα ΕΝΩΝΟΝΤΑΙ με του πρώτου σταδίου (χωρίς διπλότυπα).
+# Second retrieval stage for policies: a query with ONLY the name of the sensitive API (the full chain
+# text rarely retrieves the rule that names the API). The results are MERGED with those of the first
+# stage (without duplicates).
 POLICY_API_TOP_K = 3
-MALWARE_THRESHOLD = 0.55
+MALWARE_THRESHOLD = 0.55  # only for the informational pre_verdict field of each chain
 
-# ΝΕΟ: prompt version tracking. Αύξησε αυτό ΚΑΘΕ ΦΟΡΑ που αλλάζεις ουσιαστικά
-# το SSVC_COT_PROMPT παρακάτω (όχι για τυπογραφικά) - ώστε τα reports να
-# κρατούν ΡΗΤΑ ποιο prompt τα παρήγαγε. Χωρίς αυτό, ένα before/after
-# πείραμα σε νέο prompt θα μπέρδευε ασυνείδητα v1 και v2 reports μαζί σε
-# ένα evaluation_summary.py run - κάνοντας αδύνατη τη σωστή σύγκριση.
-# ΣΗΜΕΙΩΣΗ: v3 έχει ΤΑΥΤΟΣΗΜΟ prompt κείμενο με το v2 (καμία αλλαγή στο
-# SSVC_COT_PROMPT παρακάτω). Ο λόγος που υπάρχει ξεχωριστό version label:
-# το v2 αξιολογήθηκε μόνο σε ένα stratified δείγμα 117 πακέτων (87 πρώην
-# false negatives + 30 τυχαία ήδη-σωστά), ΟΧΙ στο πλήρες σύνολο 391+8. Το
-# v3 τρέχει το ΙΔΙΟ prompt πάνω στο ΠΛΗΡΕΣ σύνολο, ώστε η σύγκριση με το
-# v1 (που επίσης έτρεξε πλήρες) να είναι απευθείας συγκρίσιμη - ίδιος
-# πληθυσμός και στις δύο πλευρές, χωρίς να χρειάζεται stratified-sample
-# ανάλυση. Για το thesis: "v2" και "v3" αναφέρονται στο ΙΔΙΟ prompt σε
-# διαφορετικό evaluation sample size, όχι σε διαφορετική prompt λογική.
-# ΣΗΜΕΙΩΣΗ v6: πραγματική αλλαγή ΣΤΟ ΙΔΙΟ ΤΟ PROMPT ΚΕΙΜΕΝΟ (STEP 2) - όχι
-# μόνο στο RAG index όπως το v5. Διόρθωση επιβεβαιωμένου precision
-# regression: 9 γνωστά benign πακέτα (fabric, docker, kubernetes, pymongo,
-# httpx, pyinstaller, pyyaml, python-dotenv, pytest) ταξινομήθηκαν λάθος ως
-# MALICIOUS/SUSPICIOUS στο v5. Ρίζα του προβλήματος: το v4 αφαίρεσε την
-# προηγούμενη προειδοποίηση για "διάσημα, καθιερωμένα πακέτα" από το STEP 2,
-# αφήνοντας το LLM ευάλωτο σε γενικά, κοινά "σχήματα κώδικα" (base64+
-# dynamic import, event-driven fetch) που ταιριάζουν με sim>0.9 σε ΟΠΟΙΟΔΗΠΟΤΕ
-# πακέτο έχει παρόμοια επιφανειακή δομή, ανεξάρτητα από πραγματική πρόθεση.
-# Το STEP 2 τώρα επαναφέρει ΚΑΙ ενισχύει αυτή την προστασία, στοχευμένα.
-# v12: Ριζικά απλούστερο prompt. Αντί για 6 αντιφατικά steps, 3 σαφή
-# ερωτήματα (Q1 συμπεριφορά, Q2 στάθμιση Τμήματος Β, Q3 δυαδικό verdict).
-# Fixes: (a) LLM αθώωνε malicious squatted packages λόγω name recognition,
-# (b) αντιφατικές εντολές → LLM διάλεγε BENIGN. Το verdict είναι BENIGN μόνο
-# αν το Q1 δεν βρει ανεξήγητη ενέργεια (ανεξάρτητα από το similarity score),
-# αλλιώς MALICIOUS· δεν υπάρχει πλέον κατάσταση SUSPICIOUS.
-# 2026-09-24 (πριν τα runs του v12): ονόματα πεδίων που περιγράφουν ακριβώς τι
-# είναι - is_false_positive -> behavior_explained (το LLM δεν ξέρει ground truth),
-# policy_violations -> related_policies (ανακτημένες εγγραφές, όχι αποδεδειγμένες
-# παραβιάσεις), και η λίστα εξαρτήσεων δεν λέγεται πια "vendored" (CODEQL_NO_VENDOR).
+# Prompt version tracking: increase PROMPT_VERSION whenever SSVC_COT_PROMPT below changes in
+# substance (not for typos), so that every report records which prompt produced it and results of
+# different prompts are never mixed in one evaluation.
+# v12: a simpler prompt with three explicit questions instead of many steps - Q1 what the code does
+# (Section A), Q2 how Section B supports the Q1 finding, Q3 a binary verdict. The verdict is BENIGN only
+# if Q1 finds no unexplained action (whatever the similarity score), otherwise MALICIOUS; there is no
+# SUSPICIOUS state. Output fields are named for what they are: behavior_explained (the LLM does not know
+# the ground truth) and related_policies (retrieved entries, not proven violations); the dependency list
+# contains names only (CODEQL_NO_VENDOR).
 PROMPT_VERSION = "v12"
 
-# Ablation: ίδιο prompt, αλλά αφαιρούνται τα ανακτημένα αποτελέσματα (το prompt
-# ήδη λέει "No similar malware found" / "No relevant security policies matched").
-# RAG_MODE: sum (προεπιλογή, δείγματα + policies) | samples (μόνο δείγματα malware)
-#           | policy (μόνο policies) | llm (χωρίς ανάκτηση, μόνο LLM).
+# Ablation: the same prompt, with the retrieved results removed (the prompt then says
+# "No similar malware found" / "No relevant security policies matched", as when nothing is retrieved).
+# RAG_MODE: sum (default, samples + policies) | samples (malware samples only)
+#           | policy (policies only) | llm (no retrieval, LLM only).
 RAG_MODE = os.environ.get("RAG_MODE", "sum")
 if RAG_MODE not in ("sum", "samples", "policy", "llm"):
-    raise SystemExit(f"RAG_MODE άκυρο: {RAG_MODE}")
+    raise SystemExit(f"Invalid RAG_MODE: {RAG_MODE}")
 NO_MALWARE = RAG_MODE in ("policy", "llm")
 NO_POLICY = RAG_MODE in ("samples", "llm")
-# Φάκελος αποτελεσμάτων: results/v12_<RAG_MODE>[_<πάροχος αν όχι deepseek>][RESULTS_SUFFIX], ώστε
-# αποτελέσματα άλλου LLM να μην αναμειγνύονται ποτέ με τα κύρια (deepseek).
+# Results folder: results/v12_<RAG_MODE>[_<provider if not deepseek>][RESULTS_SUFFIX], so that results of
+# another LLM are never mixed with the main (deepseek) ones.
 _PROVIDER = os.environ.get("LLM_PROVIDER", "deepseek").strip().lower()
 RESULTS_TAG = (f"{PROMPT_VERSION}_{RAG_MODE}" + ("" if _PROVIDER == "deepseek" else f"_{_PROVIDER}")
                + os.environ.get("RESULTS_SUFFIX", ""))
@@ -256,16 +243,16 @@ from them, so write the reasoning before you decide the verdict.
 }}"""
 
 _OSV_BOILERPLATE = re.compile(
-    r"_-= Per source details\. Do not edit below this line\.=-_"   # διαχωριστικό του OSV
+    r"_-= Per source details\. Do not edit below this line\.=-_"   # OSV separator
     r"|^#+\s*Source:.*$"                                             # "## Source: kam193 (hash)"
     r"|^\s*-{3,}\s*$", re.M)                                        # "---"
 
 
 def clean_description(text):
     """
-    Οι περιγραφές OSV ξεκινούν συχνά με boilerplate ("Malicious code in X (PyPI)", "---",
-    "_-= Per source details... =-_", "## Source: <αναλυτής> (<hash>)") που έτρωγε το όριο των
-    250 χαρακτήρων στο Τμήμα Β, πριν φτάσει η πραγματική περιγραφή. Αφαιρείται μόνο στο prompt.
+    OSV descriptions often start with boilerplate ("Malicious code in X (PyPI)", "---",
+    "_-= Per source details... =-_", "## Source: <analyst> (<hash>)") that would use up the 250-character
+    limit of Section B before the actual description. It is removed in the prompt only.
     """
     t = _OSV_BOILERPLATE.sub(" ", text or "")
     t = re.sub(r"^\s*Malicious code in \S+ \((PyPI|npm)\)\s*", "", t.strip())
@@ -273,24 +260,28 @@ def clean_description(text):
 
 
 def cosine_search(query_vec, vectors, top_k=5):
+    """Top-k (similarity, row index) pairs; vectors are normalised, so the dot product is the cosine."""
     similarities = np.dot(vectors, query_vec)
     best_indices = np.argsort(similarities)[::-1][:top_k]
     return [(float(similarities[i]), i) for i in best_indices]
 
 
 class RAGEngine:
+    """Singleton holding the embedding model and both indexes (loaded lazily, once per process)."""
     _instance = None
 
     def __new__(cls):
+        """Return the single shared instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def _ensure_init(self):
+        """Load the model, the malware index and the policy index on first use."""
         if self._initialized:
             return
-        print(f"[*] Φόρτωση RAG Engine ({MODEL_NAME})...")
+        print(f"[*] Loading the RAG engine ({MODEL_NAME})...")
         self.model = SentenceTransformer(MODEL_NAME)
 
         with open(METADATA_FILE, "r", encoding="utf-8") as f:
@@ -306,6 +297,11 @@ class RAGEngine:
         self._initialized = True
 
     def analyze_package(self, json_path, extra_context=""):
+        """
+        One result per evaluated chain of the package's chains file: retrieved malware / policy matches,
+        the full LLM prompt and the texts used. Pure-vendor chains are skipped and counted in
+        self.last_vendor_excluded. extra_context is appended to the prompt (after Section C).
+        """
         self._ensure_init()
 
         if not os.path.exists(json_path):
@@ -321,19 +317,18 @@ class RAGEngine:
         self.last_vendor_excluded = 0
 
         for idx, chain in enumerate(pkg_data.get("behavior_chains", [])):
-            # Ίδιος κανόνας με το build_rag_index.py: κώδικας νόμιμων βιβλιοθηκών που
-            # εγκαταστήσαμε εμείς στο vendor/ δεν αξιολογείται ως κώδικας του πακέτου.
+            # Same rule as build_rag_index.py: code of legitimate libraries installed into vendor/ during
+            # analysis is not evaluated as code of the package.
             if is_pure_vendor_chain(chain):
                 self.last_vendor_excluded += 1
                 continue
-            text = flatten_chain_to_text(chain)  # κείμενο embedding (≤200 λέξεις), ίδιο με το index
+            text = flatten_chain_to_text(chain)  # embedding text (<=200 words), same as the index side
             query_vec = self.model.encode([text], normalize_embeddings=True)[0]
-            llm_text = chain_to_llm_text(chain)  # πλήρες κείμενο για το Τμήμα Α του LLM
+            llm_text = chain_to_llm_text(chain)  # full text for Section A of the LLM prompt
 
-            # Εξαρτήσεις του πακέτου ως συμπληρωματικό context (μικρό, για να μην
-            # τρώει tokens). Με CODEQL_NO_VENDOR=1 το package_dependency_graph είναι
-            # {όνομα: []}: τα πακέτα τρίτων που κάνει import ο κώδικας, μόνο κατ' όνομα,
-            # χωρίς υπο-εξαρτήσεις και χωρίς να έχει αναλυθεί ο κώδικάς τους.
+            # The package's dependencies as short supplementary context (at most 15 names, to save
+            # tokens). With CODEQL_NO_VENDOR=1 package_dependency_graph is {name: []}: the third-party
+            # packages the code imports, by name only, without sub-dependencies and without their code.
             dep_names = sorted(pkg_data.get("package_dependency_graph") or {})
             chain_extra = extra_context
             if dep_names:
@@ -364,6 +359,7 @@ class RAGEngine:
                 )
                 chain_extra = (chain_extra + heuristic_note) if chain_extra else heuristic_note
 
+            # Stage 1 retrieval with the chain text (skipped per source in the ablation modes)
             m_matches = [] if NO_MALWARE else cosine_search(query_vec, self.malware_vectors, MALWARE_TOP_K)
             p_matches = [] if NO_POLICY else cosine_search(query_vec, self.policy_vectors, POLICY_TOP_K)
 
@@ -373,11 +369,9 @@ class RAGEngine:
                 "attack_type_tags": self.malware_meta[i].get("attack_type_tags", []),
                 "category": self.malware_meta[i].get("category"),
                 "campaign_preview": self.malware_meta[i].get("campaign_signature_preview", ""),
-                # ΝΕΟ: πραγματικό OSV description (όχι μόνο tags) - επικυρωμένο
-                # εύρημα (p<0.000001 στο δικό μας recall-by-tag τεστ, ΚΑΙ το
-                # ablation study του IntelGuard) ότι το πλούσιο, εξηγηματικό
-                # κείμενο γύρω από ένα malware δείγμα βοηθάει σημαντικά το
-                # LLM reasoning, πέρα από μόνο tags/category.
+                # The real OSV description (not only tags): richer, explanatory text about a malware
+                # example helps the LLM's reasoning beyond tags/category (seen in our recall-by-tag
+                # analysis and in IntelGuard's ablation study).
                 "description": clean_description(self.malware_meta[i].get("description", "")),
             } for sim, i in m_matches]
 
@@ -390,7 +384,8 @@ class RAGEngine:
                 "matched_by": "chain",
             } for sim, i in p_matches]
 
-            # Στάδιο 2: ανάκτηση policies με βάση ΜΟΝΟ το API του chain.
+            # Stage 2: policy retrieval with ONLY the chain's API name (not for unanchored chains or raw
+            # CodeQL node texts); entries already retrieved in stage 1 are not repeated.
             api = (chain.get("sensitive_api") or "").removesuffix("(...)")
             if not NO_POLICY and chain.get("category") != "unanchored" and api and not api.startswith("ControlFlowNode for"):
                 if api not in api_cache:
@@ -415,6 +410,7 @@ class RAGEngine:
 
             best_sim = malware_hits[0]["similarity"] if malware_hits else 0.0
 
+            # Section B / Section C text blocks of the prompt
             malware_context = "\n".join([
                 f"- [{h['similarity']:.2f}] Package: {h['package']} | "
                 f"Tags: {', '.join(h['attack_type_tags'])} | "
@@ -461,13 +457,14 @@ class RAGEngine:
 
 
 def analyze_package(json_path):
+    """Module-level shortcut: analyse one chains file with the shared RAGEngine."""
     engine = RAGEngine()
     return engine.analyze_package(json_path)
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Χρήση: python3 query_rag.py /path/to/sliced_behavior_chain.json")
+        print("Usage: python3 query_rag.py /path/to/sliced_behavior_chain.json")
         sys.exit(1)
 
     results = analyze_package(sys.argv[1])
