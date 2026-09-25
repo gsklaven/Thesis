@@ -10,7 +10,8 @@
 
 The `<version>` is `PROMPT_VERSION_RAG_MODE[_provider][RESULTS_SUFFIX]` (e.g. `v12_sum`, `v12_llm`,
 `v12_sum_gemini`, `v12_sum_smoke`). The provider is added only when it is not `deepseek` (see `LLM_PROVIDER`).
-The folders `v1`–`v11` are earlier versions of the prompt/pipeline and are not comparable with v12.
+The results of the earlier prompt/pipeline versions `v1`–`v11` (not comparable with v12) are kept in the
+git history and locally in `old/results/`.
 
 ## Scripts
 
@@ -18,7 +19,6 @@ The folders `v1`–`v11` are earlier versions of the prompt/pipeline and are not
 RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test          # malware of the test set
 RAG_MODE=sum python3 results/check_test_set.py dataset/benign_test_set   # benign packages
 python3 results/evaluation_summary.py [v12_samples ...]                  # metrics (without an argument: every v12_*)
-python3 results/confusion_matrix_by_category.py                          # recall per attack category, all versions
 python3 results/results_analysis.py                                      # detailed results + confusion matrix -> results/analysis/
 python3 results/thesis_tables.py                                         # LaTeX tables/figures of the thesis -> results/analysis/latex/
 ```

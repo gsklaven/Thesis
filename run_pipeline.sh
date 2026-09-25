@@ -282,15 +282,8 @@ cmd_benign() {
 # ------------------------------------------------------------------------------ policy
 cmd_policy() {
   log "NOTE: new snapshot of the knowledge base (current versions of MITRE/CWE/CAPEC and of the rules)."
-  local r="$WORK/policy_repos"; mkdir -p "$r"
-  local repo
-  for repo in DataDog/guarddog PyCQA/bandit semgrep/semgrep-rules; do
-    [ -d "$r/$(basename "$repo")" ] || run git clone --depth=1 "https://github.com/$repo.git" "$r/$(basename "$repo")"
-  done
-  run "$PY" "$PREP/harvest_guarddog_rules.py" "$r/guarddog"
-  run "$PY" "$PREP/harvest_extra_policy_sources.py" "$r/guarddog" "$r/bandit"
-  run "$PY" "$PREP/harvest_semgrep_python_rules.py" "$r/semgrep-rules"
-  run "$PY" "$PREP/harvest_registry_policies.py"
+  # GuardDog, Bandit, Semgrep rules + registry policies -> policy_sources/*.json (clones the repos if missing)
+  run "$PY" "$PREP/harvest_policy_sources.py" "$WORK/policy_repos"
   run "$PY" "$PREP/build_policy_dataset.py"
   run "$PY" "$PREP/build_policy_index.py"
 }
@@ -319,7 +312,6 @@ cmd_evaluate() {
     fi
     RAG_MODE=$mode run "$PY" results/evaluation_summary.py
   done
-  run "$PY" results/confusion_matrix_by_category.py
   run "$PY" results/results_analysis.py     # confusion matrix, CI, similarity strata, FP/FN -> results/analysis/
 }
 

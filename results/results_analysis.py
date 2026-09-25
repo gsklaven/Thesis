@@ -142,7 +142,7 @@ def analyze(tag, sim_source):
     fps = sorted(({"package": p, "chains": R[p].get("total_chains_analyzed"),
                    "malicious_chains": R[p].get("malicious_chains"), "max_similarity": sim_source.get(p),
                    "flagged": chain_info(p, True)} for p in b_sc if verdict(p) in POSITIVE),
-                 key=lambda x: -(x["chains"] or 0))
+                 key=lambda x: (-(x["chains"] or 0), x["package"]))  # name breaks ties (set order is random)
     fns = sorted(({"package": p, "chains": R[p].get("total_chains_analyzed"), "max_similarity": sim_source.get(p)}
                   for p in m_sc if verdict(p) not in POSITIVE), key=lambda x: x["package"])
     return {"tag": tag, "reports": len(R), "expected": len(mal) + len(ben), "missing": missing,

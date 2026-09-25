@@ -35,7 +35,7 @@ results/
   test_set_summaries/        test_set_summary_<version>_<test set>.json
   evaluation_summaries/      evaluation_summary_<version>.json
   analysis/                  metrics, confusion matrices, strata, ablations, LaTeX of the thesis
-  check_test_set.py, evaluation_summary.py, confusion_matrix_by_category.py, results_analysis.py, thesis_tables.py
+  check_test_set.py, evaluation_summary.py, results_analysis.py, thesis_tables.py, progress.py, run_local_subset.sh
 expected_labels.json         evaluation labels (malicious for rag_test, benign for benign_test_set)
 run_pipeline.sh              automated execution of all stages (guide: PIPELINE.md)
 requirements.txt             versions of the Python packages
@@ -103,12 +103,10 @@ python3 dataset/preparation/payload_scan.py
 ### 3. Security knowledge base
 
 ```bash
-python3 dataset/preparation/harvest_semgrep_python_rules.py    # -> policy_sources/*.json
-python3 dataset/preparation/harvest_guarddog_rules.py
-python3 dataset/preparation/harvest_registry_policies.py
-python3 dataset/preparation/harvest_extra_policy_sources.py
-python3 dataset/preparation/build_policy_dataset.py            # + MITRE ATT&CK, CWE, CAPEC -> dataset/policy_rules.json
-python3 dataset/preparation/build_policy_index.py              # -> dataset/indexes/policy_index/
+python3 dataset/preparation/harvest_policy_sources.py   # GuardDog, Bandit, Semgrep, registry policies -> policy_sources/*.json
+python3 dataset/preparation/build_policy_dataset.py     # + MITRE ATT&CK, CWE, CAPEC -> dataset/policy_rules.json
+python3 dataset/preparation/build_policy_index.py       # -> dataset/indexes/policy_index/
+# or all three: ./run_pipeline.sh policy
 ```
 
 ### 4. RAG: selection, split, index
@@ -141,7 +139,6 @@ for MODE in sum samples policy llm; do     # sum = full system, llm = no retriev
   RAG_MODE=$MODE python3 results/check_test_set.py dataset/benign_test_set
   RAG_MODE=$MODE python3 results/evaluation_summary.py
 done
-python3 results/confusion_matrix_by_category.py
 python3 results/results_analysis.py       # metrics, confusion matrices, strata, ablations -> results/analysis/
 python3 results/thesis_tables.py          # LaTeX tables and figures of the thesis -> results/analysis/latex/
 ```

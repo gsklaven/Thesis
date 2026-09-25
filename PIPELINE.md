@@ -157,6 +157,15 @@ Every report records `llm_provider`/`llm_model`, and every chain verdict its `mo
 never switched silently: if a provider fails or runs out of quota, the chain is retried and, if it fails
 for good, the package stays `INCOMPLETE` for the next run.
 
+**Local-model experiment.** A local model is evaluated on a fixed subset of the test sets
+(`dataset/preparation/select_local_subset.py` → `dataset/local_subset.json`: 120 malware + 60 benign
+packages, 1,709 chains per mode), compared package by package with DeepSeek:
+```bash
+sudo sysctl iogpu.wired_limit_mb=20480     # 24 GB Mac: GPU memory for a ~20k-token context (until reboot)
+bash results/run_local_subset.sh           # sum and llm; checks the loaded context first; resumable
+python3 results/progress.py --watch 60     # progress, in a second terminal
+```
+
 ## 3. All commands
 
 | Command | What it does |
@@ -170,7 +179,7 @@ for good, the package stays `INCOMPLETE` for the next run.
 | `benign` | download of sdists from the PyPI JSON API (no pip) + CodeQL for the missing benign packages |
 | `policy` | a **new** snapshot of the knowledge base (current versions of MITRE/CWE/CAPEC and of the rules). Not part of `all`/`update`, so that the knowledge base of the experiments stays the same |
 | `rag` | `rebuild_rag.py` (descriptions, tags, selection, split, index) + `audit_leakage.py` |
-| `evaluate` | for every `RAG_MODE` in `MODES`: `check_test_set` on malware and benign, and `evaluation_summary`; then `confusion_matrix_by_category` and `results_analysis` |
+| `evaluate` | for every `RAG_MODE` in `MODES`: `check_test_set` on malware and benign, and `evaluation_summary`; then `results_analysis` |
 | `update` | `sources` → `collect` → `analyze` → `rag` |
 | `all` | `collect` → `analyze` → `benign` → `rag` → `evaluate` |
 | `pack` / `unpack [DIR]` | packing / restoring for the GitHub Release |
