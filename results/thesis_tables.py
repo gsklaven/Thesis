@@ -6,6 +6,7 @@ Writes to results/analysis/latex/:
   dataset_sources.tex      malware samples per source: collected, excluded, train / test
   dataset_sets.tex         final sets: packages, packages with / without Behavior Chains, chains
   dataset_attack_types.tex attack-type tags of the selected malware samples
+  policy_sources.tex       entries of the security knowledge base per source (dataset/policy_rules.json)
   main_metrics.tex         metrics of the full system with 95% Wilson intervals
   ablations.tex            metrics of the four configurations (LLM stage + end-to-end)
   strata.tex               recall / false positives per similarity stratum and configuration
@@ -129,7 +130,7 @@ def dataset_tables():
              f"{num(len(train))} & {num(len(test))}"]
     write("dataset_sources.tex", table(
         "Δείγματα κακόβουλων πακέτων ανά πηγή: συλλογή, εξαίρεση και τελική κατανομή στο ευρετήριο "
-        "(εκπαίδευση) και στο σύνολο αξιολόγησης.", "tab:dataset_sources", "|l|r|r|r|r|",
+        "και στο σύνολο αξιολόγησης.", "tab:dataset_sources", "|l|r|r|r|r|",
         "Πηγή & Δείγματα & Εξαιρέθηκαν & Ευρετήριο & Αξιολόγηση", rows,
         note="Εξαιρέθηκαν: νόμιμα πακέτα με λανθασμένη ετικέτα malware και πακέτα χωρίς κακόβουλο "
              "κώδικα (Ενότητα~\\ref{subsection:label_quality})."))
@@ -141,7 +142,7 @@ def dataset_tables():
     index_chains = len(meta) if isinstance(meta, list) else len(meta.get("entries", meta))
     with_chains = lambda S: [n for n in S if R.get(n, {}).get("final_verdict") != "NO_CHAINS_FOUND"]
     chains = lambda S: sum(R[n].get("total_chains_analyzed") or 0 for n in S if n in R)
-    rows = [f"Ευρετήριο κακόβουλων δειγμάτων (εκπαίδευση) & {num(len(train))} & -- & {num(index_chains)}",
+    rows = [f"Ευρετήριο κακόβουλων δειγμάτων (\\textit{{rag\\_train}}) & {num(len(train))} & -- & {num(index_chains)}",
             f"Αξιολόγηση: κακόβουλα & {num(len(test))} & {num(len(with_chains(test)))} & {num(chains(test))}",
             f"Αξιολόγηση: νόμιμα & {num(len(ben))} & {num(len(with_chains(ben)))} & {num(chains(ben))}"]
     write("dataset_sets.tex", table(
@@ -155,6 +156,45 @@ def dataset_tables():
         f"Ετικέτες τύπου επίθεσης των {num(rep['total_selected'])} επιλεγμένων κακόβουλων πακέτων "
         "(ένα πακέτο μπορεί να φέρει περισσότερες από μία ετικέτες).", "tab:attack_types", "|l|r|",
         "Ετικέτα & Πακέτα", rows))
+
+
+# Greek labels (with citations) of the knowledge-base sources, by the "source" field of policy_rules.json.
+POLICY_LABEL = {
+    "MITRE ATT&CK": "MITRE ATT\\&CK (τεχνικές)~\\cite{strom2018attack,mitre_attack}",
+    "CAPEC Attack Patterns": "CAPEC (μοτίβα επίθεσης)~\\cite{mitre_capec}",
+    "CWE Database": "CWE (κατηγορίες αδυναμιών)~\\cite{mitre_cwe}",
+    "Semgrep Community Rules": "Κανόνες κοινότητας Semgrep~\\cite{semgrep_rules}",
+    "Bandit (PyCQA) Security Checks": "Κανόνες Bandit (PyCQA)~\\cite{bandit}",
+    "GuardDog (Datadog) Detection Rules": "Κανόνες ανίχνευσης GuardDog (Datadog)~\\cite{guarddog}",
+    "GuardDog (Datadog) Metadata Heuristics": "Μεταδεδομένα ευρετικών GuardDog~\\cite{guarddog}",
+    "SLSA v0.1 Threat Model": "Μοντέλο απειλών SLSA v0.1~\\cite{slsa_v01_threats}",
+    "SLSA Framework": "Πλαίσιο SLSA~\\cite{slsa}",
+    "OWASP Top 10:2025": "OWASP Top 10:2025~\\cite{owasp_top10_2025}",
+    "OWASP Software Component Verification Standard": "OWASP Software Component Verification Standard~\\cite{owasp_scvs}",
+    "OWASP Top 10 CI/CD Security Risks": "OWASP Top 10 CI/CD Security Risks~\\cite{owasp_cicd}",
+    "OWASP Secure Coding Practices": "OWASP Secure Coding Practices~\\cite{owasp_scp}",
+    "Threat Hunting Heuristics": "Ευρετικές μέθοδοι threat hunting (επιμέλεια)",
+    "Package Registry Acceptable-Use Policies": "Πολιτικές αποδεκτής χρήσης αποθετηρίων (PyPI/npm/GitHub)~\\cite{pypi_aup,npm_terms,github_aup}",
+}
+
+
+def policy_label(source):
+    """Greek label of a knowledge-base source: the POLICY_LABEL key that its name starts with."""
+    key = max((k for k in POLICY_LABEL if source.startswith(k)), key=len, default=None)
+    if key is None:
+        sys.exit(f"[!] No label for the knowledge-base source {source!r} - add it to POLICY_LABEL")
+    return POLICY_LABEL[key]
+
+
+def knowledge_base_table():
+    """Entries of the security knowledge base (dataset/policy_rules.json) per source."""
+    rules = json.load(open(os.path.join(DS, "policy_rules.json"), encoding="utf-8"))
+    counts = Counter(policy_label(r["source"]) for r in rules)
+    rows = [f"{label} & {num(n)}" for label, n in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+    rows += ["\\hline", f"Σύνολο & {num(len(rules))}"]
+    write("policy_sources.tex", table(
+        "Σύνθεση της βάσης δομημένης γνώσης ασφάλειας ανά πηγή.", "tab:policy_sources", "|l|r|",
+        "Πηγή & Εγγραφές", rows))
 
 
 # ----------------------------------------------------------------------------- results (Chapter 5)
@@ -340,6 +380,7 @@ def results_tables():
 
 if __name__ == "__main__":
     dataset_tables()
+    knowledge_base_table()
     results_tables()
     print(f"[+] LaTeX -> {OUT}")
     for f in sorted(os.listdir(OUT)):
