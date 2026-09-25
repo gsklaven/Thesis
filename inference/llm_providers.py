@@ -6,7 +6,8 @@ Provider selection in .env (see .env.example):
   LLM_PROVIDER=deepseek    DEEPSEEK_API_KEY, DEEPSEEK_MODEL (deepseek-flash)          - the thesis experiments
   LLM_PROVIDER=gemini      GEMINI_API_KEY, GEMINI_MODEL (gemini-3.6-flash)
   LLM_PROVIDER=lmstudio    LM_STUDIO_URL (http://localhost:1234/v1), LM_STUDIO_MODEL - a local model, no
-                           data leaves the computer
+                           data leaves the computer; LM_STUDIO_REASONING (default "none": no hidden
+                           reasoning, like DeepSeek's disabled thinking mode; "" = the model's default)
   LLM_PROVIDER=openrouter  OPENROUTER_API_KEY, OPENROUTER_MODEL (required: one specific model)
   LLM_MAX_WORKERS          parallel calls per package (default per provider)
 
@@ -31,7 +32,8 @@ PROVIDERS = ("deepseek", "gemini", "lmstudio", "openrouter")
 
 MAX_RETRIES = 3          # attempts per call (on top of the evaluator's retry rounds per chain)
 INITIAL_RETRY_DELAY = 3  # seconds, doubled on every rate-limited retry
-_DEFAULT_WORKERS = {"deepseek": 8, "gemini": 4, "lmstudio": 1, "openrouter": 4}
+# LM Studio serves several requests in parallel (continuous batching): 4 gave ~1.5x the throughput of 1
+_DEFAULT_WORKERS = {"deepseek": 8, "gemini": 4, "lmstudio": 4, "openrouter": 4}
 
 # one API client per worker thread (clients are not shared between threads)
 _thread_local = threading.local()
@@ -213,8 +215,12 @@ def get_provider():
         # LM Studio: start the server (Developer / Local Server, port 1234) with a model loaded.
         url = os.environ.get("LM_STUDIO_URL", "http://localhost:1234/v1")
         model = os.environ.get("LM_STUDIO_MODEL", "local-model")
+        # Reasoning models (e.g. Gemma 4, Qwen 3) otherwise spend ~2/3 of their output on hidden reasoning;
+        # reasoning_effort="none" turns it off, as the thesis experiments do for DeepSeek.
+        effort = os.environ.get("LM_STUDIO_REASONING", "none")
+        extra = {"extra_body": {"reasoning_effort": effort}} if effort else {}
         return "lmstudio", model, lambda p: _openai_compatible(
-            p, label="LM Studio", base_url=url, api_key="lm-studio", model=model, extra={},
+            p, label="LM Studio", base_url=url, api_key="lm-studio", model=model, extra=extra,
             backoff_on_rate_limit=False), workers
 
     # openrouter: a specific model is required (no automatic router), so all results come from one model

