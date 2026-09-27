@@ -10,7 +10,6 @@ Writes to results/analysis/latex/:
   main_metrics.tex         metrics of the full system with 95% Wilson intervals
   ablations.tex            metrics of the four configurations (LLM stage + end-to-end)
   strata.tex               recall / false positives per similarity stratum and configuration
-  mcnemar.tex              paired comparison of every configuration with the LLM-only one
   agreement.tex            agreement of the four configurations per package
   ssvc.tex                 SSVC priority of true / false positives per configuration
   false_positives.tex      false positives of the full system (package, chains, flagged chain)
@@ -30,7 +29,6 @@ import json
 import os
 import sys
 from collections import Counter
-from math import comb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import results_analysis as ra  # noqa: E402  (same definitions of metrics and strata)
@@ -101,25 +99,6 @@ def table(caption, label, spec, header, rows, note=None, size="\\small", sep=Non
         out.append(f"\\par\\smallskip{{\\footnotesize {note}}}")
     out += [f"\\caption{{{caption}}}", f"\\label{{{label}}}", "\\end{table}"]
     return out
-
-
-def holm_adjust(pvalues):
-    """Holm-Bonferroni adjusted p-values, in the order given (step-down, monotone, capped at 1)."""
-    m = len(pvalues)
-    order = sorted(range(m), key=lambda i: pvalues[i])
-    adjusted, running = [0.0] * m, 0.0
-    for rank, i in enumerate(order):
-        running = max(running, min(1.0, (m - rank) * pvalues[i]))
-        adjusted[i] = running
-    return adjusted
-
-
-def mcnemar_p(b, c):
-    """Exact two-sided McNemar test on the discordant pairs b, c (binomial with p = 1/2)."""
-    n = b + c
-    if n == 0:
-        return 1.0
-    return min(1.0, 2 * sum(comb(n, i) for i in range(min(b, c) + 1)) / 2 ** n)
 
 
 # ----------------------------------------------------------------------------- dataset (Chapter 4)
@@ -314,31 +293,11 @@ def results_tables():
         "Ζώνη ομοιότητας & Κακόβ. & Νόμιμα & " + " & ".join(NAME[c] for c in CONFIGS), rows,
         size="\\footnotesize"))
 
-    # paired comparison with the LLM-only configuration
+    # labels and correctness per package, used by the agreement table
     lab = json.load(open(os.path.join(ROOT, "expected_labels.json"), encoding="utf-8"))
     scored = [n for n, r in reports["sum"].items() if lab.get(n) in ("malicious", "benign")
               and r["final_verdict"] != "NO_CHAINS_FOUND"]
     flag = lambda c, n: reports[c][n]["final_verdict"] in ra.POSITIVE
-    right = lambda c, n: flag(c, n) == (lab[n] == "malicious")
-    tests = []  # (configuration, class, b, c, p)
-    for c in CONFIGS[:3]:
-        for cls in ("malicious", "benign", None):
-            S = [n for n in scored if cls is None or lab[n] == cls]
-            b = sum(right(c, n) and not right("llm", n) for n in S)
-            d = sum(right("llm", n) and not right(c, n) for n in S)
-            tests.append((c, cls, b, d, mcnemar_p(b, d)))
-    holm = holm_adjust([x[4] for x in tests])
-    rows = []
-    for c in CONFIGS[:3]:
-        cells = [f"{b} / {d} & {num(pv, 2)} ({num(ph, 2)})" for (cc, _, b, d, pv), ph in zip(tests, holm) if cc == c]
-        rows.append(f"{NAME[c]} & " + " & ".join(cells))
-    write("mcnemar.tex", table(
-        "Σύγκριση ανά πακέτο κάθε διαμόρφωσης με ανάκτηση με τη διαμόρφωση χωρίς ανάκτηση: πακέτα που "
-        "ταξινομούνται σωστά μόνο από τη διαμόρφωση με ανάκτηση / μόνο χωρίς ανάκτηση, και τιμή $p$ του "
-        "ακριβούς ελέγχου McNemar· σε παρένθεση η τιμή μετά τη διόρθωση Holm για τις εννέα συγκρίσεις του πίνακα.",
-        "tab:mcnemar", "|l|c|r|c|r|c|r|",
-        "Διαμόρφωση & \\multicolumn{2}{c|}{Κακόβουλα} & \\multicolumn{2}{c|}{Νόμιμα} & \\multicolumn{2}{c|}{Σύνολο}",
-        ["& $b$ / $c$ & $p$ & $b$ / $c$ & $p$ & $b$ / $c$ & $p$", "\\hline"] + rows))
 
     # agreement of the four configurations
     rows = []
