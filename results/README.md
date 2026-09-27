@@ -13,7 +13,7 @@ The `<version>` is `PROMPT_VERSION_RAG_MODE[_provider][RESULTS_SUFFIX]` (e.g. `v
 `v13_sum` and `v13_llm` are the local-model runs (LM Studio) on `dataset/local_subset.json`; their name is set
 with `RESULTS_TAG` by `run_local_subset.sh`.
 The results of the earlier prompt/pipeline versions `v1`–`v11` (not comparable with v12) are kept in the
-git history and locally in `old/results/`.
+git history and in the archive of `old/` kept outside the repository.
 
 ## Scripts
 
