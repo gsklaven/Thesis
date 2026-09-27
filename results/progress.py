@@ -1,7 +1,7 @@
 """
 progress.py - live progress of an evaluation run (e.g. the local-model run on dataset/local_subset).
 
-For every run folder given (default: v12_sum_lmstudio and v12_llm_lmstudio) it shows, over the packages of
+For every run folder given (default: v13_sum and v13_llm, the local-model runs) it shows, over the packages of
 the subset: how many are done per class, the verdicts so far, the agreement with the DeepSeek run of the
 same RAG mode on the same packages, and the Behavior Chains left. The speed is measured in chains over the
 last two hours (so earlier runs and pauses do not distort it) and gives the estimate of the remaining time.
@@ -18,6 +18,7 @@ from collections import Counter
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 POSITIVE = ("MALICIOUS", "SUSPICIOUS")
 SPEED_WINDOW = 2 * 3600  # seconds of recent reports used to measure the speed
+REF_VERSION = "v12"      # the DeepSeek runs the local model is compared with
 
 
 def reports(tag):
@@ -53,9 +54,9 @@ def show(tags, subset):
     runs, chains_left = [], 0
     for tag in tags:
         rep = reports(tag)
-        # the DeepSeek run with the same RAG mode (v12_sum_lmstudio -> v12_sum); it also gives the chain
-        # count of the packages not evaluated yet
-        ref = reports("_".join(tag.split("_")[:2]))
+        # the DeepSeek run with the same RAG mode (v13_sum -> v12_sum); it also gives the chain count of
+        # the packages not evaluated yet
+        ref = reports(f"{REF_VERSION}_{tag.split('_')[1]}")
         runs.append(rep)
         done = [p for s in sets.values() for p in s if p in rep]
         left = sum(ref[p][2] for s in sets.values() for p in s if p not in rep and p in ref)
@@ -78,7 +79,7 @@ def show(tags, subset):
 def main():
     """Parse the arguments and print the progress once or every --watch seconds."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("tags", nargs="*", default=["v12_sum_lmstudio", "v12_llm_lmstudio"])
+    ap.add_argument("tags", nargs="*", default=["v13_sum", "v13_llm"])
     ap.add_argument("--subset", default=os.path.join(ROOT, "dataset", "local_subset.json"))
     ap.add_argument("--watch", type=int, default=0, help="refresh every N seconds (Ctrl+C to stop)")
     args = ap.parse_args()

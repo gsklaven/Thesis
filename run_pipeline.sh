@@ -324,13 +324,13 @@ PACK_ITEMS="analyzed_chains benign_test_set rag_train rag_test indexes"
 cmd_pack() {
   mkdir -p dist
   local gz="gzip"; command -v pigz >/dev/null 2>&1 && gz="pigz"
-  log "packing dataset/{$PACK_ITEMS}, dataset/*.json, results/v12*, expected_labels.json -> dist/ (with $gz)"
+  log "packing dataset/{$PACK_ITEMS}, dataset/*.json, results/v12* and v13*, expected_labels.json -> dist/ (with $gz)"
   rm -f dist/behavior_chains.tar.gz.part-*
   local items="" i j
   for i in $PACK_ITEMS; do [ -e "dataset/$i" ] && items="$items dataset/$i"; done
   for j in dataset/*.json; do [ -f "$j" ] && items="$items $j"; done
   # LLM reports of the final runs (not of the *_smoke test runs) - they are not in git
-  for j in results/v12*; do case "$j" in *smoke*) ;; *) [ -d "$j" ] && items="$items $j" ;; esac; done
+  for j in results/v12* results/v13*; do case "$j" in *smoke*) ;; *) [ -d "$j" ] && items="$items $j" ;; esac; done
   # shellcheck disable=SC2086
   tar -C "$ROOT" -cf - $items expected_labels.json | $gz -c | split -b 1900m - dist/behavior_chains.tar.gz.part-
   (cd dist && shasum -a 256 behavior_chains.tar.gz.part-* > SHA256SUMS)

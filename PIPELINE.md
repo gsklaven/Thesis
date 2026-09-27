@@ -162,7 +162,7 @@ for good, the package stays `INCOMPLETE` for the next run.
 packages, 1,709 chains per mode), compared package by package with DeepSeek:
 ```bash
 sudo sysctl iogpu.wired_limit_mb=20480     # 24 GB Mac: GPU memory for a ~20k-token context (until reboot)
-bash results/run_local_subset.sh           # sum and llm; checks the loaded context first; resumable
+bash results/run_local_subset.sh           # sum and llm -> results/v13_{sum,llm}/; checks the context first; resumable
 python3 results/progress.py --watch 60     # progress, in a second terminal
 ```
 

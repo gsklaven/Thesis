@@ -34,7 +34,7 @@ Maximum similarity of any Behavior Chain of the package to the index (from the `
 |---|---|---|---|---|
 | >=0.98 known variant | 235 | 233/235 = 99.1% | 29 | 4/29 = 13.8% |
 | 0.90-0.98 close | 139 | 129/139 = 92.8% | 83 | 4/83 = 4.8% |
-| <0.90 novel | 42 | 42/42 = 100.0% | 18 | 0/18 = 0.0% |
+| <0.90 low similarity | 42 | 42/42 = 100.0% | 18 | 0/18 = 0.0% |
 
 ## False positives (8)
 

@@ -7,7 +7,8 @@
 #      the answer), with 4, else 2, else 1 parallel predictions. LM Studio silently shrinks the context
 #      to what fits in GPU memory, so the loaded context is read back and checked;
 #   2. sends a ~16k-token test prompt and stops if it is rejected (nothing is evaluated with a short context);
-#   3. evaluates the malware and benign subset for every RAG mode -> results/<version>_<mode>_lmstudio/.
+#   3. evaluates the malware and benign subset for every RAG mode -> results/v13_<mode>/ (the local-model
+#      experiment is v13 of the thesis; same prompt as v12).
 # Resumable: stop it at any point (Ctrl+C) and run it again; finished packages are skipped.
 # The computer is kept awake while it runs (leave a laptop plugged in with the lid open).
 #
@@ -74,7 +75,7 @@ EOF
 for m in "${MODES[@]}"; do
   for s in malware benign; do
     log "RAG_MODE=$m - dataset/local_subset/$s ($parallel parallel)"
-    RAG_MODE="$m" LLM_MAX_WORKERS="$parallel" "$PY" results/check_test_set.py "dataset/local_subset/$s"
+    RESULTS_TAG="v13_$m" RAG_MODE="$m" LLM_MAX_WORKERS="$parallel" "$PY" results/check_test_set.py "dataset/local_subset/$s"
   done
 done
 log "done - summary: $PY results/progress.py"

@@ -66,10 +66,12 @@ if RAG_MODE not in ("sum", "samples", "policy", "llm"):
 NO_MALWARE = RAG_MODE in ("policy", "llm")
 NO_POLICY = RAG_MODE in ("samples", "llm")
 # Results folder: results/v12_<RAG_MODE>[_<provider if not deepseek>][RESULTS_SUFFIX], so that results of
-# another LLM are never mixed with the main (deepseek) ones.
+# another LLM are never mixed with the main (deepseek) ones. RESULTS_TAG in the environment names the folder
+# explicitly (the local-model experiment uses v13_<RAG_MODE>, see results/run_local_subset.sh).
 _PROVIDER = os.environ.get("LLM_PROVIDER", "deepseek").strip().lower()
-RESULTS_TAG = (f"{PROMPT_VERSION}_{RAG_MODE}" + ("" if _PROVIDER == "deepseek" else f"_{_PROVIDER}")
-               + os.environ.get("RESULTS_SUFFIX", ""))
+RESULTS_TAG = os.environ.get("RESULTS_TAG") or (
+    f"{PROMPT_VERSION}_{RAG_MODE}" + ("" if _PROVIDER == "deepseek" else f"_{_PROVIDER}")
+    + os.environ.get("RESULTS_SUFFIX", ""))
 
 
 SSVC_COT_PROMPT = """You are a cybersecurity analyst evaluating a Python/npm package for malicious intent.

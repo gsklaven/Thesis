@@ -15,6 +15,8 @@ Writes to results/analysis/latex/:
   ssvc.tex                 SSVC priority of true / false positives per configuration
   false_positives.tex      false positives of the full system (package, chains, flagged chain)
   comparison.tex           comparison with the tools evaluated in IntelGuard (Table 1 of that paper)
+  rag_literature.tex       accuracy / FPR without and with retrieval: IntelGuard RQ4 next to ours
+  local_model.tex          v13: the local model (LM Studio) and DeepSeek on the same subset
   confusion_sum.tex        figure: confusion matrix of the full system (TikZ)
   confusion_grid.tex       figure: the four confusion matrices (TikZ)
 
@@ -40,7 +42,7 @@ OUT = os.path.join(ra.OUT, "latex")
 CONFIGS = ["sum", "samples", "policy", "llm"]
 TAGS = [f"v12_{c}" for c in CONFIGS]
 # Short Greek names of the configurations, as used in the thesis text.
-NAME = {"sum": "Πλήρες σύστημα", "samples": "Μόνο δείγματα", "policy": "Μόνο πολιτικές", "llm": "Χωρίς ανάκτηση"}
+NAME = {"sum": "Πλήρες σύστημα", "samples": "Μόνο δείγματα", "policy": "Μόνο πολιτικές", "llm": "Χωρίς RAG"}
 # Readable names of the sample sources (first directory of each sample's path under THESIS_SOURCES_DIR).
 SOURCE_LABEL = {
     "pypi_malregistry": "pypi\\_malregistry~\\cite{guo2023empirical}",
@@ -61,6 +63,9 @@ INTELGUARD_TABLE1 = [
     ("MalGuard-SVM", 94.75, 99.89, 89.60, 94.46), ("MalGuard-XGB", 89.65, 100.00, 79.30, 88.46),
     ("IntelGuard", 99.00, 99.49, 98.50, 98.99),
 ]
+# IntelGuard, RQ4 "Knowledge Contribution" (ge2026bridging): direct GPT-4o-mini analysis without retrieved
+# knowledge vs IntelGuard - (setting, accuracy without, FPR without, accuracy with, FPR with), in %.
+INTELGUARD_RQ4 = [("PyPI", 96.99, 2.11, 99.00, 0.50), ("συγκεκαλυμμένος κώδικας", 52.82, None, 96.50, None)]
 
 
 def num(x, digits=1):
@@ -98,6 +103,17 @@ def table(caption, label, spec, header, rows, note=None, size="\\small", sep=Non
     return out
 
 
+def holm_adjust(pvalues):
+    """Holm-Bonferroni adjusted p-values, in the order given (step-down, monotone, capped at 1)."""
+    m = len(pvalues)
+    order = sorted(range(m), key=lambda i: pvalues[i])
+    adjusted, running = [0.0] * m, 0.0
+    for rank, i in enumerate(order):
+        running = max(running, min(1.0, (m - rank) * pvalues[i]))
+        adjusted[i] = running
+    return adjusted
+
+
 def mcnemar_p(b, c):
     """Exact two-sided McNemar test on the discordant pairs b, c (binomial with p = 1/2)."""
     n = b + c
@@ -123,17 +139,33 @@ def dataset_tables():
         if group(s) not in order:
             order.append(group(s))
     count = lambda names: Counter(group(src.get(n, "?")) for n in names)
-    collected, fpc, npc = count(src), count(fp_names & set(src)), count(no_payload)
+    label_names = fp_names & set(src)
+    no_payload_names = (no_payload & set(src)) - label_names
+    collected, lab, npc = count(src), count(label_names), count(no_payload_names)
     trc, tec = count(train), count(test)
-    rows = [f"{g} & {num(collected[g])} & {num(fpc[g] + npc[g])} & {num(trc[g])} & {num(tec[g])}" for g in order]
-    rows += ["\\hline", f"Σύνολο & {num(len(src))} & {num(len((fp_names | no_payload) & set(src)))} & "
-             f"{num(len(train))} & {num(len(test))}"]
+    # everything else was analysed but not selected (same code as a selected package, campaign cap,
+    # sampling of the packages without chains), or its static analysis did not complete
+    rest = {g: collected[g] - lab[g] - npc[g] - trc[g] - tec[g] for g in order}
+    report = json.load(open(os.path.join(DS, "final_dataset_report.json"), encoding="utf-8"))
+    no_analysis = len(src) - len(label_names) - len(no_payload_names) - report["total_analyzed_samples"]
+    not_selected = report["total_analyzed_samples"] - report["total_selected"]
+    assert sum(rest.values()) == no_analysis + not_selected, "the sample accounting does not add up"
+    rows = [f"{g} & {num(collected[g])} & {num(lab[g])} & {num(npc[g])} & {num(rest[g])} & {num(trc[g])} & {num(tec[g])}"
+            for g in order]
+    rows += ["\\hline", f"Σύνολο & {num(len(src))} & {num(len(label_names))} & {num(len(no_payload_names))} & "
+             f"{num(sum(rest.values()))} & {num(len(train))} & {num(len(test))}"]
+    col = lambda w: f">{{\\raggedleft\\arraybackslash}}p{{{w}\\linewidth}}"
     write("dataset_sources.tex", table(
-        "Δείγματα κακόβουλων πακέτων ανά πηγή: συλλογή, εξαίρεση και τελική κατανομή στο ευρετήριο "
-        "και στο σύνολο αξιολόγησης.", "tab:dataset_sources", "|l|r|r|r|r|",
-        "Πηγή & Δείγματα & Εξαιρέθηκαν & Ευρετήριο & Αξιολόγηση", rows,
-        note="Εξαιρέθηκαν: νόμιμα πακέτα με λανθασμένη ετικέτα malware και πακέτα χωρίς κακόβουλο "
-             "κώδικα (Ενότητα~\\ref{subsection:label_quality})."))
+        "Δείγματα κακόβουλων πακέτων ανά πηγή, από τη συλλογή μέχρι το τελικό σύνολο: κάθε γραμμή αθροίζει "
+        "στο πλήθος των δειγμάτων της πηγής.", "tab:dataset_sources",
+        "|>{\\raggedright\\arraybackslash}p{0.25\\linewidth}|"
+        + "|".join(col(w) for w in (0.08, 0.08, 0.12, 0.08, 0.09, 0.10)) + "|",
+        "Πηγή & Δείγματα & Λάθος ετικέτα & Χωρίς κακόβουλο κώδικα & Εκτός επιλογής & Ευρετήριο & Αξιολόγηση", rows,
+        note="Λάθος ετικέτα: νόμιμα πακέτα με ετικέτα malware· χωρίς κακόβουλο κώδικα: δείγματα χωρίς κανένα σήμα "
+             f"κακόβουλης λειτουργικότητας. Εκτός επιλογής: {num(not_selected)} δείγματα που αναλύθηκαν αλλά δεν "
+             "επιλέχθηκαν (ίδιος κώδικας με ήδη επιλεγμένο πακέτο, όριο πέντε πακέτων ανά καμπάνια, δειγματοληψία "
+             f"των πακέτων χωρίς Behavior Chains) και {num(no_analysis)} δείγματα των οποίων η στατική ανάλυση δεν "
+             "ολοκληρώθηκε.", size="\\footnotesize"))
 
     # final sets: packages / with chains / chains, from the reports of the full system
     R = ra.load("v12_sum")
@@ -197,6 +229,35 @@ def knowledge_base_table():
         "Πηγή & Εγγραφές", rows))
 
 
+def local_model_table():
+    """v13: the local model (LM Studio) next to DeepSeek on the same subset (dataset/local_subset.json)."""
+    if not all(os.path.isdir(os.path.join(ROOT, "results", t)) for t in ("v13_sum", "v13_llm")):
+        print("[!] results/v13_sum or v13_llm is missing - local_model.tex skipped")
+        return
+    subset = json.load(open(os.path.join(DS, "local_subset.json"), encoding="utf-8"))
+    runs = [("DeepSeek (API)", "v12_sum", "sum"), ("DeepSeek (API)", "v12_llm", "llm"),
+            ("gemma-4-26b-a4b (τοπικά)", "v13_sum", "sum"), ("gemma-4-26b-a4b (τοπικά)", "v13_llm", "llm")]
+    rows = []
+    for model, tag, conf in runs:
+        R = ra.load(tag)
+        flag = lambda n: R[n]["final_verdict"] in ra.POSITIVE
+        tp = sum(flag(n) for n in subset["malware"]); fn = len(subset["malware"]) - tp
+        fp = sum(flag(n) for n in subset["benign"]); tn = len(subset["benign"]) - fp
+        rec, fpr, prec = 100 * ra.div(tp, tp + fn), 100 * ra.div(fp, fp + tn), 100 * ra.div(tp, tp + fp)
+        f1 = ra.div(2 * prec * rec, prec + rec)
+        acc = 100 * ra.div(tp + tn, tp + fn + fp + tn)
+        if rows and model != rows[-1][0]:
+            rows.append(("\\hline",))
+        rows.append((model, f"{model} & {NAME[conf]} & {tp} & {fn} & {fp} & {tn} & {p(rec)} & {p(fpr)} & {p(prec)} & "
+                            f"{p(f1)} & {p(acc)}"))
+    write("local_model.tex", table(
+        f"Το τοπικό μοντέλο και το DeepSeek στο υποσύνολο αξιολόγησης του τοπικού μοντέλου "
+        f"({num(len(subset['malware']))} κακόβουλα και {num(len(subset['benign']))} νόμιμα πακέτα), με το Πλήρες "
+        "σύστημα και χωρίς RAG.", "tab:local_model", "|l|l|r|r|r|r|r|r|r|r|r|",
+        "Μοντέλο & Διαμόρφωση & TP & FN & FP & TN & Recall & FPR & Prec. & F1 & Acc.",
+        [r[-1] if len(r) == 2 else r[0] for r in rows], size="\\footnotesize", sep="3.5pt"))
+
+
 # ----------------------------------------------------------------------------- results (Chapter 5)
 def results_tables():
     sim_source = {p_: ra.max_similarity(r) for p_, r in ra.load("v12_sum").items()}
@@ -239,7 +300,7 @@ def results_tables():
         size="\\footnotesize", sep="3.5pt"))
 
     # similarity strata: one cell per configuration = recall (%) / false positives
-    zone = {0: "$\\geq 0{,}98$ (γνωστή παραλλαγή)", 1: "$0{,}90$--$0{,}98$ (κοντινό)", 2: "$< 0{,}90$ (νέο)"}
+    zone = {0: "$\\geq 0{,}98$ (γνωστή παραλλαγή)", 1: "$0{,}90$--$0{,}98$ (κοντινό)", 2: "$< 0{,}90$ (χαμηλή ομοιότητα)"}
     rows = []
     for i in range(len(ra.STRATA)):
         s0 = res["sum"]["strata"][i]
@@ -259,19 +320,23 @@ def results_tables():
               and r["final_verdict"] != "NO_CHAINS_FOUND"]
     flag = lambda c, n: reports[c][n]["final_verdict"] in ra.POSITIVE
     right = lambda c, n: flag(c, n) == (lab[n] == "malicious")
-    rows = []
+    tests = []  # (configuration, class, b, c, p)
     for c in CONFIGS[:3]:
-        cells = []
         for cls in ("malicious", "benign", None):
             S = [n for n in scored if cls is None or lab[n] == cls]
             b = sum(right(c, n) and not right("llm", n) for n in S)
             d = sum(right("llm", n) and not right(c, n) for n in S)
-            cells.append(f"{b} / {d} & {num(mcnemar_p(b, d), 2)}")
+            tests.append((c, cls, b, d, mcnemar_p(b, d)))
+    holm = holm_adjust([x[4] for x in tests])
+    rows = []
+    for c in CONFIGS[:3]:
+        cells = [f"{b} / {d} & {num(pv, 2)} ({num(ph, 2)})" for (cc, _, b, d, pv), ph in zip(tests, holm) if cc == c]
         rows.append(f"{NAME[c]} & " + " & ".join(cells))
     write("mcnemar.tex", table(
         "Σύγκριση ανά πακέτο κάθε διαμόρφωσης με ανάκτηση με τη διαμόρφωση χωρίς ανάκτηση: πακέτα που "
         "ταξινομούνται σωστά μόνο από τη διαμόρφωση με ανάκτηση / μόνο χωρίς ανάκτηση, και τιμή $p$ του "
-        "ακριβούς ελέγχου McNemar.", "tab:mcnemar", "|l|c|r|c|r|c|r|",
+        "ακριβούς ελέγχου McNemar· σε παρένθεση η τιμή μετά τη διόρθωση Holm για τις εννέα συγκρίσεις του πίνακα.",
+        "tab:mcnemar", "|l|c|r|c|r|c|r|",
         "Διαμόρφωση & \\multicolumn{2}{c|}{Κακόβουλα} & \\multicolumn{2}{c|}{Νόμιμα} & \\multicolumn{2}{c|}{Σύνολο}",
         ["& $b$ / $c$ & $p$ & $b$ / $c$ & $p$ & $b$ / $c$ & $p$", "\\hline"] + rows))
 
@@ -329,7 +394,7 @@ def results_tables():
     rows.append("\\hline")
     for c in ("sum", "llm"):
         x = e2e(c)
-        rows.append(f"\\textbf{{Παρούσα εργασία}} ({NAME[c].lower()}) & {num(x['accuracy'], 2)} & "
+        rows.append(f"\\textbf{{Παρούσα εργασία}}: {NAME[c]} & {num(x['accuracy'], 2)} & "
                     f"{num(x['precision'], 2)} & {num(x['recall'], 2)} & {num(x['f1'], 2)}")
     write("comparison.tex", table(
         "Σύγκριση με εργαλεία ανίχνευσης κακόβουλων πακέτων PyPI. Οι τιμές των υπολοίπων εργαλείων είναι "
@@ -337,6 +402,20 @@ def results_tables():
         "της παρούσας εργασίας αφορούν το σύνολο αξιολόγησης του Κεφαλαίου~\\ref{chapter:implementations}, "
         "μετρημένες end-to-end.", "tab:comparison", "|l|r|r|r|r|",
         "Εργαλείο & Accuracy (\\%) & Precision (\\%) & Recall (\\%) & F1 (\\%)", rows))
+
+    # effect of retrieval: IntelGuard RQ4 (direct GPT-4o-mini vs IntelGuard) next to ours, end-to-end
+    rows = [f"IntelGuard~\\cite{{ge2026bridging}}, {name} & {num(a0, 2)} & {num(f0, 2) if f0 is not None else '--'} & "
+            f"{num(a1, 2)} & {num(f1, 2) if f1 is not None else '--'}" for name, a0, f0, a1, f1 in INTELGUARD_RQ4]
+    x0, x1 = e2e("llm"), e2e("sum")
+    rows.append(f"Παρούσα εργασία, end-to-end & {num(x0['accuracy'], 2)} & {num(x0['fpr'], 2)} & "
+                f"{num(x1['accuracy'], 2)} & {num(x1['fpr'], 2)}")
+    write("rag_literature.tex", table(
+        "Accuracy και FPR (\\%) χωρίς και με RAG: οι τιμές που αναφέρει το IntelGuard (απευθείας ανάλυση του κώδικα "
+        "με το GPT-4o-mini έναντι του πλήρους IntelGuard) και οι διαμορφώσεις Χωρίς RAG και Πλήρες σύστημα της "
+        "παρούσας εργασίας. Οι τιμές έχουν μετρηθεί σε διαφορετικά σύνολα αξιολόγησης.", "tab:rag_literature",
+        "|l|r|r|r|r|",
+        "Εργασία, σύνολο & \\multicolumn{2}{c|}{Χωρίς RAG} & \\multicolumn{2}{c|}{Με RAG}",
+        ["& Accuracy & FPR & Accuracy & FPR", "\\hline"] + rows))
 
     def panel(k, c, x=1.45, y=1.1, font="\\footnotesize"):
         """TikZ drawing of one 2x2 confusion matrix (rows: true class, columns: decision)."""
@@ -381,6 +460,7 @@ def results_tables():
 if __name__ == "__main__":
     dataset_tables()
     knowledge_base_table()
+    local_model_table()
     results_tables()
     print(f"[+] LaTeX -> {OUT}")
     for f in sorted(os.listdir(OUT)):

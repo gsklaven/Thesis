@@ -36,7 +36,7 @@ UNSCORED = ("EVALUATION_FAILED", "INCOMPLETE", "UNKNOWN")
 MODE_NAMES = {"sum": "full system (samples + policies)", "samples": "malware samples only",
               "policy": "security knowledge base only", "llm": "no retrieval (LLM only)"}
 # similarity strata: (label, lower bound inclusive, upper bound exclusive) of the package's max similarity
-STRATA = [(">=0.98 known variant", 0.98, 2.0), ("0.90-0.98 close", 0.90, 0.98), ("<0.90 novel", -1.0, 0.90)]
+STRATA = [(">=0.98 known variant", 0.98, 2.0), ("0.90-0.98 close", 0.90, 0.98), ("<0.90 low similarity", -1.0, 0.90)]
 # single-hue (blue) sequential ramp, from near zero to the maximum (dataviz reference palette)
 RAMP = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5",
         "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
