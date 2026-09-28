@@ -5,9 +5,10 @@ For the package in CODEQL_TARGET_DIR:
   1. find its third-party imports (AST scan of every .py file) - with CODEQL_NO_VENDOR=1 they are only
      recorded by name in results/dependency_tree.json; otherwise each is pip-installed into vendor/
      (no dependencies of dependencies) so that library code can be analysed too;
-  2. for each language (Python, JavaScript): create a CodeQL database and run the four queries
+  2. for each language (Python, JavaScript): create a CodeQL database and run the queries
      (find_flow = source->sink taint tracking to sensitive API calls, call_graph, backward_slice,
-     control_deps), decoding every result to a CSV file in results/.
+     control_deps, and for Python constant_args = the literal arguments of the calls), decoding every
+     result to a CSV file in results/.
 
 A language whose database or queries fail is skipped with the message "[!] Skipping language '<lang>'"
 (the scripts that run this one look for that exact text). build_behavior_chain.py then combines the CSV

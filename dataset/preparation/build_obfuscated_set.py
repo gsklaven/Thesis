@@ -64,12 +64,21 @@ def eligible(folder):
     return out
 
 
+def malware_source(name):
+    """Source path of a malware sample: v12 samples first, then the matched dataset (samples added later)."""
+    paths = json.load(open(os.path.join(DS, "v12_known_samples.json"), encoding="utf-8"))["source_code_path"]
+    if name not in paths:
+        for item in json.load(open(os.path.join(DS, "malware_dataset_matched.json"), encoding="utf-8")):
+            if item.get("package_name") == name and item.get("source_code_path"):
+                return item["source_code_path"]
+    return paths[name]
+
+
 def fetch_original(name, label, version, dest):
     """Copy (malware) or download (benign, exact release) the original package into dest and extract it."""
     os.makedirs(dest)
     if label == "malicious":
-        src = resolve_source_path(json.load(open(os.path.join(DS, "v12_known_samples.json"),
-                                                 encoding="utf-8"))["source_code_path"][name])
+        src = resolve_source_path(malware_source(name))
         if os.path.isdir(src):
             shutil.copytree(src, os.path.join(dest, "src"))
         else:
@@ -86,23 +95,38 @@ def fetch_original(name, label, version, dest):
     ba.extract_archives(dest)
 
 
-def obfuscate(src, out, level):
-    """Run Intensio-Obfuscator; returns (ok, number of .py files that no longer parse)."""
-    res = subprocess.run([TOOL_PY, "intensio_obfuscator.py", "-i", src, "-o", out, "-mlen", "lower", "-ind", "4",
-                          *LEVELS[level]], cwd=TOOL, capture_output=True, text=True, timeout=600)
-    if res.returncode != 0 or not os.path.isdir(out):
-        return False, None
+def python_files(folder):
+    """The .py files of a folder, without macOS metadata files (._*) that a FAT/exFAT disk adds."""
+    return [os.path.join(root, f) for root, _, files in os.walk(folder)
+            for f in files if f.endswith(".py") and not f.startswith("._")]
+
+
+def unparsable(folder):
+    """Number of .py files of the folder that no longer parse."""
     broken = 0
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        for root, _, files in os.walk(out):
-            for f in files:
-                if f.endswith(".py"):
-                    try:
-                        ast.parse(open(os.path.join(root, f), encoding="utf-8", errors="replace").read())
-                    except (SyntaxError, ValueError):
-                        broken += 1
-    return True, broken
+        for path in python_files(folder):
+            try:
+                ast.parse(open(path, encoding="utf-8", errors="replace").read())
+            except (SyntaxError, ValueError):
+                broken += 1
+    return broken
+
+
+def obfuscate(src, out, level):
+    """Run Intensio-Obfuscator; returns (ok, number of .py files that no longer parse)."""
+    # Intensio's input check rejects a package when at least half of its .py files are empty (e.g. empty
+    # __init__.py files); an empty module and a module with a single newline are the same program.
+    for path in python_files(src):
+        if os.path.getsize(path) == 0:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n")
+    res = subprocess.run([TOOL_PY, "intensio_obfuscator.py", "-i", src, "-o", out, "-mlen", "lower", "-ind", "4",
+                          *LEVELS[level]], cwd=TOOL, capture_output=True, text=True, timeout=1200)
+    if res.returncode != 0 or not os.path.isdir(out) or not python_files(out):
+        return False, None
+    return True, unparsable(out)
 
 
 def private_pipeline(path):
@@ -151,7 +175,8 @@ def main():
             print(f"\n=== {obf_name} ({label}) ===")
             analysed = os.path.join(WORK, f"w{worker}", "an", obf_name)
             try:
-                if not os.path.isdir(orig):
+                if not os.path.isdir(orig) or not python_files(orig):
+                    shutil.rmtree(orig, ignore_errors=True)  # an earlier failed fetch leaves an empty folder
                     fetch_original(name, label, version, orig)
                 obf_src = os.path.join(OBF_SOURCES, level, name)
                 if os.path.exists(obf_src):
@@ -193,6 +218,11 @@ def main():
     for f in sorted(glob.glob(os.path.join(DS, "obfuscated", "*", "*.json"))):
         data = json.load(open(f, encoding="utf-8"))
         origin = data.get("obfuscated_from", {})
+        obf_src = os.path.join(OBF_SOURCES, origin.get("level", ""), origin.get("package", ""))
+        if origin and os.path.isdir(obf_src) and unparsable(obf_src) != origin.get("unparsable_py_files"):
+            # copies made before ._* metadata files were excluded from the count
+            origin["unparsable_py_files"] = unparsable(obf_src)
+            json.dump(data, open(f, "w", encoding="utf-8"), indent=4, ensure_ascii=False)
         labels[os.path.basename(f)[:-5]] = origin.get("label")
         results[os.path.basename(f)[:-5]] = {"chains": len(data.get("behavior_chains", [])),
                                              "unparsable_py_files": origin.get("unparsable_py_files")}

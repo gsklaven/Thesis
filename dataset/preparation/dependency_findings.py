@@ -19,7 +19,7 @@ new verdicts of this system, which also re-checks the packages that depend on a 
 --own-verdicts DIR...: also use the packages this system has judged MALICIOUS (reports in DIR) as a
 second registry (see inference/dependency_check.py).
 
-Usage: python3 dataset/preparation/dependency_findings.py [--own-verdicts results/v12_sum] dataset/rag_test [...]
+Usage: python3 dataset/preparation/dependency_findings.py dataset/rag_test [...] [--own-verdicts results/v12_sum]
 """
 import argparse
 import json

@@ -1,12 +1,17 @@
 """
-progress.py - live progress of an evaluation run (e.g. the local-model run on dataset/local_subset).
+progress.py - live progress of an evaluation run.
 
-For every run folder given (default: v13_sum and v13_llm, the local-model runs) it shows, over the packages of
-the subset: how many are done per class, the verdicts so far, the agreement with the DeepSeek run of the
-same RAG mode on the same packages, and the Behavior Chains left. The speed is measured in chains over the
-last two hours (so earlier runs and pauses do not distort it) and gives the estimate of the remaining time.
+For every run folder given it shows, per set of packages: how many are done, the verdicts so far, the wrong
+verdicts so far, the agreement with the DeepSeek v12 run of the same RAG mode (on the packages that run
+evaluated) and the Behavior Chains left. The speed is measured in chains over the last two hours (so earlier
+runs and pauses do not distort it) and gives the estimate of the remaining time.
+
+The packages come either from a subset file (default: dataset/local_subset.json, the local-model runs v13_*)
+or, with --sets, from dataset folders (e.g. the v14 run: rag_test, benign_test_set and the obfuscated sets).
 
 Usage: python3 results/progress.py [tag ...] [--subset dataset/local_subset.json] [--watch SECONDS]
+       python3 results/progress.py v14_sum v14_samples v14_policy v14_llm --sets dataset/rag_test \
+           dataset/benign_test_set dataset/obfuscated/* --watch 60
 """
 import argparse
 import glob
@@ -17,8 +22,9 @@ from collections import Counter
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 POSITIVE = ("MALICIOUS", "SUSPICIOUS")
+NOT_JUDGED = ("NO_CHAINS_FOUND", "INCOMPLETE", "EVALUATION_FAILED", "UNKNOWN")
 SPEED_WINDOW = 2 * 3600  # seconds of recent reports used to measure the speed
-REF_VERSION = "v12"      # the DeepSeek runs the local model is compared with
+REF_VERSION = "v12"      # the DeepSeek runs every run is compared with
 
 
 def reports(tag):
@@ -46,34 +52,61 @@ def seconds_per_chain(runs):
     return (recent[-1][0] - recent[0][0]) / chains if chains else None
 
 
-def show(tags, subset):
-    """Print one progress block per run folder, then the estimate of the time left for all of them."""
+def from_subset(path):
+    """Sets, labels and chain counts (None: taken from the v12 reports) of a subset file."""
+    with open(path, encoding="utf-8") as f:
+        subset = json.load(f)
     sets = {"malware": subset["malware"], "benign": subset["benign"]}
+    labels = {p: ("malicious" if name == "malware" else "benign") for name, pkgs in sets.items() for p in pkgs}
+    return sets, labels, None
+
+
+def from_folders(folders):
+    """Sets (one per folder), labels (expected_labels.json) and chain counts of dataset folders."""
+    with open(os.path.join(ROOT, "expected_labels.json"), encoding="utf-8") as f:
+        expected = json.load(f)
+    sets, chains = {}, {}
+    for folder in folders:
+        name = os.path.relpath(os.path.abspath(folder), os.path.join(ROOT, "dataset"))
+        sets[name] = []
+        for f in sorted(os.listdir(folder)):
+            if f.endswith(".json") and not f.startswith("_"):
+                with open(os.path.join(folder, f), encoding="utf-8") as fh:
+                    chains[f[:-5]] = len(json.load(fh).get("behavior_chains") or [])
+                sets[name].append(f[:-5])
+    labels = {p: expected.get(p) for pkgs in sets.values() for p in pkgs}
+    return sets, labels, chains
+
+
+def show(tags, sets, labels, chains):
+    """Print one progress block per run folder, then the estimate of the time left for all of them."""
     total = sum(len(v) for v in sets.values())
-    print(time.strftime("%H:%M:%S"), f"- subset: {len(sets['malware'])} malware + {len(sets['benign'])} benign")
+    print(time.strftime("%H:%M:%S"), "- " + ", ".join(f"{name}: {len(p)}" for name, p in sets.items()))
     runs, chains_left = [], 0
     for tag in tags:
         rep = reports(tag)
-        # the DeepSeek run with the same RAG mode (v13_sum -> v12_sum); it also gives the chain count of
-        # the packages not evaluated yet
+        # the DeepSeek run with the same RAG mode (v13_sum -> v12_sum); without chain counts of the sets it
+        # also gives the chain count of the packages not evaluated yet
         ref = reports(f"{REF_VERSION}_{tag.split('_')[1]}")
         runs.append(rep)
         done = [p for s in sets.values() for p in s if p in rep]
-        left = sum(ref[p][2] for s in sets.values() for p in s if p not in rep and p in ref)
+        count = (lambda p: chains.get(p, 0)) if chains is not None else (lambda p: ref[p][2] if p in ref else 0)
+        left = sum(count(p) for s in sets.values() for p in s if p not in rep)
         chains_left += left
         print(f"\n{tag}: {len(done)}/{total} packages | {left} chains left")
         for name, pkgs in sets.items():
             d = [p for p in pkgs if p in rep]
             v = Counter(rep[p][0] for p in d)
-            agree = sum((rep[p][0] in POSITIVE) == (ref[p][0] in POSITIVE) for p in d if p in ref)
-            wrong = sum((rep[p][0] in POSITIVE) != (name == "malware") for p in d
-                        if rep[p][0] not in ("NO_CHAINS_FOUND", "INCOMPLETE", "EVALUATION_FAILED", "UNKNOWN"))
-            print(f"  {name:8s} {len(d):4d}/{len(pkgs):<4d} verdicts {dict(v)} | wrong so far: {wrong} | "
-                  f"same as DeepSeek: {agree}/{len(d)}")
+            in_ref = [p for p in d if p in ref]
+            agree = sum((rep[p][0] in POSITIVE) == (ref[p][0] in POSITIVE) for p in in_ref)
+            wrong = sum((rep[p][0] in POSITIVE) != (labels.get(p) == "malicious") for p in d
+                        if rep[p][0] not in NOT_JUDGED)
+            same = f" | same as {REF_VERSION}: {agree}/{len(in_ref)}" if in_ref else ""
+            print(f"  {name:20s} {len(d):4d}/{len(pkgs):<4d} verdicts {dict(v)} | wrong so far: {wrong}{same}")
     speed = seconds_per_chain(runs)
     if speed:
-        print(f"\n~{speed:.0f} s per chain (last {SPEED_WINDOW // 3600} h) | {chains_left} chains left "
-              f"-> ~{chains_left * speed / 3600:.1f} h" + ("" if chains_left else " (done)"))
+        print(f"\n~{speed:.2f} s per chain (all runs together, last {SPEED_WINDOW // 3600} h) | {chains_left} "
+              f"chains left -> ~{chains_left * speed / 3600:.1f} h" + ("" if chains_left else " (done)"))
 
 
 def main():
@@ -81,14 +114,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("tags", nargs="*", default=["v13_sum", "v13_llm"])
     ap.add_argument("--subset", default=os.path.join(ROOT, "dataset", "local_subset.json"))
+    ap.add_argument("--sets", nargs="+", help="dataset folders instead of a subset file")
     ap.add_argument("--watch", type=int, default=0, help="refresh every N seconds (Ctrl+C to stop)")
     args = ap.parse_args()
-    with open(args.subset, encoding="utf-8") as f:
-        subset = json.load(f)
+    sets, labels, chains = from_folders(args.sets) if args.sets else from_subset(args.subset)
     while True:
         if args.watch:
             os.system("clear")
-        show(args.tags, subset)
+        show(args.tags, sets, labels, chains)
         if not args.watch:
             break
         time.sleep(args.watch)
