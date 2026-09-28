@@ -356,7 +356,8 @@ def results_tables():
         rows.append(f"\\textbf{{Παρούσα εργασία}}: {NAME[c]} & {num(x['accuracy'], 2)} & "
                     f"{num(x['precision'], 2)} & {num(x['recall'], 2)} & {num(x['f1'], 2)}")
     write("comparison.tex", table(
-        "Σύγκριση με εργαλεία ανίχνευσης κακόβουλων πακέτων PyPI. Οι τιμές των υπολοίπων εργαλείων είναι "
+        "Αποτελέσματα της παρούσας εργασίας και δημοσιευμένες τιμές εργαλείων ανίχνευσης κακόβουλων πακέτων "
+        "PyPI. Οι τιμές των υπολοίπων εργαλείων είναι "
         "αυτές που αναφέρει το IntelGuard~\\cite{ge2026bridging} στο δικό του σύνολο αξιολόγησης· οι τιμές "
         "της παρούσας εργασίας αφορούν το σύνολο αξιολόγησης του Κεφαλαίου~\\ref{chapter:implementations}, "
         "μετρημένες end-to-end.", "tab:comparison", "|l|r|r|r|r|",
@@ -371,7 +372,7 @@ def results_tables():
     write("rag_literature.tex", table(
         "Accuracy και FPR (\\%) χωρίς και με RAG: οι τιμές που αναφέρει το IntelGuard (απευθείας ανάλυση του κώδικα "
         "με το GPT-4o-mini έναντι του πλήρους IntelGuard) και οι διαμορφώσεις Χωρίς RAG και Πλήρες σύστημα της "
-        "παρούσας εργασίας. Οι τιμές έχουν μετρηθεί σε διαφορετικά σύνολα αξιολόγησης.", "tab:rag_literature",
+        "παρούσας εργασίας.", "tab:rag_literature",
         "|l|r|r|r|r|",
         "Εργασία, σύνολο & \\multicolumn{2}{c|}{Χωρίς RAG} & \\multicolumn{2}{c|}{Με RAG}",
         ["& Accuracy & FPR & Accuracy & FPR", "\\hline"] + rows))
