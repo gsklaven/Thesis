@@ -166,6 +166,21 @@ bash results/run_local_subset.sh           # sum and llm -> results/v13_{sum,llm
 python3 results/progress.py --watch 60     # progress, in a second terminal
 ```
 
+**v14: extended evaluation.** Same index, knowledge base and prompt as v12; the evaluation sets grow and
+the dependency graph of every package is checked:
+```bash
+bash run_pipeline.sh sources && bash run_pipeline.sh collect && bash run_pipeline.sh analyze
+bash run_pipeline.sh addtest                                           # new malware -> rag_test only
+python3 dataset/preparation/select_extra_benign.py --extend 460        # 40 curated + 460 sampled = 500 benign
+bash run_pipeline.sh benign                                            # CodeQL for the new benign packages
+bash run_pipeline.sh obfuscate                                         # 100+100 obfuscated copies, levels A and B
+bash run_pipeline.sh deps                                              # dependency findings in every chains file
+bash results/run_v14.sh                                                # sum and llm -> results/v14_{sum,llm}/
+```
+The obfuscation tool is set up once as described in `dataset/preparation/build_obfuscated_set.py`. Every
+report records `final_verdict` (the LLM on the package's own code) and `final_verdict_with_dependencies`
+(also MALICIOUS when a known malicious package is in its dependency graph, `inference/dependency_check.py`).
+
 ## 3. All commands
 
 | Command | What it does |
@@ -180,6 +195,9 @@ python3 results/progress.py --watch 60     # progress, in a second terminal
 | `policy` | a **new** snapshot of the knowledge base (current versions of MITRE/CWE/CAPEC and of the rules). Not part of `all`/`update`, so that the knowledge base of the experiments stays the same |
 | `rag` | `rebuild_rag.py` (descriptions, tags, selection, split, index) + `audit_leakage.py` |
 | `evaluate` | for every `RAG_MODE` in `MODES`: `check_test_set` on malware and benign, and `evaluation_summary`; then `results_analysis` |
+| `addtest` | new malware samples (names not in `dataset/v12_known_samples.json`) → evaluation set only, with the selection and family-split rules; index and split unchanged |
+| `obfuscate` | `build_obfuscated_set.py`: obfuscated copies (Intensio-Obfuscator, levels A and B) of 100 malware + 100 benign evaluation packages + CodeQL → `dataset/obfuscated/` |
+| `deps` | `dependency_findings.py`: declared dependencies of every evaluation package and the known malicious packages in its dependency graph → written into the chains files |
 | `update` | `sources` → `collect` → `analyze` → `rag` |
 | `all` | `collect` → `analyze` → `benign` → `rag` → `evaluate` |
 | `pack` / `unpack [DIR]` | packing / restoring for the GitHub Release |

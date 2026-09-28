@@ -71,6 +71,23 @@ def aggregate_verdicts(chain_results):
     return "UNKNOWN"
 
 
+def dependency_verdict(json_path, final_verdict):
+    """
+    Interpackage analysis: the known malicious packages in the package's dependency graph, written into
+    the chains file by dataset/preparation/dependency_findings.py (inference/dependency_check.py). A
+    package that pulls in a malicious package is MALICIOUS whatever its own code does; the LLM verdict on
+    its own Behavior Chains stays in final_verdict, the verdict with the dependency graph is
+    final_verdict_with_dependencies.
+    """
+    with open(json_path, encoding="utf-8") as f:
+        findings = json.load(f).get("dependency_findings")
+    return {
+        "dependency_checked": findings is not None,
+        "dependency_findings": findings or [],
+        "final_verdict_with_dependencies": "MALICIOUS" if findings else final_verdict,
+    }
+
+
 def _evaluate_one(idx, chain_result):
     """Send one chain's prompt to the LLM (runs in a worker thread); returns (index, parsed answer)."""
     llm_result = evaluate_prompt(chain_result['prompt_for_llm'])
@@ -103,6 +120,7 @@ def main(json_path):
             "final_verdict": "NO_CHAINS_FOUND", "total_chains_analyzed": 0,
             "vendor_chains_excluded": getattr(engine, "last_vendor_excluded", 0),
             "malicious_chains": 0, "suspicious_chains": 0, "chain_details": [],
+            **dependency_verdict(json_path, "NO_CHAINS_FOUND"),
         }
         os.makedirs(RESULTS_DIR, exist_ok=True)
         with open(os.path.join(RESULTS_DIR, f"report_{package_name}.json"), "w", encoding="utf-8") as f:
@@ -150,6 +168,7 @@ def main(json_path):
         "vendor_chains_excluded": getattr(engine, "last_vendor_excluded", 0),
         "malicious_chains": sum(1 for r in results if r.get("llm_evaluation", {}).get("verdict") == "MALICIOUS"),
         "suspicious_chains": sum(1 for r in results if r.get("llm_evaluation", {}).get("verdict") == "SUSPICIOUS"),
+        **dependency_verdict(json_path, final_verdict),
         "chain_details": results,
     }
     os.makedirs(RESULTS_DIR, exist_ok=True)

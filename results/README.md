@@ -12,6 +12,8 @@ The `<version>` is `PROMPT_VERSION_RAG_MODE[_provider][RESULTS_SUFFIX]` (e.g. `v
 `v12_sum_gemini`, `v12_sum_smoke`). The provider is added only when it is not `deepseek` (see `LLM_PROVIDER`).
 `v13_sum` and `v13_llm` are the local-model runs (LM Studio) on `dataset/local_subset.json`; their name is set
 with `RESULTS_TAG` by `run_local_subset.sh`.
+`v14_sum` and `v14_llm` (`run_v14.sh`) evaluate the extended sets (new malware, 500 benign, obfuscated copies)
+with the index, knowledge base and prompt of v12; their reports also carry the dependency-graph check.
 The results of the earlier prompt/pipeline versions `v1`–`v11` (not comparable with v12) are kept in the
 git history and in the archive of `old/` kept outside the repository.
 

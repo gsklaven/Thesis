@@ -13,8 +13,11 @@ Procedure (seeded, documented in the output JSON):
        - it is NOT in malware_dataset_matched.json, NOT in the OSV malicious-PyPI
          list, NOT already in BENIGN_PACKAGES (fetch_benign_test_set.py)
   4. Stop at N packages.
+With --extend TOTAL the existing selection is kept and the same procedure adds packages (not already
+selected) until the selection has TOTAL; each extension is recorded under "extensions".
 Output: benign_extra_selection.json (read by fetch_benign_test_set.py).
 """
+import argparse
 import json
 import os
 import sys
@@ -49,8 +52,14 @@ def existing_benign():
 
 
 def main():
-    """Walk the shuffled rank window and keep the first N packages that pass the filters; write the selection with its parameters."""
-    top = json.loads(get(TOP_URL))["rows"]
+    """Walk the shuffled rank window and keep the first N packages that pass the filters; write the selection with its parameters.
+    With --extend TOTAL the current selection is kept and new packages are added the same way until it has TOTAL."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--extend", type=int, help="keep the current selection and add packages until it has this many")
+    args = ap.parse_args()
+
+    top_json = json.loads(get(TOP_URL))
+    top = top_json["rows"]
     cands = [(i + 1, r["project"]) for i, r in enumerate(top)][RANK_MIN - 1:RANK_MAX]
     malware = {norm(i["package_name"]) for i in json.load(open(os.path.join(ROOT, "dataset", "malware_dataset_matched.json"))) if i.get("package_name")}
     osv = {norm(n) for n in os.listdir(OSV_DIR)} if os.path.isdir(OSV_DIR) else set()
@@ -58,8 +67,14 @@ def main():
     random.Random(SEED).shuffle(cands)
 
     chosen, rejected = [], {"malware_or_osv_name": 0, "already_benign": 0, "too_big_or_no_files": 0, "api_error": 0}
+    target, previous = N, None
+    if args.extend:
+        previous = json.load(open(OUT, encoding="utf-8"))
+        chosen = list(previous["packages"])
+        have |= {norm(p["package"]) for p in chosen}
+        target = args.extend
     for rank, name in cands:
-        if len(chosen) >= N:
+        if len(chosen) >= target:
             break
         n = norm(name)
         if n in malware or n in osv:
@@ -84,6 +99,11 @@ def main():
                        "version": info["info"]["version"], "summary": (info["info"].get("summary") or "")[:100]})
     out = {"method": "seeded random sample of top-PyPI ranks, filtered by size and by absence from malware/OSV lists",
            "seed": SEED, "rank_range": [RANK_MIN, RANK_MAX], "max_kb": MAX_KB, "rejected": rejected, "packages": chosen}
+    if previous:  # the original selection is kept as-is; the extension is documented separately
+        out["rejected"] = previous["rejected"]
+        out["extensions"] = previous.get("extensions", []) + [{
+            "added": len(chosen) - len(previous["packages"]), "total": len(chosen), "rejected": rejected,
+            "top_pypi_last_update": top_json.get("last_update")}]
     json.dump(out, open(OUT, "w"), indent=2, ensure_ascii=False)
     print(f"[+] {len(chosen)} packages selected; rejected: {rejected}")
     for c in chosen:

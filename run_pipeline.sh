@@ -13,6 +13,9 @@
 #   ./run_pipeline.sh benign       CodeQL for the missing benign packages (sdists from PyPI)
 #   ./run_pipeline.sh policy       rebuild the security knowledge base (NEW snapshot of its sources)
 #   ./run_pipeline.sh rag          selection, family split, index + audit
+#   ./run_pipeline.sh addtest      NEW malware samples -> evaluation set only (index and split unchanged)
+#   ./run_pipeline.sh obfuscate    obfuscated copies of 100+100 evaluation packages (2 levels) + CodeQL
+#   ./run_pipeline.sh deps         dependency graph of every evaluation package vs known malicious packages
 #   ./run_pipeline.sh evaluate     LLM evaluation for every RAG_MODE in MODES
 #   ./run_pipeline.sh update       sources -> collect -> analyze -> rag  (update with new packages)
 #   ./run_pipeline.sh all          collect -> analyze -> benign -> rag -> evaluate
@@ -248,7 +251,7 @@ EOF
     local pids=() i w
     for ((i = 0; i < WORKERS; i++)); do
       w="$WORK/analyze/w$i"; setup_worker "$w"
-      BATCH_STAGING_DIR="$w/staging" "$PY" "$PREP/rerun_chains.py" --packages-file "$targets" --key targets \
+      BATCH_STAGING_DIR="$w/temp_malware_analysis" "$PY" "$PREP/rerun_chains.py" --packages-file "$targets" --key targets \
         --out-dir "$ROOT/dataset/analyzed_chains" --pipeline-dir "$w/pipeline" --shard "$i/$WORKERS" \
         --log "$LOGS/analyze_w$i.log" > "$LOGS/analyze_w$i.out" 2>&1 &
       pids+=($!)
@@ -319,18 +322,18 @@ cmd_evaluate() {
 # Everything needed to re-run rag/evaluate on another machine WITHOUT the malware sources:
 # Behavior Chains (malware + benign), final train/test, indexes and the dataset JSON files.
 # (final_diverse_subset/ is a copy of rag_train + rag_test and is recreated by rag.)
-PACK_ITEMS="analyzed_chains benign_test_set rag_train rag_test indexes"
+PACK_ITEMS="analyzed_chains benign_test_set rag_train rag_test indexes obfuscated"
 
 cmd_pack() {
   mkdir -p dist
   local gz="gzip"; command -v pigz >/dev/null 2>&1 && gz="pigz"
-  log "packing dataset/{$PACK_ITEMS}, dataset/*.json, results/v12* and v13*, expected_labels.json -> dist/ (with $gz)"
+  log "packing dataset/{$PACK_ITEMS}, dataset/*.json, results/v12*, v13* and v14*, expected_labels.json -> dist/ (with $gz)"
   rm -f dist/behavior_chains.tar.gz.part-*
   local items="" i j
   for i in $PACK_ITEMS; do [ -e "dataset/$i" ] && items="$items dataset/$i"; done
   for j in dataset/*.json; do [ -f "$j" ] && items="$items $j"; done
   # LLM reports of the final runs (not of the *_smoke test runs) - they are not in git
-  for j in results/v12* results/v13*; do case "$j" in *smoke*) ;; *) [ -d "$j" ] && items="$items $j" ;; esac; done
+  for j in results/v12* results/v13* results/v14* results/v15*; do case "$j" in *smoke*) ;; *) [ -d "$j" ] && items="$items $j" ;; esac; done
   # shellcheck disable=SC2086
   tar -C "$ROOT" -cf - $items expected_labels.json | $gz -c | split -b 1900m - dist/behavior_chains.tar.gz.part-
   (cd dist && shasum -a 256 behavior_chains.tar.gz.part-* > SHA256SUMS)
@@ -346,6 +349,23 @@ cmd_unpack() {
   log "restored: $(ls dataset/analyzed_chains | wc -l | tr -d ' ') malware, $(ls dataset/benign_test_set | wc -l | tr -d ' ') benign"
 }
 
+# ------------------------------------------------------------------------------ v14 additions
+cmd_addtest() { need_sources; run "$PY" "$PREP/add_test_samples.py"; }
+cmd_obfuscate() {
+  need_sources; keep_awake
+  setup_worker "$WORK/obfuscation"
+  run "$PY" -u "$PREP/build_obfuscated_set.py" --pipeline-dir "$WORK/obfuscation/pipeline"
+}
+cmd_deps() {
+  need_sources
+  local sets="" s
+  for s in dataset/rag_test dataset/benign_test_set dataset/obfuscated/*_malware dataset/obfuscated/*_benign; do
+    [ -d "$s" ] && sets="$sets $s"
+  done
+  # shellcheck disable=SC2086
+  run "$PY" "$PREP/dependency_findings.py" $sets
+}
+
 # ------------------------------------------------------------------------------ main
 stage="${1:-}"; shift || true
 case "$stage" in
@@ -358,10 +378,13 @@ case "$stage" in
   benign)   cmd_benign ;;
   policy)   cmd_policy ;;
   rag)      cmd_rag "$@" ;;
+  addtest)  cmd_addtest ;;
+  obfuscate) cmd_obfuscate ;;
+  deps)     cmd_deps ;;
   evaluate) cmd_evaluate ;;
   update)   cmd_sources; cmd_collect; cmd_analyze; cmd_rag ;;
   all)      cmd_collect; cmd_analyze; cmd_benign; cmd_rag; cmd_evaluate ;;
   pack)     cmd_pack ;;
   unpack)   cmd_unpack "$@" ;;
-  *)        sed -n '2,29p' "$0"; exit 1 ;;
+  *)        sed -n '2,32p' "$0"; exit 1 ;;
 esac

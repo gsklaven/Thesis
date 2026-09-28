@@ -12,6 +12,7 @@ Writes to results/analysis/latex/:
   strata.tex               recall / false positives per similarity stratum and configuration
   agreement.tex            agreement of the four configurations per package
   ssvc.tex                 SSVC priority of true / false positives per configuration
+  confidence.tex           self-reported confidence of true / false positives per configuration (+ AUROC)
   false_positives.tex      false positives of the full system (package, chains, flagged chain)
   comparison.tex           comparison with the tools evaluated in IntelGuard (Table 1 of that paper)
   rag_literature.tex       accuracy / FPR without and with retrieval: IntelGuard RQ4 next to ours
@@ -29,6 +30,7 @@ import json
 import os
 import sys
 from collections import Counter
+from statistics import median
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import results_analysis as ra  # noqa: E402  (same definitions of metrics and strata)
@@ -331,6 +333,32 @@ def results_tables():
         "Διαμόρφωση & \\multicolumn{3}{c|}{Σωστά (TP)} & \\multicolumn{3}{c|}{False positives}",
         ["& \\texttt{ACT} & \\texttt{ATTEND} & \\texttt{TRACK*} & \\texttt{ACT} & \\texttt{ATTEND} & \\texttt{TRACK*}",
          "\\hline"] + rows))
+
+    # self-reported confidence of true / false positives: the highest among the package's MALICIOUS chains
+    def auroc(pos, neg):
+        """Probability that a random true positive has a higher confidence than a random false positive."""
+        return sum((a > b) + 0.5 * (a == b) for a in pos for b in neg) / (len(pos) * len(neg))
+
+    rows = []
+    for c in CONFIGS:
+        conf = {"malicious": [], "benign": []}
+        for n in scored:
+            if not flag(c, n):
+                continue
+            cs = [ch["llm_evaluation"].get("confidence") for ch in reports[c][n].get("chain_details", [])
+                  if ch.get("llm_evaluation", {}).get("verdict") in ra.POSITIVE]
+            cs = [x for x in cs if isinstance(x, (int, float))]
+            if cs:
+                conf[lab[n]].append(max(cs))
+        tp, fp = conf["malicious"], conf["benign"]
+        rows.append(f"{NAME[c]} & {len(tp)} & {num(median(tp), 2)} & {len(fp)} & "
+                    f"{num(median(fp), 2) if fp else '--'} & {num(auroc(tp, fp), 2) if len(fp) >= 2 else '--'}")
+    write("confidence.tex", table(
+        "Αυτο-αναφερόμενη βεβαιότητα (\\texttt{confidence}) του μοντέλου στα πακέτα που χαρακτηρίστηκαν "
+        "\\texttt{MALICIOUS}: η μεγαλύτερη τιμή μεταξύ των κακόβουλων Behavior Chains του πακέτου. AUROC: η "
+        "πιθανότητα ένα τυχαίο σωστό θετικό να έχει μεγαλύτερη βεβαιότητα από ένα τυχαίο false positive "
+        "(υπολογίζεται για τουλάχιστον δύο false positives).", "tab:confidence", "|l|r|r|r|r|r|",
+        "Διαμόρφωση & TP & Διάμεση (TP) & FP & Διάμεση (FP) & AUROC", rows))
 
     # false positives of the full system
     rows = []
