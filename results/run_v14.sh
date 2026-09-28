@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 # =====================================================================================
-# run_v14.sh - the v14 evaluation: every evaluation set with the Full system (sum) and without RAG (llm),
+# run_v14.sh - the v14 evaluation: every evaluation set with the four configurations (sum, samples, policy, llm),
 # with DeepSeek and prompt v12 -> results/v14_<mode>/. The configurations run in parallel.
 #
 #   sets: dataset/rag_test          v12 malware + new samples (dataset/preparation/add_test_samples.py)
 #         dataset/benign_test_set   500 benign packages (select_extra_benign.py --extend + run_pipeline.sh benign)
 #         dataset/obfuscated/{A,B}_{malware,benign}   obfuscated copies (build_obfuscated_set.py)
 #
-# Before: bash run_pipeline.sh deps  (dependency findings in the chains files, used by llm_evaluator.py).
-# The index and the knowledge base are those of v12, so the packages of v12 are evaluated again under the
-# same conditions: v12 vs v14 on them measures the repeatability of the decisions.
+# Before: bash run_pipeline.sh constargs && bash run_pipeline.sh deps  (constant call arguments in the LLM
+# text of every chain; dependency findings used by llm_evaluator.py). The index and the knowledge base are
+# those of v12.
 # Resumable: stop it at any point (Ctrl+C) and run it again; finished packages are skipped.
 #
-#   bash results/run_v14.sh [MODE ...]          (default: sum llm)
+#   bash results/run_v14.sh [MODE ...]          (default: sum samples policy llm)
 #   logs: logs/v14_<mode>_<set>.log
 # =====================================================================================
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$ROOT/venv/bin/python"; [ -x "$PY" ] || PY="python3"
-MODES=("$@"); [ ${#MODES[@]} -gt 0 ] || MODES=(sum llm)
+MODES=("$@"); [ ${#MODES[@]} -gt 0 ] || MODES=(sum samples policy llm)
 SETS=(dataset/rag_test dataset/benign_test_set
       dataset/obfuscated/A_malware dataset/obfuscated/A_benign dataset/obfuscated/B_malware dataset/obfuscated/B_benign)
 export LLM_PROVIDER=deepseek
@@ -40,4 +40,4 @@ for m in "${MODES[@]}"; do
   ) &
 done
 wait
-log "all done - progress/metrics: $PY results/evaluation_summary.py v14_sum v14_llm"
+log "all done - metrics: $PY results/evaluation_summary.py v14_sum v14_samples v14_policy v14_llm"

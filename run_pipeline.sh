@@ -16,6 +16,7 @@
 #   ./run_pipeline.sh addtest      NEW malware samples -> evaluation set only (index and split unchanged)
 #   ./run_pipeline.sh obfuscate    obfuscated copies of 100+100 evaluation packages (2 levels) + CodeQL
 #   ./run_pipeline.sh deps         dependency graph of every evaluation package vs known malicious packages
+#   ./run_pipeline.sh constargs [DIR ...]  constant call arguments (constant_args_py.ql) for chains built without them
 #   ./run_pipeline.sh evaluate     LLM evaluation for every RAG_MODE in MODES
 #   ./run_pipeline.sh update       sources -> collect -> analyze -> rag  (update with new packages)
 #   ./run_pipeline.sh all          collect -> analyze -> benign -> rag -> evaluate
@@ -353,8 +354,32 @@ cmd_unpack() {
 cmd_addtest() { need_sources; run "$PY" "$PREP/add_test_samples.py"; }
 cmd_obfuscate() {
   need_sources; keep_awake
-  setup_worker "$WORK/obfuscation"
-  run "$PY" -u "$PREP/build_obfuscated_set.py" --pipeline-dir "$WORK/obfuscation/pipeline"
+  local pids=() i w
+  for ((i = 0; i < WORKERS; i++)); do
+    w="$WORK/obfuscation/w$i"; setup_worker "$w"
+    "$PY" -u "$PREP/build_obfuscated_set.py" --shard "$i/$WORKERS" --pipeline-dir "$w/pipeline" \
+      > "$LOGS/obfuscate_w$i.log" 2>&1 &
+    pids+=($!)
+  done
+  wait "${pids[@]}"
+  # final pass without --shard: retries whatever failed, writes the labels and the manifest
+  setup_worker "$WORK/obfuscation/final"
+  run "$PY" -u "$PREP/build_obfuscated_set.py" --pipeline-dir "$WORK/obfuscation/final/pipeline"
+}
+cmd_constargs() {
+  need_sources; keep_awake
+  local sets="" s pids=() i
+  # default: the evaluation sets; other folders (e.g. dataset/rag_train) can be given as arguments
+  for s in ${*:-dataset/rag_test dataset/benign_test_set dataset/obfuscated/*_malware dataset/obfuscated/*_benign}; do
+    [ -d "$s" ] && sets="$sets $s"
+  done
+  for ((i = 0; i < WORKERS; i++)); do
+    # shellcheck disable=SC2086
+    "$PY" -u "$PREP/constant_arguments.py" --shard "$i/$WORKERS" $sets > "$LOGS/constargs_w$i.log" 2>&1 &
+    pids+=($!)
+  done
+  wait "${pids[@]}"
+  log "constant arguments: $(tail -qn 1 "$LOGS"/constargs_w*.log | tr '\n' ' ')"
 }
 cmd_deps() {
   need_sources
@@ -362,8 +387,9 @@ cmd_deps() {
   for s in dataset/rag_test dataset/benign_test_set dataset/obfuscated/*_malware dataset/obfuscated/*_benign; do
     [ -d "$s" ] && sets="$sets $s"
   done
+  local own=""; [ -d results/v12_sum ] && own="--own-verdicts results/v12_sum"   # this system's verdicts
   # shellcheck disable=SC2086
-  run "$PY" "$PREP/dependency_findings.py" $sets
+  run "$PY" "$PREP/dependency_findings.py" $own $sets
 }
 
 # ------------------------------------------------------------------------------ main
@@ -381,10 +407,11 @@ case "$stage" in
   addtest)  cmd_addtest ;;
   obfuscate) cmd_obfuscate ;;
   deps)     cmd_deps ;;
+  constargs) cmd_constargs "$@" ;;
   evaluate) cmd_evaluate ;;
   update)   cmd_sources; cmd_collect; cmd_analyze; cmd_rag ;;
   all)      cmd_collect; cmd_analyze; cmd_benign; cmd_rag; cmd_evaluate ;;
   pack)     cmd_pack ;;
   unpack)   cmd_unpack "$@" ;;
-  *)        sed -n '2,32p' "$0"; exit 1 ;;
+  *)        sed -n '2,33p' "$0"; exit 1 ;;
 esac

@@ -22,12 +22,18 @@ A dependency counts as malicious when:
 A legitimate project with a few compromised releases that is still on PyPI with other versions is NOT
 flagged for an unpinned requirement (the installed version cannot be resolved statically).
 
+Second registry - the verdicts of this system (load_own_verdicts): a dependency that this system has
+itself judged MALICIOUS (its own Behavior Chains, final_verdict of a report) counts as well, so that a
+malicious dependency is caught before it is listed in OSV (typically an attacker uploads the dropper and
+its payload package together). To keep a single wrong verdict on a popular library from flagging every
+package that depends on it, this applies only to projects outside the ESTABLISHED list (the 15,000 most
+downloaded PyPI projects); compromised releases of established projects are covered by OSV.
+
 Usage: python3 inference/dependency_check.py PATH [PATH ...]   (a package folder or archive)
 """
 import ast
 import atexit
 import configparser
-import io
 import json
 import os
 import re
@@ -49,6 +55,9 @@ from utils import SOURCES_DIR  # noqa: E402  (also loads the .env)
 OSV_DIR = os.environ.get("THESIS_OSV_DIR") or os.path.join(SOURCES_DIR, "malicious-packages", "osv", "malicious", "pypi")
 # PyPI existence lookups are cached, so that a re-run gives the same answer and needs no network
 PYPI_CACHE = os.path.join(_ROOT, "work", "pypi_project_cache.json")
+# established projects (see the docstring): hugovk/top-pypi-packages, 15,000 most downloaded (30 days)
+TOP_PYPI_URL = "https://hugovk.github.io/top-pypi-packages/top-pypi-packages.min.json"
+TOP_PYPI_CACHE = os.path.join(_ROOT, "work", "top_pypi.json")
 
 METADATA_FILES = {"PKG-INFO", "METADATA", "requires.txt", "setup.py", "setup.cfg", "pyproject.toml"}
 REQUIREMENTS_FILE = re.compile(r"requirements[\w.-]*\.txt$", re.I)
@@ -314,21 +323,53 @@ def pypi_requires(name, version):
     return _PYPI[key]
 
 
+_OWN = {}
+_ESTABLISHED = None
+
+
+def load_own_verdicts(result_dirs):
+    """Second registry: {package: report} of every package this system judged MALICIOUS from its own code
+    (final_verdict of the reports in result_dirs). Obfuscated evaluation copies are not real projects."""
+    for d in result_dirs:
+        for fname in os.listdir(d):
+            if not (fname.startswith("report_") and fname.endswith(".json")) or "--obf" in fname:
+                continue
+            with open(os.path.join(d, fname), encoding="utf-8") as f:
+                report = json.load(f)
+            if report.get("final_verdict") == "MALICIOUS":
+                _OWN[norm(report.get("package_name") or fname[7:-5])] = os.path.relpath(os.path.join(d, fname), _ROOT)
+    return _OWN
+
+
+def established():
+    """Normalised names of the established PyPI projects (TOP_PYPI_URL), downloaded once into work/."""
+    global _ESTABLISHED
+    if _ESTABLISHED is None:
+        if not os.path.exists(TOP_PYPI_CACHE):
+            req = urllib.request.Request(TOP_PYPI_URL, headers={"User-Agent": "thesis-dependency-check"})
+            os.makedirs(os.path.dirname(TOP_PYPI_CACHE), exist_ok=True)
+            with urllib.request.urlopen(req, timeout=60) as r, open(TOP_PYPI_CACHE, "wb") as out:
+                out.write(r.read())
+        with open(TOP_PYPI_CACHE, encoding="utf-8") as f:
+            _ESTABLISHED = {norm(r["project"]) for r in json.load(f)["rows"]}
+    return _ESTABLISHED
+
+
 def is_malicious(name, pinned=None):
     """(True, reason, OSV ids) if the dependency is a known malicious package, else (False, None, ids)."""
     rec = registry().get(norm(name))
-    if not rec:
-        return False, None, []
-    if rec["all_versions"]:
-        return True, "every version is malicious (OSV)", rec["ids"]
-    if pinned and pinned in rec["versions"]:
-        return True, f"pinned version {pinned} is malicious (OSV)", rec["ids"]
-    info = _pypi_info(norm(name))
-    if info is None:  # PyPI unreachable: never flag on missing information
-        return False, None, rec["ids"]
-    if not [v for v in info["releases"] if v not in rec["versions"]]:
-        return True, "malicious versions listed in OSV and no other release on PyPI", rec["ids"]
-    return False, None, rec["ids"]
+    if rec:
+        if rec["all_versions"]:
+            return True, "every version is malicious (OSV)", rec["ids"]
+        if pinned and pinned in rec["versions"]:
+            return True, f"pinned version {pinned} is malicious (OSV)", rec["ids"]
+        info = _pypi_info(norm(name))
+        if info is not None and not [v for v in info["releases"] if v not in rec["versions"]]:
+            return True, "malicious versions listed in OSV and no other release on PyPI", rec["ids"]
+    own = _OWN.get(norm(name))
+    if own and norm(name) not in established():
+        return True, f"judged MALICIOUS by this system ({own})", rec["ids"] if rec else []
+    return False, None, rec["ids"] if rec else []
 
 
 # Transitive dependencies are followed through the PyPI metadata of each dependency (its latest release)

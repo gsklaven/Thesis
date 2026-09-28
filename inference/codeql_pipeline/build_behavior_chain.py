@@ -6,7 +6,9 @@ One Behavior Chain is built per sensitive-call anchor (file, line, category):
   - control_deps_<lang>.csv   -> the conditions that gate the call,
   - final_codeql_results_<lang>.csv (find_flow.ql) -> confirmed source->sink flows landing on or near
     the anchor (flows that match no anchor are kept as "unanchored" chains, never dropped),
-  - call_graph_<lang>.csv     -> the call-graph edges of the files the chain touches.
+  - call_graph_<lang>.csv     -> the call-graph edges of the files the chain touches,
+  - constant_args_<lang>.csv  -> the constant arguments of the calls on the chain's lines (anchor, slice
+    nodes, confirmed flows): the literal values that the slice abbreviates as "callee(...)".
 Each flow also gets its package boundary (App-Internal, App-to-Vendor, Vendor-to-App, Vendor-Internal).
 
 Output: results/sliced_behavior_chain.json with the chains, the full call graphs and the dependency graph.
@@ -29,6 +31,45 @@ LINE_TOLERANCE = 2
 # this is only a safety net; a small limit was shown to cut genuinely different external call names
 # (python-aliyun-sdk-core: 64 distinct names).
 MAX_RELEVANT_EDGES_PER_ANCHOR = 300
+
+# Constant arguments kept per Behavior Chain (calls), and the maximum length of one literal value
+MAX_CONSTANT_CALLS_PER_CHAIN = 50
+MAX_CONSTANT_VALUE_CHARS = 200
+
+
+def read_constant_args(language):
+    """Rows (file, line, callee, arg, value) of constant_args_<language>.csv ([] if the query did not run)."""
+    rows = []
+    for row in read_csv_rows(os.path.join(RESULTS_DIR, f"constant_args_{language}.csv")):
+        if len(row) >= 5:
+            rows.append(tuple(x.strip() for x in row[:5]))
+    return rows
+
+
+def attach_constant_arguments(chains, rows):
+    """
+    Add "constant_arguments" to every chain: the calls with constant arguments that are on the chain's
+    own lines (its anchor, its data-flow slice nodes and the sources of its confirmed flows), as
+    [{"file", "line", "call", "args": {position or keyword: literal}}], in file/line order.
+    """
+    by_line = {}
+    for file_, line, callee, arg, value in rows:
+        if len(value) > MAX_CONSTANT_VALUE_CHARS:
+            value = value[:MAX_CONSTANT_VALUE_CHARS] + "..."
+        call = by_line.setdefault((file_, line), {}).setdefault(callee, {})
+        call.setdefault(arg, value)
+    for chain in chains:
+        a_file, _, a_line = chain.get("location", "").rpartition(":")
+        lines = {(a_file, a_line)}
+        lines |= {(n.get("file"), str(n.get("line"))) for n in chain.get("data_flow_slice", [])}
+        lines |= {(f.get("source", {}).get("file"), str(f.get("source", {}).get("line")))
+                  for f in chain.get("confirmed_source_flows", [])}
+        found = []
+        for file_, line in sorted(l for l in lines if l in by_line):
+            for callee, args in sorted(by_line[(file_, line)].items()):
+                found.append({"file": file_, "line": line, "call": callee, "args": args})
+        chain["constant_arguments"] = found[:MAX_CONSTANT_CALLS_PER_CHAIN]
+    return chains
 
 
 def read_csv_rows(path):
@@ -219,6 +260,7 @@ def build_for_language(language):
             }
         )
 
+    attach_constant_arguments(behavior_chains, read_constant_args(language))
     return behavior_chains, full_call_graph
 
 

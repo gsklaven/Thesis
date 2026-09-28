@@ -64,7 +64,7 @@ MIN_FREE_DISK_GB = 2
 # behaviour of a completely different one.
 CSV_GLOB_PATTERNS = [
     "final_codeql_results_*.csv", "call_graph_*.csv",
-    "backward_slice_*.csv", "control_deps_*.csv",
+    "backward_slice_*.csv", "control_deps_*.csv", "constant_args_*.csv",
 ]
 
 

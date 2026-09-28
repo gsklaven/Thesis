@@ -24,6 +24,7 @@ Usage: python3 dataset/preparation/build_obfuscated_set.py [--n 100] [--levels A
 """
 import argparse
 import ast
+import glob
 import json
 import os
 import random
@@ -122,59 +123,88 @@ def main():
     ap.add_argument("--n", type=int, default=100, help="packages per class")
     ap.add_argument("--levels", nargs="+", default=list(LEVELS), choices=list(LEVELS))
     ap.add_argument("--pipeline-dir", default=os.path.join(WORK, "pipeline"))
+    ap.add_argument("--shard", help="I/N: only every N-th sampled package (parallel workers); labels and the "
+                    "manifest are written by a final run without --shard")
     args = ap.parse_args()
     if not os.path.exists(TOOL_PY):
         sys.exit(f"Intensio-Obfuscator is not set up - see the docstring ({TOOL_PY} missing)")
     private_pipeline(args.pipeline_dir)
+    worker = args.shard.split("/")[0] if args.shard else "main"
 
     rng = random.Random(SEED)
     sample = {"malicious": rng.sample(eligible(os.path.join(DS, "rag_test")), args.n),
               "benign": rng.sample(eligible(os.path.join(DS, "benign_test_set")), args.n)}
-    manifest = json.load(open(MANIFEST, encoding="utf-8")) if os.path.exists(MANIFEST) else {"results": {}}
+    items = [(label, name, version) for label, pkgs in sample.items() for name, version in pkgs]
+    if args.shard:
+        i, n = map(int, args.shard.split("/"))
+        items = items[i::n]
+    failures = {}
+
+    for label, name, version in items:
+        orig = os.path.join(WORK, "src", name)
+        for level in args.levels:
+            obf_name = f"{name}--obf{level}"
+            out_dir = os.path.join(DS, "obfuscated", f"{level}_" + ("malware" if label == "malicious" else "benign"))
+            dest = os.path.join(out_dir, f"{obf_name}.json")
+            if os.path.exists(dest):
+                continue
+            print(f"\n=== {obf_name} ({label}) ===")
+            analysed = os.path.join(WORK, f"w{worker}", "an", obf_name)
+            try:
+                if not os.path.isdir(orig):
+                    fetch_original(name, label, version, orig)
+                obf_src = os.path.join(OBF_SOURCES, level, name)
+                if os.path.exists(obf_src):
+                    shutil.rmtree(obf_src)
+                os.makedirs(os.path.dirname(obf_src), exist_ok=True)
+                ok, broken = obfuscate(orig, obf_src, level)
+                if not ok:
+                    failures[obf_name] = "obfuscation failed"
+                    continue
+                # analysed from a local copy: the CodeQL database is created next to the analysed folder,
+                # so every worker keeps its own (the obfuscated sources on the external disk are shared)
+                if os.path.exists(os.path.dirname(analysed)):
+                    shutil.rmtree(os.path.dirname(analysed))
+                shutil.copytree(obf_src, analysed)
+                fb.TEST_SET_DIR = out_dir
+                if not fb.run_codeql_pipeline(obf_name, analysed):
+                    failures[obf_name] = "static analysis failed"
+                    continue
+                data = json.load(open(dest, encoding="utf-8"))
+                data["obfuscated_from"] = {"package": name, "label": label, "level": level, "version": version,
+                                           "unparsable_py_files": broken}
+                json.dump(data, open(dest, "w", encoding="utf-8"), indent=4, ensure_ascii=False)
+            except Exception as e:  # one package must not stop the whole set
+                failures[obf_name] = f"error: {e}"
+            finally:
+                shutil.rmtree(os.path.dirname(analysed), ignore_errors=True)
+
+    os.makedirs(WORK, exist_ok=True)
+    json.dump(failures, open(os.path.join(WORK, f"failed_{worker}.json"), "w", encoding="utf-8"), indent=1)
+    if args.shard:
+        print(f"\n[*] shard done ({len(failures)} failures); run once without --shard for labels + manifest")
+        return
+
+    # final run: labels and manifest from every analysed copy (whichever worker produced it)
     commit = subprocess.run(["git", "-C", os.path.dirname(os.path.dirname(TOOL)), "rev-parse", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
-    manifest.update({"tool": f"Intensio-Obfuscator {commit}", "levels": LEVELS, "seed": SEED,
-                     "max_chains_mb": MAX_CHAINS_MB, "sample": {k: [n for n, _ in v] for k, v in sample.items()}})
     labels = json.load(open(LABELS, encoding="utf-8"))
-
-    for label, pkgs in sample.items():
-        for name, version in pkgs:
-            orig = os.path.join(WORK, "src", name)
-            for level in args.levels:
-                obf_name = f"{name}--obf{level}"
-                out_dir = os.path.join(DS, "obfuscated", f"{level}_" + ("malware" if label == "malicious" else "benign"))
-                dest = os.path.join(out_dir, f"{obf_name}.json")
-                if os.path.exists(dest):
-                    continue
-                print(f"\n=== {obf_name} ({label}) ===")
-                try:
-                    if not os.path.isdir(orig):
-                        fetch_original(name, label, version, orig)
-                    obf_src = os.path.join(OBF_SOURCES, level, name)
-                    if os.path.exists(obf_src):
-                        shutil.rmtree(obf_src)
-                    os.makedirs(os.path.dirname(obf_src), exist_ok=True)
-                    ok, broken = obfuscate(orig, obf_src, level)
-                    if not ok:
-                        manifest["results"][obf_name] = "obfuscation failed"
-                        continue
-                    fb.TEST_SET_DIR = out_dir
-                    if not fb.run_codeql_pipeline(obf_name, obf_src):
-                        manifest["results"][obf_name] = "static analysis failed"
-                        continue
-                    data = json.load(open(dest, encoding="utf-8"))
-                    data["obfuscated_from"] = {"package": name, "label": label, "level": level, "version": version}
-                    json.dump(data, open(dest, "w", encoding="utf-8"), indent=4, ensure_ascii=False)
-                    labels[obf_name] = label
-                    manifest["results"][obf_name] = {"chains": len(data.get("behavior_chains", [])),
-                                                     "unparsable_py_files": broken}
-                except Exception as e:  # one package must not stop the whole set
-                    manifest["results"][obf_name] = f"error: {e}"
-                finally:
-                    json.dump(manifest, open(MANIFEST, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
-                    json.dump(labels, open(LABELS, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-
-    done = [k for k, v in manifest["results"].items() if isinstance(v, dict)]
+    results = {}
+    for f in sorted(glob.glob(os.path.join(DS, "obfuscated", "*", "*.json"))):
+        data = json.load(open(f, encoding="utf-8"))
+        origin = data.get("obfuscated_from", {})
+        labels[os.path.basename(f)[:-5]] = origin.get("label")
+        results[os.path.basename(f)[:-5]] = {"chains": len(data.get("behavior_chains", [])),
+                                             "unparsable_py_files": origin.get("unparsable_py_files")}
+    for fname in glob.glob(os.path.join(WORK, "failed_*.json")):
+        for k, v in json.load(open(fname, encoding="utf-8")).items():
+            results.setdefault(k, v)
+    manifest = {"tool": f"Intensio-Obfuscator {commit}", "levels": LEVELS, "seed": SEED,
+                "max_chains_mb": MAX_CHAINS_MB, "sample": {k: [n for n, _ in v] for k, v in sample.items()},
+                "results": results}
+    json.dump(manifest, open(MANIFEST, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    json.dump(labels, open(LABELS, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+    done = [k for k, v in results.items() if isinstance(v, dict)]
     print(f"\n[+] {len(done)} obfuscated packages analysed; manifest -> {MANIFEST}")
 
 

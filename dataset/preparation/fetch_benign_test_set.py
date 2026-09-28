@@ -73,7 +73,7 @@ RESULTS_JSON = os.path.join(PIPELINE_RESULTS_DIR, "sliced_behavior_chain.json")
 # intermediate CSV files of the pipeline, removed before each package
 CSV_GLOB_PATTERNS = [
     "final_codeql_results_*.csv", "call_graph_*.csv",
-    "backward_slice_*.csv", "control_deps_*.csv",
+    "backward_slice_*.csv", "control_deps_*.csv", "constant_args_*.csv",
 ]
 
 

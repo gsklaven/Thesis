@@ -359,6 +359,7 @@ if __name__ == "__main__":
             ("call_graph_py.ql", "call_graph_python.csv"),
             ("backward_slice_py.ql", "backward_slice_python.csv"),
             ("control_deps_py.ql", "control_deps_python.csv"),
+            ("constant_args_py.ql", "constant_args_python.csv"),
         ],
         "javascript": [
             ("call_graph_js.ql", "call_graph_javascript.csv"),

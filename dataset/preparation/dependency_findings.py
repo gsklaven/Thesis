@@ -13,10 +13,15 @@ Where the declared dependencies come from:
   - obfuscated copies (build_obfuscated_set.py): the original package - obfuscation does not change the
     dependencies.
 A package whose dependencies cannot be read is marked as not checked (dependency_findings = null).
-Re-running recomputes everything (the registry may have been updated in the meantime).
+Re-running recomputes everything (the registries may have been updated in the meantime) - including after
+new verdicts of this system, which also re-checks the packages that depend on a newly flagged package.
 
-Usage: python3 dataset/preparation/dependency_findings.py dataset/rag_test dataset/benign_test_set [...]
+--own-verdicts DIR...: also use the packages this system has judged MALICIOUS (reports in DIR) as a
+second registry (see inference/dependency_check.py).
+
+Usage: python3 dataset/preparation/dependency_findings.py [--own-verdicts results/v12_sum] dataset/rag_test [...]
 """
+import argparse
 import json
 import os
 import subprocess
@@ -59,9 +64,12 @@ def registry_commit():
     return r.stdout.strip() or None
 
 
-def main(folders):
+def main(folders, own_verdicts=()):
     sources = malware_sources()
     registry = {"source": "OpenSSF malicious-packages (OSV)", "commit": registry_commit()}
+    if own_verdicts:
+        n = len(dc.load_own_verdicts(own_verdicts))
+        registry["own_verdicts"] = {"dirs": list(own_verdicts), "malicious_packages": n}
     for folder in folders:
         n = checked = 0
         flagged = []
@@ -98,6 +106,8 @@ def main(folders):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        sys.exit(__doc__)
-    main(sys.argv[1:])
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("folders", nargs="+", help="folders of package chains files")
+    ap.add_argument("--own-verdicts", nargs="*", default=[], help="results folders with this system's reports")
+    args = ap.parse_args()
+    main(args.folders, args.own_verdicts)

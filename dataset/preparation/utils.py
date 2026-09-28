@@ -200,14 +200,23 @@ def display_path(location):
     return "/".join(parts)
 
 
+def _render_constant_call(c):
+    """'os.path.join(…, "pkg/about.py")' from {"call", "args": {position or keyword: literal}}."""
+    args = c.get("args", {})
+    pos = {int(k): v for k, v in args.items() if k.isdigit()}
+    shown = [pos.get(i, "…") for i in range(max(pos) + 1)] if pos else []
+    shown += [f"{k}={v}" for k, v in args.items() if not k.isdigit()]
+    return f"{c.get('call')}({', '.join(shown)})"
+
+
 def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
                      max_flows=None, max_conditions=None, dedup=False, mark_omitted=False):
     """
     Deterministic text serialisation of one Behavior Chain, shared by both representations.
 
     The parts appear in a fixed order: category, sensitive API, (LLM only) location, flow boundary,
-    confirmed source->sink flows, gating conditions, data-flow slice nodes, external callees and
-    (index only) attack-type tags. Each list can be capped; with mark_omitted=True (LLM text) the
+    confirmed source->sink flows, gating conditions, data-flow slice nodes, (LLM only) constant
+    arguments of the calls, external callees and (index only) attack-type tags. Each list can be capped; with mark_omitted=True (LLM text) the
     number of omitted items and any final truncation are stated in the text.
     """
     def capped(items, cap, what):
@@ -250,6 +259,13 @@ def _serialize_chain(chain, attack_type_tags, max_words, max_slice, max_callees,
     slice_texts = [n.get("text", "") for n in chain.get("data_flow_slice", [])]
     if slice_texts:
         parts.append("Contributing data-flow nodes: " + "; ".join(capped(slice_texts, max_slice, "nodes")) + ".")
+
+    # LLM text only (not the embedding, so the index is unchanged): the constant arguments of the calls
+    # on the chain's lines (constant_args_py.ql), e.g. which file open(...) reads or which URL is called
+    consts = chain.get("constant_arguments") or []
+    if mark_omitted and consts:
+        rendered = list(dict.fromkeys(_render_constant_call(c) for c in consts))
+        parts.append("Constant arguments of these calls: " + "; ".join(rendered) + ".")
 
     # external (library) callees of the relevant call-graph part, sorted for determinism
     edges = chain.get("relevant_call_graph", [])
