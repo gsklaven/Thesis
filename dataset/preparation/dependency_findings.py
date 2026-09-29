@@ -68,8 +68,16 @@ def main(folders, own_verdicts=()):
     sources = malware_sources()
     registry = {"source": "OpenSSF malicious-packages (OSV)", "commit": registry_commit()}
     if own_verdicts:
-        n = len(dc.load_own_verdicts(own_verdicts))
-        registry["own_verdicts"] = {"dirs": list(own_verdicts), "malicious_packages": n}
+        own = dc.load_own_verdicts(own_verdicts)
+        # verdicts on packages of the checked folders are left out, so that no package is judged through the
+        # system's verdict on another package of the same evaluation
+        checked_names = {dc.norm(f[:-5].split("--obf")[0]) for d in folders for f in os.listdir(d)
+                         if f.endswith(".json") and not f.startswith("_")}
+        excluded = [p for p in own if p in checked_names]
+        for p in excluded:
+            del own[p]
+        registry["own_verdicts"] = {"dirs": list(own_verdicts), "malicious_packages": len(own),
+                                    "excluded_packages_of_the_checked_sets": len(excluded)}
     for folder in folders:
         n = checked = 0
         flagged = []

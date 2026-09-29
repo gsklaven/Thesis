@@ -387,6 +387,28 @@ def extra_tables(reports, scored, lab, res):
         note=("Πακέτα που εντοπίστηκαν μόνο μέσω των εξαρτήσεών τους (κακόβουλες εξαρτήσεις): " + note + ".")
         if note else None))
 
+    # package size: similarity, detection and false positives by number of Behavior Chains (the package
+    # similarity is a maximum over the chains, and the package verdict is MALICIOUS if any chain is)
+    from scipy.stats import spearmanr
+    nch = lambda n: reports["sum"][n].get("total_chains_analyzed") or 0
+    msim = lambda n: ra.max_similarity(reports["sum"][n])
+    rho = {cls: spearmanr([nch(n) for n in S], [msim(n) for n in S])[0] for cls, S in (("mal", mal), ("ben", ben))}
+    rows = []
+    for label, lo, hi in (("1--10", 1, 10), ("11--100", 11, 100), ("$>100$", 101, 10 ** 9)):
+        M = [n for n in mal if lo <= nch(n) <= hi]
+        B = [n for n in ben if lo <= nch(n) <= hi]
+        cells = " & ".join(f"{frac(sum(pos(c, n) for n in M), len(M))} / {sum(pos(c, n) for n in B)}" for c in CONFIGS)
+        rows.append(f"{label} & {len(M)} & {len(B)} & {num(median([msim(n) for n in M]), 3)} & "
+                    f"{num(median([msim(n) for n in B]), 3)} & {cells}")
+    write("chain_buckets.tex", table(
+        "Αποτελέσματα ανά πλήθος Behavior Chains του πακέτου: διάμεση μέγιστη ομοιότητα με το ευρετήριο και, σε "
+        "κάθε διαμόρφωση, κακόβουλα πακέτα που εντοπίστηκαν / ψευδώς θετικά. Συσχέτιση Spearman ανάμεσα στο "
+        f"πλήθος των Behavior Chains και στη μέγιστη ομοιότητα: {num(rho['mal'], 2)} στα κακόβουλα και "
+        f"{num(rho['ben'], 2)} στα νόμιμα πακέτα.", "tab:chain_buckets",
+        "|l|r|r|r|r|" + "|".join([">{\\centering\\arraybackslash}p{1.35cm}"] * 4) + "|",
+        "Chains & Κακόβ. & Νόμιμα & Ομοιότ. (κακόβ.) & Ομοιότ. (νόμιμα) & " + " & ".join(NAME[c] for c in CONFIGS),
+        rows, size="\\footnotesize", sep="3pt"))
+
     # natural obfuscation: malware that decodes and executes code (a decoding chain + an execution chain)
     def decodes_and_executes(n):
         chs = reports["sum"][n].get("chain_details", [])
@@ -464,6 +486,8 @@ def results_tables():
             f"Accuracy & {p(m['accuracy'])} & {m['TP'] + m['TN']}/{m['TP'] + m['FN'] + m['FP'] + m['TN']} & --",
             f"Balanced accuracy & {p(m['balanced_accuracy'])} & -- & --",
             "\\hline",
+            f"Κάλυψη στατικής ανάλυσης & {p(100 * ra.div(e['TP'] + e['FN'] - e['malware_no_chains'], e['TP'] + e['FN']))} & "
+            f"{e['TP'] + e['FN'] - e['malware_no_chains']}/{e['TP'] + e['FN']} & --",
             f"Recall end-to-end & {p(e['recall'])} & {e['TP']}/{e['TP'] + e['FN']} & --",
             f"Accuracy end-to-end & {p(e['accuracy'])} & {e['TP'] + e['TN']}/{e['TP'] + e['FN'] + e['FP'] + e['TN']} & --"]
     write("main_metrics.tex", table(
@@ -532,7 +556,7 @@ def results_tables():
         rows.append(f"{NAME[c]} & " + " & ".join(str(tp[k]) for k in order) + " & " +
                     " & ".join(str(fp[k]) for k in order))
     write("ssvc.tex", table(
-        "Επίπεδο προτεραιότητας (SSVC) των πακέτων που χαρακτηρίστηκαν \\texttt{MALICIOUS}: το υψηλότερο "
+        "Επίπεδο προτεραιότητας (εμπνευσμένο από το SSVC) των πακέτων που χαρακτηρίστηκαν \\texttt{MALICIOUS}: το υψηλότερο "
         "επίπεδο μεταξύ των κακόβουλων Behavior Chains του πακέτου.", "tab:ssvc", "|l|r|r|r|r|r|r|",
         "Διαμόρφωση & \\multicolumn{3}{c|}{Σωστά (TP)} & \\multicolumn{3}{c|}{False positives}",
         ["& \\texttt{ACT} & \\texttt{ATTEND} & \\texttt{TRACK*} & \\texttt{ACT} & \\texttt{ATTEND} & \\texttt{TRACK*}",
