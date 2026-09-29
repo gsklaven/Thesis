@@ -295,6 +295,7 @@ cmd_policy() {
 cmd_rag() {
   run "$PY" "$PREP/rebuild_rag.py" "$@"
   run "$PY" "$PREP/audit_leakage.py" --out "$ROOT/dataset/audit_leakage.json"
+  run "$PY" "$PREP/audit_code_overlap.py" --out "$ROOT/dataset/audit_code_overlap.json"
 }
 
 # ------------------------------------------------------------------------------ evaluate

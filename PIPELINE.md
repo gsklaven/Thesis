@@ -196,7 +196,7 @@ Behavior Chain, while the retrieval text is unchanged, so the index of v12 is re
 | `analyze` | CodeQL (without installing dependencies) for the missing malware, `WORKERS` in parallel + `payload_scan` |
 | `benign` | download of sdists from the PyPI JSON API (no pip) + CodeQL for the missing benign packages |
 | `policy` | a **new** snapshot of the knowledge base (current versions of MITRE/CWE/CAPEC and of the rules). Not part of `all`/`update`, so that the knowledge base of the experiments stays the same |
-| `rag` | `rebuild_rag.py` (descriptions, tags, selection, split, index) + `audit_leakage.py` |
+| `rag` | `rebuild_rag.py` (descriptions, tags, selection, split, index) + `audit_leakage.py` + `audit_code_overlap.py` |
 | `evaluate` | for every `RAG_MODE` in `MODES`: `check_test_set` on malware and benign, and `evaluation_summary`; then `results_analysis` |
 | `addtest` | new malware samples (names not in `dataset/v12_known_samples.json`) → evaluation set only, with the selection and family-split rules; index and split unchanged |
 | `obfuscate` | `build_obfuscated_set.py`: obfuscated copies (Intensio-Obfuscator, levels A and B) of 100 malware + 100 benign evaluation packages + CodeQL → `dataset/obfuscated/` |

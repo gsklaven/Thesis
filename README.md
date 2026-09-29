@@ -26,6 +26,7 @@ dataset/
   indexes/policy_index/      vectors of the security knowledge base
   obfuscated/                obfuscated copies (levels A, B) of 100+100 evaluation packages (obfuscated_set.json)
   payload_scan.json, excluded_*.json, attack_type_tags.json, policy_rules.json, audit_leakage.json,
+  audit_code_overlap.json    code overlap of the evaluation malware without Behavior Chains with the index
   added_test_samples.json    samples added to the evaluation set only (index and split unchanged)
 inference/
   codeql_pipeline/           analysis.py, build_behavior_chain.py, python_queries/, js_queries/
@@ -37,7 +38,8 @@ results/
   test_set_summaries/        test_set_summary_<version>_<test set>.json
   evaluation_summaries/      evaluation_summary_<version>.json
   analysis/                  metrics, confusion matrices, strata, ablations, LaTeX of the thesis
-  check_test_set.py, evaluation_summary.py, results_analysis.py, thesis_tables.py, progress.py, run_local_subset.sh
+  check_test_set.py, evaluation_summary.py, results_analysis.py, thesis_tables.py, progress.py, run_local_subset.sh,
+  retrieval_sensitivity.py
 expected_labels.json         evaluation labels (malicious for rag_test, benign for benign_test_set)
 run_pipeline.sh              automated execution of all stages (guide: PIPELINE.md)
 requirements.txt             versions of the Python packages
@@ -116,6 +118,7 @@ python3 dataset/preparation/build_policy_index.py       # -> dataset/indexes/pol
 ```bash
 python3 dataset/preparation/rebuild_rag.py            # --dry-run to preview, --from-step N to resume
 python3 dataset/preparation/audit_leakage.py --out dataset/audit_leakage.json
+python3 dataset/preparation/audit_code_overlap.py      # -> dataset/audit_code_overlap.json
 ```
 
 `rebuild_rag.py` runs, in order:
@@ -130,7 +133,9 @@ python3 dataset/preparation/audit_leakage.py --out dataset/audit_leakage.json
 | — | (built in) | update of `expected_labels.json` and sanity check |
 
 `audit_leakage.py` checks: no train/test overlap, no shared code, no prompt with information about the
-package itself, similarity strata (known variant / close / novel) and shortcuts.
+package itself, similarity strata (known variant / close / novel) and shortcuts. `audit_code_overlap.py`
+covers the evaluation malware without Behavior Chains (no payload signature): it hashes each code file
+independently of whitespace and looks it up among the code files of every rag_train package.
 
 ### 5. LLM evaluation (4 ablations)
 
