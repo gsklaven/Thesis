@@ -12,9 +12,11 @@ The `<version>` is `PROMPT_VERSION_RAG_MODE[_provider][RESULTS_SUFFIX]` (e.g. `v
 `v12_sum_gemini`, `v12_sum_smoke`). The provider is added only when it is not `deepseek` (see `LLM_PROVIDER`).
 `v13_sum` and `v13_llm` are the local-model runs (LM Studio) on `dataset/local_subset.json`; their name is set
 with `RESULTS_TAG` by `run_local_subset.sh`.
-`v14_<mode>` (`run_v14.sh`, the four configurations) evaluate the extended sets (new malware, 500 benign,
-obfuscated copies) with the index, knowledge base and prompt of v12; the LLM text of every chain also lists
-the constant arguments of its calls, and the reports carry the dependency-graph check.
+`v14_<mode>` (the four configurations, `RESULTS_PREFIX=v14 PARALLEL_MODES=1 bash run_pipeline.sh evaluate`)
+are the final results of the thesis: the evaluation sets (451 malware, 499 benign) and the obfuscated copies,
+with the index, knowledge base and prompt `v12`; the LLM text of every chain also lists the constant arguments
+of its calls, and the reports carry the dependency-graph check. `analysis/latex/images/*.png` are the figures
+(copied to `Thesis_text/images/chapter5/`).
 The results of the earlier prompt/pipeline versions `v1`–`v11` (not comparable with v12) are kept in the
 git history and in the archive of `old/` kept outside the repository.
 
@@ -23,9 +25,10 @@ git history and in the archive of `old/` kept outside the repository.
 ```bash
 RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test          # malware of the test set
 RAG_MODE=sum python3 results/check_test_set.py dataset/benign_test_set   # benign packages
-python3 results/evaluation_summary.py [v12_samples ...]                  # metrics (without an argument: every v12_*)
+python3 results/evaluation_summary.py v14_sum [v14_llm ...]              # metrics of the given runs
 python3 results/results_analysis.py                                      # detailed results + confusion matrix -> results/analysis/
 python3 results/thesis_tables.py                                         # LaTeX tables/figures of the thesis -> results/analysis/latex/
+python3 results/progress.py v14_sum v14_llm --sets dataset/rag_test dataset/benign_test_set --watch 60   # progress of a run
 ```
 
 - `check_test_set.py` automatically re-runs `EVALUATION_FAILED` / `INCOMPLETE` / `UNKNOWN` packages and skips

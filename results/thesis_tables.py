@@ -1,10 +1,10 @@
 """
 thesis_tables.py - LaTeX tables and figures for Chapters 4-5 of the thesis, generated from the
-dataset files and the final reports (results/v12_*), so that no number is copied by hand.
+dataset files and the final reports (results/<MAIN>_*, MAIN = v14), so that no number is copied by hand.
 
 Writes to results/analysis/latex/:
   dataset_sources.tex      malware samples per source: collected, excluded, train / test
-  dataset_sets.tex         final sets: packages, packages with / without Behavior Chains, chains
+  dataset_sets.tex         final sets (incl. the obfuscated copies): packages, with Behavior Chains, chains
   dataset_attack_types.tex attack-type tags of the selected malware samples
   policy_sources.tex       entries of the security knowledge base per source (dataset/policy_rules.json)
   main_metrics.tex         metrics of the full system with 95% Wilson intervals
@@ -12,15 +12,21 @@ Writes to results/analysis/latex/:
   strata.tex               recall / false positives per similarity stratum and configuration
   agreement.tex            agreement of the four configurations per package
   ssvc.tex                 SSVC priority of true / false positives per configuration
+  act_only.tex             operating point when only the ACT priority raises an alert
   confidence.tex           self-reported confidence of true / false positives per configuration (+ AUROC)
   false_positives.tex      false positives of the full system (package, chains, flagged chain)
+  benign_groups.tex        false positive rate on the curated and on the randomly sampled benign packages
+  dependencies.tex         verdicts without / with the dependency-graph check
+  natural_obfuscation.tex  detection of malware that decodes and executes code, and of the rest
+  obfuscation.tex          obfuscated copies (levels A, B) next to the same packages unobfuscated
   comparison.tex           comparison with the tools evaluated in IntelGuard (Table 1 of that paper)
   rag_literature.tex       accuracy / FPR without and with retrieval: IntelGuard RQ4 next to ours
-  local_model.tex          v13: the local model (LM Studio) and DeepSeek on the same subset
-  confusion_sum.tex        figure: confusion matrix of the full system (TikZ)
-  confusion_grid.tex       figure: the four confusion matrices (TikZ)
+  local_model.tex          v13: the local model (LM Studio) and DeepSeek on the same subset (v12 data)
+  confusion_sum.tex        figure: confusion matrix of the full system (images/confusion_sum.png)
+  confusion_grid.tex       figure: the four confusion matrices (images/confusion_<config>.png)
 
-Copy the folder to Thesis_text/chapters/generated/ (the chapters \\input it).
+Copy the .tex files to Thesis_text/chapters/generated/ (the chapters \\input them) and images/*.png to
+Thesis_text/images/chapter5/ (the figures are PNG images drawn from TikZ with xelatex + PyMuPDF).
 The generated text (captions, headers, numbers with a decimal comma) is in Greek, the language of the
 thesis; everything else in this file is in English.
 Usage: python3 results/thesis_tables.py
@@ -28,19 +34,29 @@ Usage: python3 results/thesis_tables.py
 import glob
 import json
 import os
+import re
+import shutil
 import sys
 from collections import Counter
 from statistics import median
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import results_analysis as ra  # noqa: E402  (same definitions of metrics and strata)
-from utils import source_name  # noqa: E402  (dataset/preparation, added to sys.path by results_analysis)
+from utils import is_pure_vendor_chain, source_name  # noqa: E402  (dataset/preparation, on sys.path via results_analysis)
 
 ROOT = ra.ROOT
 DS = os.path.join(ROOT, "dataset")
 OUT = os.path.join(ra.OUT, "latex")
+IMG = os.path.join(OUT, "images")   # the figures as PNG -> Thesis_text/images/chapter5/
+IMG_REF = "images/chapter5"          # their path in the thesis
 CONFIGS = ["sum", "samples", "policy", "llm"]
-TAGS = [f"v12_{c}" for c in CONFIGS]
+MAIN = "v14"   # the evaluation of Chapter 5 (the local-model table keeps v12, the data that model ran on)
+TAGS = [f"{MAIN}_{c}" for c in CONFIGS]
+OBF = [("A", "malware"), ("A", "benign"), ("B", "malware"), ("B", "benign")]
+# A package "decodes and executes" (natural obfuscation) when one of its Behavior Chains is a decoding call
+# and another executes code or commands (the process_exec category).
+DECODE_API = re.compile(r"(b64decode|b32decode|b85decode|a85decode|decodebytes|decompress|marshal\.loads|fromhex|"
+                        r"unhexlify|codecs\.decode|b64d)\b")
 # Short Greek names of the configurations, as used in the thesis text.
 NAME = {"sum": "Πλήρες σύστημα", "samples": "Μόνο δείγματα", "policy": "Μόνο πολιτικές", "llm": "Χωρίς RAG"}
 # Readable names of the sample sources (first directory of each sample's path under THESIS_SOURCES_DIR).
@@ -82,6 +98,28 @@ def p(x, digits=1):
 
 def ci(pair):
     return f"[{num(pair[0])}--{num(pair[1])}]"
+
+
+def tikz_png(name, tikz):
+    """
+    Compile a TikZ drawing with the font of the thesis and save it as a PNG (300 dpi, with its real size) in
+    OUT/images/, so that the thesis includes an image (it also compiles on Overleaf without TikZ figures).
+    """
+    import subprocess
+    import tempfile
+    import pymupdf
+    xelatex = shutil.which("xelatex") or "/Library/TeX/texbin/xelatex"
+    doc = ["\\documentclass[border=2pt]{standalone}", "\\usepackage{fontspec}",
+           "\\setmainfont[Mapping=tex-text]{Times New Roman}", "\\usepackage{tikz}", "\\begin{document}"]
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "fig.tex"), "w", encoding="utf-8") as f:
+            f.write("\n".join(doc + tikz + ["\\end{document}"]))
+        subprocess.run([xelatex, "-interaction=nonstopmode", "-halt-on-error", "fig.tex"], cwd=d,
+                       capture_output=True, check=True)
+        pix = pymupdf.open(os.path.join(d, "fig.pdf"))[0].get_pixmap(dpi=300)
+        pix.set_dpi(300, 300)
+        os.makedirs(IMG, exist_ok=True)
+        pix.save(os.path.join(IMG, f"{name}.png"))
 
 
 def write(name, lines):
@@ -128,8 +166,15 @@ def dataset_tables():
     # sampling of the packages without chains), or its static analysis did not complete
     rest = {g: collected[g] - lab[g] - npc[g] - trc[g] - tec[g] for g in order}
     report = json.load(open(os.path.join(DS, "final_dataset_report.json"), encoding="utf-8"))
-    no_analysis = len(src) - len(label_names) - len(no_payload_names) - report["total_analyzed_samples"]
-    not_selected = report["total_analyzed_samples"] - report["total_selected"]
+    # samples added later to the evaluation set only (add_test_samples.py): the ones that reached the
+    # static analysis count as analysed, the added ones as selected
+    added = json.load(open(os.path.join(DS, "added_test_samples.json"), encoding="utf-8"))["decisions"]
+    before_analysis = ("excluded: legitimate MalwareBench package", "excluded: no payload code (payload_scan)",
+                       "excluded: not analysed")
+    analysed = report["total_analyzed_samples"] + sum(d not in before_analysis for d in added.values())
+    selected = report["total_selected"] + sum(d == "added" for d in added.values())
+    no_analysis = len(src) - len(label_names) - len(no_payload_names) - analysed
+    not_selected = analysed - selected
     assert sum(rest.values()) == no_analysis + not_selected, "the sample accounting does not add up"
     rows = [f"{g} & {num(collected[g])} & {num(lab[g])} & {num(npc[g])} & {num(rest[g])} & {num(trc[g])} & {num(tec[g])}"
             for g in order]
@@ -148,25 +193,53 @@ def dataset_tables():
              f"των πακέτων χωρίς Behavior Chains) και {num(no_analysis)} δείγματα των οποίων η στατική ανάλυση δεν "
              "ολοκληρώθηκε.", size="\\footnotesize"))
 
-    # final sets: packages / with chains / chains, from the reports of the full system
-    R = ra.load("v12_sum")
-    ben = ra.names(ra.BEN_DIR)
+    # final sets: packages / with chains / chains, from the chains files themselves
     meta = json.load(open(os.path.join(DS, "indexes", "rag_index", "metadata.json"), encoding="utf-8"))
     index_chains = len(meta) if isinstance(meta, list) else len(meta.get("entries", meta))
-    with_chains = lambda S: [n for n in S if R.get(n, {}).get("final_verdict") != "NO_CHAINS_FOUND"]
-    chains = lambda S: sum(R[n].get("total_chains_analyzed") or 0 for n in S if n in R)
-    rows = [f"Ευρετήριο κακόβουλων δειγμάτων (\\textit{{rag\\_train}}) & {num(len(train))} & -- & {num(index_chains)}",
-            f"Αξιολόγηση: κακόβουλα & {num(len(test))} & {num(len(with_chains(test)))} & {num(chains(test))}",
-            f"Αξιολόγηση: νόμιμα & {num(len(ben))} & {num(len(with_chains(ben)))} & {num(chains(ben))}"]
+
+    def chain_counts(folder):
+        """Chains per package that the LLM evaluates (pure-vendor chains are skipped, as in query_rag.py)."""
+        out = []
+        for f in sorted(glob.glob(os.path.join(folder, "*.json"))):
+            if not os.path.basename(f).startswith("_"):
+                chs = json.load(open(f, encoding="utf-8")).get("behavior_chains") or []
+                out.append(sum(not is_pure_vendor_chain(c) for c in chs))
+        return out
+    rows = [f"Ευρετήριο κακόβουλων δειγμάτων (\\textit{{rag\\_train}}) & {num(len(train))} & -- & {num(index_chains)}"]
+    for label, folder in [("Αξιολόγηση: κακόβουλα", ra.MAL_DIR), ("Αξιολόγηση: νόμιμα", ra.BEN_DIR)] + [
+            (f"Συγκάλυψη {lvl}: {'κακόβουλα' if cls == 'malware' else 'νόμιμα'}", os.path.join(DS, "obfuscated", f"{lvl}_{cls}"))
+            for lvl, cls in OBF]:
+        cc = chain_counts(folder)
+        rows.append(f"{label} & {num(len(cc))} & {num(sum(1 for c in cc if c))} & {num(sum(cc))}")
     write("dataset_sets.tex", table(
         "Τα τελικά σύνολα δεδομένων.", "tab:dataset_sets", "|l|r|r|r|",
         "Σύνολο & Πακέτα & Με Behavior Chains & Behavior Chains", rows))
 
-    rep = json.load(open(os.path.join(DS, "final_dataset_report.json"), encoding="utf-8"))
-    dist = rep["final_attack_type_distribution"]
-    rows = [f"\\texttt{{{k.replace('_', '\\_')}}} & {num(v)}" for k, v in sorted(dist.items(), key=lambda x: -x[1])]
+    # attack-type tags of the selected samples: those of the index build (attack_type_tags.json) and, for the
+    # samples added later, the same tagger on their description
+    import attack_type_tagger as att  # noqa: E402  (dataset/preparation)
+    from backfill_osv_descriptions import OSV_DIR, extract_description  # noqa: E402
+    tags = json.load(open(os.path.join(DS, "attack_type_tags.json"), encoding="utf-8"))
+    by_name = {e["package_name"]: e for e in matched}
+    osv = {re.sub(r"[-_.]+", "-", d).lower(): d for d in os.listdir(OSV_DIR)} if os.path.isdir(OSV_DIR) else {}
+    popular = att.load_popular_packages()
+    dist = Counter()
+    for n in train | test:
+        if n in tags:
+            dist.update(tags[n]["attack_type_tags"])
+            continue
+        e = by_name.get(n, {})
+        desc = (e.get("description") or "").strip()
+        key = re.sub(r"[-_.]+", "-", n).lower()
+        if not desc and key in osv:
+            desc = extract_description(os.path.join(OSV_DIR, osv[key]))
+        t = att.detect_keyword_tags(f"{e.get('summary', '')} {desc}")
+        if att.detect_typosquat(n, popular):
+            t.append("typosquatting")
+        dist.update(sorted(set(t)) or ["unclassified"])
+    rows = [f"\\texttt{{{k.replace('_', '\\_')}}} & {num(v)}" for k, v in sorted(dist.items(), key=lambda x: (-x[1], x[0]))]
     write("dataset_attack_types.tex", table(
-        f"Ετικέτες τύπου επίθεσης των {num(rep['total_selected'])} επιλεγμένων κακόβουλων πακέτων "
+        f"Ετικέτες τύπου επίθεσης των {num(len(train | test))} επιλεγμένων κακόβουλων πακέτων "
         "(ένα πακέτο μπορεί να φέρει περισσότερες από μία ετικέτες).", "tab:attack_types", "|l|r|",
         "Ετικέτα & Πακέτα", rows))
 
@@ -210,14 +283,8 @@ def knowledge_base_table():
         "Πηγή & Εγγραφές", rows))
 
 
-def local_model_table():
-    """v13: the local model (LM Studio) next to DeepSeek on the same subset (dataset/local_subset.json)."""
-    if not all(os.path.isdir(os.path.join(ROOT, "results", t)) for t in ("v13_sum", "v13_llm")):
-        print("[!] results/v13_sum or v13_llm is missing - local_model.tex skipped")
-        return
-    subset = json.load(open(os.path.join(DS, "local_subset.json"), encoding="utf-8"))
-    runs = [("DeepSeek (API)", "v12_sum", "sum"), ("DeepSeek (API)", "v12_llm", "llm"),
-            ("gemma-4-26b-a4b (τοπικά)", "v13_sum", "sum"), ("gemma-4-26b-a4b (τοπικά)", "v13_llm", "llm")]
+def subset_rows(runs, subset):
+    """Rows (model, configuration, confusion matrix and metrics) of runs on the subset, one \\hline per model."""
     rows = []
     for model, tag, conf in runs:
         R = ra.load(tag)
@@ -229,21 +296,157 @@ def local_model_table():
         acc = 100 * ra.div(tp + tn, tp + fn + fp + tn)
         if rows and model != rows[-1][0]:
             rows.append(("\\hline",))
-        rows.append((model, f"{model} & {NAME[conf]} & {tp} & {fn} & {fp} & {tn} & {p(rec)} & {p(fpr)} & {p(prec)} & "
-                            f"{p(f1)} & {p(acc)}"))
+        rows.append((model, f"{model} & {NAME.get(conf, conf)} & {tp} & {fn} & {fp} & {tn} & {p(rec)} & {p(fpr)} & "
+                            f"{p(prec)} & {p(f1)} & {p(acc)}"))
+    return [r[-1] if len(r) == 2 else r[0] for r in rows]
+
+
+def local_model_table():
+    """v13: the local model (LM Studio) next to DeepSeek on the same subset (dataset/local_subset.json).
+    The local model ran on the v12 data, so it is compared with the v12 DeepSeek runs."""
+    if not all(os.path.isdir(os.path.join(ROOT, "results", t)) for t in ("v13_sum", "v13_llm")):
+        print("[!] results/v13_sum or v13_llm is missing - local_model.tex skipped")
+        return
+    subset = json.load(open(os.path.join(DS, "local_subset.json"), encoding="utf-8"))
+    runs = [("DeepSeek (API)", "v12_sum", "sum"), ("DeepSeek (API)", "v12_llm", "llm"),
+            ("gemma-4-26b-a4b (τοπικά)", "v13_sum", "sum"), ("gemma-4-26b-a4b (τοπικά)", "v13_llm", "llm")]
+    rows = subset_rows(runs, subset)
     write("local_model.tex", table(
         f"Το τοπικό μοντέλο και το DeepSeek στο υποσύνολο αξιολόγησης του τοπικού μοντέλου "
         f"({num(len(subset['malware']))} κακόβουλα και {num(len(subset['benign']))} νόμιμα πακέτα), με το Πλήρες "
         "σύστημα και χωρίς RAG.", "tab:local_model", "|l|l|r|r|r|r|r|r|r|r|r|",
         "Μοντέλο & Διαμόρφωση & TP & FN & FP & TN & Recall & FPR & Prec. & F1 & Acc.",
-        [r[-1] if len(r) == 2 else r[0] for r in rows], size="\\footnotesize", sep="3.5pt"))
+        rows, size="\\footnotesize", sep="3.5pt"))
 
 
 # ----------------------------------------------------------------------------- results (Chapter 5)
+def extra_tables(reports, scored, lab, res):
+    """The v14 tables beyond the metrics: ACT-only operating point, curated / sampled benign packages,
+    dependency-graph check, natural and artificial obfuscation."""
+    pos = lambda c, n: reports[c][n]["final_verdict"] in ra.POSITIVE
+    mal = [n for n in scored if lab[n] == "malicious"]
+    ben = [n for n in scored if lab[n] == "benign"]
+    frac = lambda k, n: f"{k}/{n}" if n else "--"
+
+    # operating point when only the ACT priority raises an alert
+    def act(c, n):
+        return any(ch.get("llm_evaluation", {}).get("verdict") in ra.POSITIVE
+                   and ch["llm_evaluation"].get("ssvc_decision") == "ACT"
+                   for ch in reports[c][n].get("chain_details", []))
+    rows = []
+    for c in CONFIGS:
+        tp, fp = sum(pos(c, n) for n in mal), sum(pos(c, n) for n in ben)
+        ta, fa = sum(act(c, n) for n in mal), sum(act(c, n) for n in ben)
+        rows.append(f"{NAME[c]} & {p(100 * tp / len(mal))} & {p(100 * fp / len(ben))} & "
+                    f"{p(100 * ta / len(mal))} & {p(100 * fa / len(ben))}")
+    write("act_only.tex", table(
+        "Recall και FPR όταν συναγερμό σημαίνει κάθε απόφαση \\texttt{MALICIOUS} και όταν τον σημαίνει μόνο το "
+        "επίπεδο προτεραιότητας \\texttt{ACT} (πακέτα με Behavior Chains).", "tab:act_only", "|l|r|r|r|r|",
+        "Διαμόρφωση & \\multicolumn{2}{c|}{Κάθε \\texttt{MALICIOUS}} & \\multicolumn{2}{c|}{Μόνο \\texttt{ACT}}",
+        ["& Recall & FPR & Recall & FPR", "\\hline"] + rows))
+
+    # false positive rate on the curated and on the randomly sampled popular benign packages
+    sel = json.load(open(os.path.join(DS, "preparation", "benign_extra_selection.json"), encoding="utf-8"))
+    sampled = {x["package"] for x in sel["packages"]}
+    groups = [("Επιλεγμένα", [n for n in ben if n not in sampled]), ("Τυχαία δημοφιλή", [n for n in ben if n in sampled])]
+    rows = []
+    for c in CONFIGS:
+        cells = []
+        for _, S in groups:
+            k = sum(pos(c, n) for n in S)
+            cells.append(f"{frac(k, len(S))} & {p(100 * ra.div(k, len(S)))} & {ci(ra.wilson(k, len(S)))}")
+        rows.append(f"{NAME[c]} & " + " & ".join(cells))
+    write("benign_groups.tex", table(
+        "False positives στα επιλεγμένα νόμιμα πακέτα (γνωστές βιβλιοθήκες με ευαίσθητες λειτουργίες) και στα "
+        "τυχαία επιλεγμένα δημοφιλή πακέτα του PyPI (πακέτα με Behavior Chains), με διάστημα εμπιστοσύνης 95\\% "
+        "(Wilson).", "tab:benign_groups", "|l|r|r|c|r|r|c|",
+        f"Διαμόρφωση & \\multicolumn{{3}}{{c|}}{{{groups[0][0]}}} & \\multicolumn{{3}}{{c|}}{{{groups[1][0]}}}",
+        ["& FP & FPR & Δ.Ε. 95\\% & FP & FPR & Δ.Ε. 95\\%", "\\hline"] + rows, size="\\footnotesize"))
+
+    # verdicts without / with the dependency-graph check, end-to-end (packages without chains included)
+    allm, allb = ra.names(ra.MAL_DIR), ra.names(ra.BEN_DIR)
+    rows, via_deps = [], {}
+    for c in CONFIGS:
+        R = reports[c]
+        v0 = lambda n: R[n]["final_verdict"] in ra.POSITIVE
+        v1 = lambda n: R[n].get("final_verdict_with_dependencies", R[n]["final_verdict"]) in ra.POSITIVE
+        M, B = [n for n in allm if n in R], [n for n in allb if n in R]
+        tp0, tp1 = sum(map(v0, M)), sum(map(v1, M))
+        fp0, fp1 = sum(map(v0, B)), sum(map(v1, B))
+        for n in M + B:
+            if v1(n) and not v0(n):
+                via_deps[n] = sorted({f["dependency"] for f in R[n].get("dependency_findings") or []})
+        rows.append(f"{NAME[c]} & {tp0}/{len(M)} & {tp1}/{len(M)} & {fp0}/{len(B)} & {fp1}/{len(B)}")
+    note = "; ".join(f"{n.replace('_', '\\_')} ({', '.join(d.replace('_', '\\_') for d in deps)})"
+                     for n, deps in sorted(via_deps.items()))
+    write("dependencies.tex", table(
+        "Αποφάσεις χωρίς και με τον έλεγχο του γράφου εξαρτήσεων, σε όλα τα πακέτα των συνόλων αξιολόγησης "
+        "(και σε όσα δεν έχουν Behavior Chains).", "tab:dependencies", "|l|r|r|r|r|",
+        "Διαμόρφωση & \\multicolumn{2}{c|}{Εντοπισμένα κακόβουλα} & \\multicolumn{2}{c|}{False positives}",
+        ["& Χωρίς & Με εξαρτήσεις & Χωρίς & Με εξαρτήσεις", "\\hline"] + rows,
+        note=("Πακέτα που εντοπίστηκαν μόνο μέσω των εξαρτήσεών τους (κακόβουλες εξαρτήσεις): " + note + ".")
+        if note else None))
+
+    # natural obfuscation: malware that decodes and executes code (a decoding chain + an execution chain)
+    def decodes_and_executes(n):
+        chs = reports["sum"][n].get("chain_details", [])
+        return (any(DECODE_API.search(ch.get("sensitive_api") or "") for ch in chs)
+                and any(ch.get("category") == "process_exec" for ch in chs))
+    natural = [n for n in mal if decodes_and_executes(n)]
+    other = [n for n in mal if n not in set(natural)]
+    rows = [f"{label} & {len(S)} & " + " & ".join(f"{p(100 * ra.div(sum(pos(c, n) for n in S), len(S)))}" for c in CONFIGS)
+            for label, S in (("Αποκωδικοποίηση και εκτέλεση", natural), ("Υπόλοιπα", other))]
+    write("natural_obfuscation.tex", table(
+        "Recall στα κακόβουλα πακέτα που αποκωδικοποιούν και εκτελούν κώδικα ή εντολές (ένα Behavior Chain "
+        "αποκωδικοποίησης base64/zlib/marshal/hex και ένα Behavior Chain εκτέλεσης) και στα υπόλοιπα.",
+        "tab:natural_obfuscation", "|l|r|r|r|r|r|",
+        "Κακόβουλα πακέτα & Πακέτα & " + " & ".join(NAME[c] for c in CONFIGS), rows))
+
+    # artificial obfuscation (Intensio-Obfuscator, levels A and B) next to the same packages unobfuscated
+    obf = {}
+    for lvl, cls in OBF:
+        for f in glob.glob(os.path.join(DS, "obfuscated", f"{lvl}_{cls}", "*.json")):
+            d = json.load(open(f, encoding="utf-8"))
+            obf.setdefault((lvl, cls), []).append((os.path.basename(f)[:-5], d["obfuscated_from"],
+                                                    bool(d.get("behavior_chains"))))
+
+    def row(label, S, has_chains):
+        """One row: packages, packages without chains and, per configuration, flagged / packages with chains."""
+        with_c = [n for n in S if has_chains[n]]
+        cells = []
+        for c in CONFIGS:
+            done = [n for n in with_c if n in reports[c]]
+            cells.append(frac(sum(pos(c, n) for n in done), len(done)) if len(done) == len(with_c) else "--")
+        return f"{label} & {len(S)} & {len(S) - len(with_c)} & " + " & ".join(cells)
+    rows = []
+    for cls, cname in (("malware", "κακόβουλα"), ("benign", "νόμιμα")):
+        orig = sorted({o["package"] for lvl in "AB" for _, o, _ in obf.get((lvl, cls), [])})
+        folder = ra.MAL_DIR if cls == "malware" else ra.BEN_DIR
+        has = {n: bool(json.load(open(os.path.join(folder, f"{n}.json"), encoding="utf-8")).get("behavior_chains"))
+               for n in orig}
+        rows.append(row(f"Χωρίς συγκάλυψη ({cname})", orig, has))
+        for lvl in "AB":
+            items = obf.get((lvl, cls), [])
+            has = {n: hc for n, _, hc in items}
+            rows.append(row(f"Επίπεδο {lvl} ({cname})", [n for n, _, _ in items], has))
+            if lvl == "A":
+                rows.append(row("\\quad χωρίς αρχεία που δεν αναλύονται", [n for n, o, _ in items
+                                                                           if not o.get("unparsable_py_files")], has))
+        rows.append("\\hline")
+    write("obfuscation.tex", table(
+        "Τα αντίγραφα με συγκάλυψη (Intensio-Obfuscator: επίπεδο A μετονομασία και νεκρός κώδικας, επίπεδο B "
+        "επιπλέον κωδικοποίηση κάθε αρχείου σε hex που εκτελείται με \\texttt{exec}) δίπλα στα ίδια πακέτα χωρίς "
+        "συγκάλυψη. Σε κάθε κελί: πακέτα που χαρακτηρίστηκαν \\texttt{MALICIOUS} / πακέτα με Behavior Chains.",
+        "tab:obfuscation",
+        "|>{\\raggedright\\arraybackslash}p{4.2cm}|r|r|" + "|".join([">{\\centering\\arraybackslash}p{1.45cm}"] * 4) + "|",
+        "Σύνολο & Πακέτα & Χωρίς chains & " + " & ".join(NAME[c] for c in CONFIGS), rows[:-1], size="\\footnotesize"))
+
+
 def results_tables():
-    sim_source = {p_: ra.max_similarity(r) for p_, r in ra.load("v12_sum").items()}
-    res = {c: ra.analyze(f"v12_{c}", sim_source) for c in CONFIGS}
-    reports = {c: ra.load(f"v12_{c}") for c in CONFIGS}
+    sim_source = {p_: ra.max_similarity(r) for p_, r in ra.load(f"{MAIN}_sum").items()}
+    res = {c: ra.analyze(f"{MAIN}_{c}", sim_source) for c in CONFIGS}
+    reports = {c: ra.load(f"{MAIN}_{c}") for c in CONFIGS}
+    mal, ben = ra.names(ra.MAL_DIR), ra.names(ra.BEN_DIR)
 
     def e2e(c):
         m, e = res[c]["metrics"]["llm_stage"], res[c]["metrics"]["end_to_end"]
@@ -297,8 +500,9 @@ def results_tables():
 
     # labels and correctness per package, used by the agreement table
     lab = json.load(open(os.path.join(ROOT, "expected_labels.json"), encoding="utf-8"))
-    scored = [n for n, r in reports["sum"].items() if lab.get(n) in ("malicious", "benign")
-              and r["final_verdict"] != "NO_CHAINS_FOUND"]
+    # the evaluation sets only (the obfuscated copies are reported separately)
+    scored = [n for n, r in reports["sum"].items() if n in mal | ben and lab.get(n) in ("malicious", "benign")
+              and r["final_verdict"] != "NO_CHAINS_FOUND" and all(n in reports[c] for c in CONFIGS)]
     flag = lambda c, n: reports[c][n]["final_verdict"] in ra.POSITIVE
 
     # agreement of the four configurations
@@ -376,6 +580,8 @@ def results_tables():
         ">{\\raggedright\\arraybackslash}p{3.2cm}|",
         "Πακέτο & Chains & Κατηγορία & Ευαίσθητη κλήση & Αρχείο", rows, size="\\footnotesize"))
 
+    extra_tables(reports, scored, lab, res)
+
     # comparison with the tools of IntelGuard Table 1 (their PyPI dataset) - our rows end-to-end
     rows = [f"{t} & {num(a, 2)} & {num(pr, 2)} & {num(rc, 2)} & {num(f, 2)}" for t, a, pr, rc, f in INTELGUARD_TABLE1]
     rows.append("\\hline")
@@ -428,15 +634,18 @@ def results_tables():
     legend = ("Γραμμές: πραγματική κλάση· στήλες: απόφαση του συστήματος (MAL = \\texttt{MALICIOUS}, "
               "BEN = \\texttt{BENIGN})· σε κάθε κελί το πλήθος πακέτων και το ποσοστό ανά πραγματική κλάση, "
               "με την ένταση του χρώματος ανάλογη του ποσοστού.")
-    write("confusion_sum.tex", ["\\begin{figure}[H]", "\\centering"] + panel(9, "sum", 2.6, 1.6, "\\normalsize") +
-          [f"\\caption{{Confusion matrix του πλήρους συστήματος στο στάδιο του LLM. {legend}}}",
-           "\\label{fig:confusion_sum}", "\\end{figure}"])
+    tikz_png("confusion_sum", panel(9, "sum", 2.6, 1.6, "\\normalsize"))
+    write("confusion_sum.tex", ["\\begin{figure}[H]", "\\centering", f"\\includegraphics{{{IMG_REF}/confusion_sum.png}}",
+                                f"\\caption{{Confusion matrix του πλήρους συστήματος στο στάδιο του LLM. {legend}}}",
+                                "\\label{fig:confusion_sum}", "\\end{figure}"])
 
     # figure: the four confusion matrices
     fig = ["\\begin{figure}[H]", "\\centering"]
     for k, c in enumerate(CONFIGS):
-        fig += ["\\begin{subfigure}[b]{0.24\\textwidth}", "\\centering"] + panel(k, c) + \
-               [f"\\caption{{{NAME[c]}}}", "\\end{subfigure}"]
+        tikz_png(f"confusion_{c}", panel(k, c))
+        fig += ["\\begin{subfigure}[b]{0.24\\textwidth}", "\\centering",
+                f"\\includegraphics[width=\\linewidth]{{{IMG_REF}/confusion_{c}.png}}",
+                f"\\caption{{{NAME[c]}}}", "\\end{subfigure}"]
         if k < len(CONFIGS) - 1:
             fig.append("\\hfill")
     fig += [f"\\caption{{Confusion matrices των τεσσάρων διαμορφώσεων στο στάδιο του LLM. {legend}}}",

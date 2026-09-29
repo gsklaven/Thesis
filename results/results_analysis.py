@@ -145,7 +145,7 @@ def analyze(tag, sim_source):
                  key=lambda x: (-(x["chains"] or 0), x["package"]))  # name breaks ties (set order is random)
     fns = sorted(({"package": p, "chains": R[p].get("total_chains_analyzed"), "max_similarity": sim_source.get(p)}
                   for p in m_sc if verdict(p) not in POSITIVE), key=lambda x: x["package"])
-    return {"tag": tag, "reports": len(R), "expected": len(mal) + len(ben), "missing": missing,
+    return {"tag": tag, "reports": len(set(R) & (mal | ben)), "expected": len(mal) + len(ben), "missing": missing,
             "unscored": unscored, "malware_no_chains": ncm, "metrics": metrics, "strata": strata,
             "false_positives": fps, "false_negatives": fns,
             "single_chain_fp": sum(1 for x in fps if x["malicious_chains"] == 1)}

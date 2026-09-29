@@ -24,14 +24,16 @@ dataset/
   rag_train/  rag_test/      family-level split (no shared campaign or code)
   indexes/rag_index/         vectors of the rag_train Behavior Chains
   indexes/policy_index/      vectors of the security knowledge base
-  payload_scan.json, excluded_*.json, attack_type_tags.json, policy_rules.json, audit_leakage_v12.json
+  obfuscated/                obfuscated copies (levels A, B) of 100+100 evaluation packages (obfuscated_set.json)
+  payload_scan.json, excluded_*.json, attack_type_tags.json, policy_rules.json, audit_leakage.json,
+  added_test_samples.json    samples added to the evaluation set only (index and split unchanged)
 inference/
   codeql_pipeline/           analysis.py, build_behavior_chain.py, python_queries/, js_queries/
   query_rag.py               retrieval + prompt construction (RAG_MODE for the ablations)
   llm_evaluator.py           evaluation of one package (shared logic for every LLM)
   llm_providers.py           LLM call: deepseek | gemini | lmstudio | openrouter (LLM_PROVIDER in .env)
 results/
-  <version>/report_*.json    report per package (e.g. v12_sum/, v12_llm/)
+  <version>/report_*.json    report per package (v14_<mode>/ = final results of the thesis)
   test_set_summaries/        test_set_summary_<version>_<test set>.json
   evaluation_summaries/      evaluation_summary_<version>.json
   analysis/                  metrics, confusion matrices, strata, ablations, LaTeX of the thesis
@@ -113,7 +115,7 @@ python3 dataset/preparation/build_policy_index.py       # -> dataset/indexes/pol
 
 ```bash
 python3 dataset/preparation/rebuild_rag.py            # --dry-run to preview, --from-step N to resume
-python3 dataset/preparation/audit_leakage.py --out dataset/audit_leakage_v12.json
+python3 dataset/preparation/audit_leakage.py --out dataset/audit_leakage.json
 ```
 
 `rebuild_rag.py` runs, in order:
@@ -134,16 +136,14 @@ package itself, similarity strata (known variant / close / novel) and shortcuts.
 
 ```bash
 # DEEPSEEK_API_KEY in .env
-for MODE in sum samples policy llm; do     # sum = full system, llm = no retrieval
-  RAG_MODE=$MODE python3 results/check_test_set.py dataset/rag_test
-  RAG_MODE=$MODE python3 results/check_test_set.py dataset/benign_test_set
-  RAG_MODE=$MODE python3 results/evaluation_summary.py
-done
-python3 results/results_analysis.py       # metrics, confusion matrices, strata, ablations -> results/analysis/
+RESULTS_PREFIX=v14 PARALLEL_MODES=1 ./run_pipeline.sh evaluate   # sum samples policy llm -> results/v14_<mode>/
+# one configuration and one set by hand:
+RESULTS_TAG=v14_sum RAG_MODE=sum python3 results/check_test_set.py dataset/rag_test
+python3 results/results_analysis.py v14_sum v14_samples v14_policy v14_llm   # -> results/analysis/
 python3 results/thesis_tables.py          # LaTeX tables and figures of the thesis -> results/analysis/latex/
 ```
 
-- Reports per package: `results/v12_<mode>/report_<package>.json`, summaries in `results/test_set_summaries/`
+- Reports per package: `results/v14_<mode>/report_<package>.json`, summaries in `results/test_set_summaries/`
   and `results/evaluation_summaries/`.
 - `check_test_set.py` automatically re-runs whatever is `EVALUATION_FAILED`/`INCOMPLETE`/`UNKNOWN`
   and skips packages that already have a final verdict.

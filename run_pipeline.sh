@@ -16,7 +16,7 @@
 #   ./run_pipeline.sh addtest      NEW malware samples -> evaluation set only (index and split unchanged)
 #   ./run_pipeline.sh obfuscate    obfuscated copies of 100+100 evaluation packages (2 levels) + CodeQL
 #   ./run_pipeline.sh deps         dependency graph of every evaluation package vs known malicious packages
-#   ./run_pipeline.sh evaluate     LLM evaluation for every RAG_MODE in MODES
+#   ./run_pipeline.sh evaluate     LLM evaluation of the evaluation sets (+ obfuscated copies) for every RAG_MODE
 #   ./run_pipeline.sh update       sources -> collect -> analyze -> rag  (update with new packages)
 #   ./run_pipeline.sh all          collect -> analyze -> benign -> rag -> evaluate
 #   ./run_pipeline.sh pack         Behavior Chains, train/test, indexes, dataset JSON into files <=1.9GB
@@ -26,8 +26,8 @@
 #   THESIS_SOURCES_DIR   folder with the clones of the sources (REQUIRED for sources/collect/analyze)
 #   WORKERS=4            parallel CodeQL analyses for malware (BENIGN_WORKERS=2 for benign)
 #   RETRY_FAILED=1       also retry malware that has already failed (default: no)
-#   MODES="sum samples policy llm"   ablations for evaluate (RESULTS_SUFFIX for another folder)
-#   PARALLEL_SETS=1      in evaluate: malware and benign test sets at the same time
+#   MODES="sum samples policy llm"   ablations for evaluate; RESULTS_PREFIX=v14 -> results/v14_<mode>; SETS=...
+#   PARALLEL_MODES=1     in evaluate: the configurations in parallel (as in the thesis evaluation)
 #   CODEQL_QUERY_TIMEOUT / CODEQL_DB_TIMEOUT / BATCH_ANALYSIS_TIMEOUT (seconds)
 # =====================================================================================
 set -uo pipefail
@@ -302,20 +302,43 @@ cmd_evaluate() {
   local key_var; key_var="$(llm_key_var)"
   [ -z "$key_var" ] || [ -n "${!key_var:-}" ] || die "$key_var is missing for LLM_PROVIDER=${LLM_PROVIDER:-deepseek}: write it in .env"
   keep_awake
-  local mode
+  # the evaluation sets and, when built (obfuscate), the obfuscated copies; SETS overrides the list
+  local sets="${SETS:-}" s
+  if [ -z "$sets" ]; then
+    for s in dataset/rag_test dataset/benign_test_set dataset/obfuscated/*_malware dataset/obfuscated/*_benign; do
+      [ -d "$s" ] && sets="$sets $s"
+    done
+  fi
+  # results/<RESULTS_PREFIX>_<mode> when RESULTS_PREFIX is set, otherwise query_rag.py's default folder
+  local mode tag tags="" pids=()
   for mode in $MODES; do
-    log "evaluate: RAG_MODE=$mode${RESULTS_SUFFIX:+ (RESULTS_SUFFIX=$RESULTS_SUFFIX)}"
-    if [ "${PARALLEL_SETS:-0}" = 1 ]; then
-      RAG_MODE=$mode "$PY" results/check_test_set.py dataset/rag_test > "$LOGS/eval_${mode}_malware.log" 2>&1 & local p1=$!
-      RAG_MODE=$mode "$PY" results/check_test_set.py dataset/benign_test_set > "$LOGS/eval_${mode}_benign.log" 2>&1 & local p2=$!
-      wait "$p1" "$p2"
+    tag="${RESULTS_PREFIX:+${RESULTS_PREFIX}_$mode}"
+    tags="$tags $tag"
+    log "evaluate: RAG_MODE=$mode${tag:+ -> results/$tag}${RESULTS_SUFFIX:+ (RESULTS_SUFFIX=$RESULTS_SUFFIX)}:$sets"
+    if [ "${PARALLEL_MODES:-0}" = 1 ]; then
+      eval_mode "$mode" "$tag" "$sets" &
+      pids+=($!)
     else
-      RAG_MODE=$mode "$PY" results/check_test_set.py dataset/rag_test 2>&1 | tee "$LOGS/eval_${mode}_malware.log"
-      RAG_MODE=$mode "$PY" results/check_test_set.py dataset/benign_test_set 2>&1 | tee "$LOGS/eval_${mode}_benign.log"
+      eval_mode "$mode" "$tag" "$sets"
     fi
-    RAG_MODE=$mode run "$PY" results/evaluation_summary.py
   done
-  run "$PY" results/results_analysis.py     # confusion matrix, CI, similarity strata, FP/FN -> results/analysis/
+  [ ${#pids[@]} -eq 0 ] || wait "${pids[@]}"
+  for mode in $MODES; do
+    RESULTS_TAG="${RESULTS_PREFIX:+${RESULTS_PREFIX}_$mode}" RAG_MODE=$mode run "$PY" results/evaluation_summary.py
+  done
+  # confusion matrix, CI, similarity strata, FP/FN -> results/analysis/ (the tags, or its default)
+  # shellcheck disable=SC2086
+  run "$PY" results/results_analysis.py $tags
+}
+
+# One RAG_MODE over every set (TAG empty = the default results folder); logs: logs/eval_<tag|mode>_<set>.log
+eval_mode() {
+  local mode="$1" tag="$2" s
+  for s in $3; do
+    log "  $mode: $s"
+    RESULTS_TAG="$tag" RAG_MODE="$mode" "$PY" results/check_test_set.py "$s" \
+      > "$LOGS/eval_${tag:-$mode}_$(basename "$s").log" 2>&1
+  done
 }
 
 # ------------------------------------------------------------------------------ pack / unpack

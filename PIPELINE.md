@@ -106,9 +106,9 @@ Indicative times (Apple M5, 10 cores, 24 GB):
 | Stage | Time |
 |---|---|
 | `analyze` (~14,500 malware, 4–6 workers) | ~3–4 days |
-| `benign` (170 packages) | ~2 hours |
+| `benign` (~500 packages) | ~2 hours with 4 workers |
 | `rag` | ~10 minutes |
-| `evaluate` (~16,500 LLM calls per ablation) | ~2.5 hours per ablation with `PARALLEL_SETS=1` |
+| `evaluate` (~25,000 LLM calls per configuration, incl. the obfuscated copies) | ~10 hours for the four configurations with `PARALLEL_MODES=1` |
 
 `./run_pipeline.sh status` shows at any time how much is done and what is missing.
 
@@ -175,7 +175,7 @@ python3 dataset/preparation/select_extra_benign.py --extend 460        # 40 cura
 bash run_pipeline.sh benign                                            # CodeQL for the new benign packages
 bash run_pipeline.sh obfuscate                                         # 100+100 obfuscated copies, levels A and B
 bash run_pipeline.sh deps                                              # dependency findings in every chains file
-bash results/run_v14.sh                                                # the 4 configurations -> results/v14_*/
+RESULTS_PREFIX=v14 PARALLEL_MODES=1 bash run_pipeline.sh evaluate      # the 4 configurations -> results/v14_*/
 ```
 The obfuscation tool is set up once as described in `dataset/preparation/build_obfuscated_set.py`. Every
 report records `final_verdict` (the LLM on the package's own code) and `final_verdict_with_dependencies`
@@ -205,8 +205,9 @@ Behavior Chain, while the retrieval text is unchanged, so the index of v12 is re
 | `all` | `collect` → `analyze` → `benign` → `rag` → `evaluate` |
 | `pack` / `unpack [DIR]` | packing / restoring for the GitHub Release |
 
-More settings: `BENIGN_WORKERS` (2), `RETRY_FAILED=1`, `MODES`, `PARALLEL_SETS=1` (malware and benign test
-sets at the same time in `evaluate`), `RESULTS_SUFFIX`, `CODEQL_QUERY_TIMEOUT` / `CODEQL_DB_TIMEOUT` /
+More settings: `BENIGN_WORKERS` (2), `RETRY_FAILED=1`, `MODES`, `RESULTS_PREFIX` (results in `results/<prefix>_<mode>`),
+`SETS` (the sets of `evaluate`; default: the evaluation sets and the obfuscated copies), `PARALLEL_MODES=1`
+(the configurations in parallel in `evaluate`), `RESULTS_SUFFIX`, `CODEQL_QUERY_TIMEOUT` / `CODEQL_DB_TIMEOUT` /
 `BATCH_ANALYSIS_TIMEOUT` (seconds).
 
 ## 4. Where files are written
