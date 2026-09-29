@@ -491,7 +491,8 @@ def results_tables():
             f"Recall end-to-end & {p(e['recall'])} & {e['TP']}/{e['TP'] + e['FN']} & --",
             f"Accuracy end-to-end & {p(e['accuracy'])} & {e['TP'] + e['TN']}/{e['TP'] + e['FN'] + e['FP'] + e['TN']} & --"]
     write("main_metrics.tex", table(
-        "Μετρικές του πλήρους συστήματος στο σύνολο αξιολόγησης, με διάστημα εμπιστοσύνης 95\\% (Wilson).",
+        "Μετρικές του πλήρους συστήματος στο σύνολο αξιολόγησης. Για recall, FPR και precision δίνεται "
+        "διάστημα εμπιστοσύνης 95\\% κατά Wilson.",
         "tab:main_metrics", "|l|r|r|c|", "Μετρική & Τιμή & Πλήθος & Δ.Ε. 95\\%", rows))
 
     # the four configurations
