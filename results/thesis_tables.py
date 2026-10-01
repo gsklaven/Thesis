@@ -314,7 +314,8 @@ def local_model_table():
     write("local_model.tex", table(
         f"Το τοπικό μοντέλο και το DeepSeek στο υποσύνολο αξιολόγησης του τοπικού μοντέλου "
         f"({num(len(subset['malware']))} κακόβουλα και {num(len(subset['benign']))} νόμιμα πακέτα), με το Πλήρες "
-        "σύστημα και χωρίς RAG.", "tab:local_model", "|l|l|r|r|r|r|r|r|r|r|r|",
+        "σύστημα και χωρίς RAG, και με την αναπαράσταση των Behavior Chains χωρίς τα σταθερά ορίσματα για τα "
+        "δύο μοντέλα.", "tab:local_model", "|l|l|r|r|r|r|r|r|r|r|r|",
         "Μοντέλο & Διαμόρφωση & TP & FN & FP & TN & Recall & FPR & Prec. & F1 & Acc.",
         rows, size="\\footnotesize", sep="3.5pt"))
 
@@ -422,7 +423,8 @@ def extra_tables(reports, scored, lab, res):
         "Recall στα κακόβουλα πακέτα που αποκωδικοποιούν και εκτελούν κώδικα ή εντολές (ένα Behavior Chain "
         "αποκωδικοποίησης base64/zlib/marshal/hex και ένα Behavior Chain εκτέλεσης) και στα υπόλοιπα.",
         "tab:natural_obfuscation", "|l|r|r|r|r|r|",
-        "Κακόβουλα πακέτα & Πακέτα & " + " & ".join(NAME[c] for c in CONFIGS), rows))
+        "Κακόβουλα πακέτα & Πακέτα & " + " & ".join(NAME[c] for c in CONFIGS), rows,
+        size="\\footnotesize", sep="4pt"))
 
     # artificial obfuscation (Intensio-Obfuscator, levels A and B) next to the same packages unobfuscated
     obf = {}

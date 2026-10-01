@@ -3,19 +3,26 @@
 # run_local_subset.sh - the local-model experiment: evaluation of dataset/local_subset with an LLM served
 # by LM Studio on this computer (no code, chain or prompt leaves the machine).
 #
-#   1. loads the model with a context long enough for the longest prompt of the subset (~16.7k tokens plus
-#      the answer), with 4, else 2, else 1 parallel predictions. LM Studio silently shrinks the context
-#      to what fits in GPU memory, so the loaded context is read back and checked;
+#   1. loads the model with a context long enough for the prompts (plus the answer), with 4, else 2,
+#      else 1 parallel predictions. LM Studio silently shrinks the context to what fits in GPU memory,
+#      so the loaded context is read back and checked;
 #   2. sends a ~16k-token test prompt and stops if it is rejected (nothing is evaluated with a short context);
-#   3. evaluates the malware and benign subset for every RAG mode -> results/v13_<mode>/ (the local-model
-#      experiment is v13 of the thesis; same prompt as v12).
+#   3. evaluates the malware and benign subset for every RAG mode -> results/<prefix>_<mode>/
+#      (prefix v14_local: the final Behavior Chains, with constant arguments, and prompt v12; the DeepSeek
+#      runs of the same packages are v14_<mode>; the earlier run without constant arguments is v13_<mode>).
 # Resumable: stop it at any point (Ctrl+C) and run it again; finished packages are skipped.
 # The computer is kept awake while it runs (leave a laptop plugged in with the lid open).
 #
 #   bash results/run_local_subset.sh [MODE ...]      (default: sum llm)
 #   python3 results/progress.py --watch 60            (progress, in a second terminal)
 #
-# Settings (environment): LM_STUDIO_MODEL (google/gemma-4-26b-a4b), LM_CONTEXT (20480), MIN_CONTEXT (18000).
+# Two passes. The first (default context) evaluates almost every chain with 4 parallel predictions; the
+# handful of prompts longer than the context fail and leave their packages INCOMPLETE. The second pass,
+# with a long context and fewer parallel predictions, evaluates only those packages:
+#   LM_CONTEXT=38912 MIN_CONTEXT=37000 bash results/run_local_subset.sh sum llm
+#
+# Settings (environment): LOCAL_RESULTS_PREFIX (v14_local), LM_STUDIO_MODEL (google/gemma-4-26b-a4b),
+# LM_CONTEXT (22016), MIN_CONTEXT (21000).
 # On a 24 GB Mac the 15 GB model leaves no room for a long context under the default GPU memory limit;
 # raise it first (the setting resets on reboot):   sudo sysctl iogpu.wired_limit_mb=20480
 # =====================================================================================
@@ -24,7 +31,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$ROOT/venv/bin/python"; [ -x "$PY" ] || PY="python3"
 LMS="$HOME/.lmstudio/bin/lms"; command -v lms >/dev/null 2>&1 && LMS=lms
 URL="${LM_STUDIO_URL:-http://localhost:1234/v1}"
-CONTEXT="${LM_CONTEXT:-20480}"; MIN_CONTEXT="${MIN_CONTEXT:-18000}"
+CONTEXT="${LM_CONTEXT:-22016}"; MIN_CONTEXT="${MIN_CONTEXT:-21000}"
+PREFIX="${LOCAL_RESULTS_PREFIX:-v14_local}"
 MODES=("$@"); [ ${#MODES[@]} -gt 0 ] || MODES=(sum llm)
 # local provider; the embedding model is read from the local cache without any network check
 export LLM_PROVIDER=lmstudio LM_STUDIO_MODEL="${LM_STUDIO_MODEL:-google/gemma-4-26b-a4b}" LM_STUDIO_URL="$URL"
@@ -75,7 +83,7 @@ EOF
 for m in "${MODES[@]}"; do
   for s in malware benign; do
     log "RAG_MODE=$m - dataset/local_subset/$s ($parallel parallel)"
-    RESULTS_TAG="v13_$m" RAG_MODE="$m" LLM_MAX_WORKERS="$parallel" "$PY" results/check_test_set.py "dataset/local_subset/$s"
+    RESULTS_TAG="${PREFIX}_$m" RAG_MODE="$m" LLM_MAX_WORKERS="$parallel" "$PY" results/check_test_set.py "dataset/local_subset/$s"
   done
 done
 log "done - summary: $PY results/progress.py"

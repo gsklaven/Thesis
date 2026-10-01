@@ -2,11 +2,11 @@
 progress.py - live progress of an evaluation run.
 
 For every run folder given it shows, per set of packages: how many are done, the verdicts so far, the wrong
-verdicts so far, the agreement with the DeepSeek v12 run of the same RAG mode (on the packages that run
+verdicts so far, the agreement with the DeepSeek run of the same RAG mode and representation (on the packages that run
 evaluated) and the Behavior Chains left. The speed is measured in chains over the last two hours (so earlier
 runs and pauses do not distort it) and gives the estimate of the remaining time.
 
-The packages come either from a subset file (default: dataset/local_subset.json, the local-model runs v13_*)
+The packages come either from a subset file (default: dataset/local_subset.json, the local-model runs v14_local_*)
 or, with --sets, from dataset folders (e.g. the v14 run: rag_test, benign_test_set and the obfuscated sets).
 
 Usage: python3 results/progress.py [tag ...] [--subset dataset/local_subset.json] [--watch SECONDS]
@@ -24,7 +24,10 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 POSITIVE = ("MALICIOUS", "SUSPICIOUS")
 NOT_JUDGED = ("NO_CHAINS_FOUND", "INCOMPLETE", "EVALUATION_FAILED", "UNKNOWN")
 SPEED_WINDOW = 2 * 3600  # seconds of recent reports used to measure the speed
-REF_VERSION = "v12"      # the DeepSeek runs every run is compared with
+# the DeepSeek run every run is compared with: the one with the same Behavior Chain representation
+# (v13_* local runs -> v12, everything else -> the final v14 runs)
+def ref_tag(tag):
+    return f"{'v12' if tag.startswith('v13') else 'v14'}_{tag.rsplit('_', 1)[1]}"
 
 
 def reports(tag):
@@ -87,7 +90,7 @@ def show(tags, sets, labels, chains):
         rep = reports(tag)
         # the DeepSeek run with the same RAG mode (v13_sum -> v12_sum); without chain counts of the sets it
         # also gives the chain count of the packages not evaluated yet
-        ref = reports(f"{REF_VERSION}_{tag.split('_')[1]}")
+        ref = reports(ref_tag(tag))
         runs.append(rep)
         done = [p for s in sets.values() for p in s if p in rep]
         count = (lambda p: chains.get(p, 0)) if chains is not None else (lambda p: ref[p][2] if p in ref else 0)
@@ -101,7 +104,7 @@ def show(tags, sets, labels, chains):
             agree = sum((rep[p][0] in POSITIVE) == (ref[p][0] in POSITIVE) for p in in_ref)
             wrong = sum((rep[p][0] in POSITIVE) != (labels.get(p) == "malicious") for p in d
                         if rep[p][0] not in NOT_JUDGED)
-            same = f" | same as {REF_VERSION}: {agree}/{len(in_ref)}" if in_ref else ""
+            same = f" | same as {ref_tag(tag)}: {agree}/{len(in_ref)}" if in_ref else ""
             print(f"  {name:20s} {len(d):4d}/{len(pkgs):<4d} verdicts {dict(v)} | wrong so far: {wrong}{same}")
     speed = seconds_per_chain(runs)
     if speed:
@@ -112,7 +115,7 @@ def show(tags, sets, labels, chains):
 def main():
     """Parse the arguments and print the progress once or every --watch seconds."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("tags", nargs="*", default=["v13_sum", "v13_llm"])
+    ap.add_argument("tags", nargs="*", default=["v14_local_sum", "v14_local_llm"])
     ap.add_argument("--subset", default=os.path.join(ROOT, "dataset", "local_subset.json"))
     ap.add_argument("--sets", nargs="+", help="dataset folders instead of a subset file")
     ap.add_argument("--watch", type=int, default=0, help="refresh every N seconds (Ctrl+C to stop)")
