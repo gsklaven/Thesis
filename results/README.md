@@ -11,8 +11,9 @@
 
 The `<version>` is `PROMPT_VERSION_RAG_MODE[_provider][RESULTS_SUFFIX]` (e.g. `v12_sum`, `v12_llm`,
 `v12_sum_gemini`, `v12_sum_smoke`). The provider is added only when it is not `deepseek` (see `LLM_PROVIDER`).
-`v13_sum` and `v13_llm` are the local-model runs (LM Studio) on `dataset/local_subset.json`; their name is set
-with `RESULTS_TAG` by `run_local_subset.sh`.
+`v14_local_sum` and `v14_local_llm` are the local-model runs of the thesis (LM Studio, `run_local_subset.sh`) on
+`dataset/local_subset.json`, with the final Behavior Chains; they are compared with `v14_sum`/`v14_llm` on the same
+packages. `v13_sum` and `v13_llm` are the earlier local runs on the Behavior Chains without constant arguments.
 `v14_<mode>` (the four configurations, `RESULTS_PREFIX=v14 PARALLEL_MODES=1 bash run_pipeline.sh evaluate`)
 are the final results of the thesis: the evaluation sets (451 malware, 499 benign) and the obfuscated copies,
 with the index, knowledge base and prompt `v12`; the LLM text of every chain also lists the constant arguments

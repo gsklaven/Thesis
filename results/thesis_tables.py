@@ -21,7 +21,7 @@ Writes to results/analysis/latex/:
   obfuscation.tex          obfuscated copies (levels A, B) next to the same packages unobfuscated
   comparison.tex           comparison with the tools evaluated in IntelGuard (Table 1 of that paper)
   rag_literature.tex       accuracy / FPR without and with retrieval: IntelGuard RQ4 next to ours
-  local_model.tex          v13: the local model (LM Studio) and DeepSeek on the same subset (v12 data)
+  local_model.tex          the local model (LM Studio, v14_local_*) and DeepSeek (v14_*) on the same subset
   confusion_sum.tex        figure: confusion matrix of the full system (images/confusion_sum.png)
   confusion_grid.tex       figure: the four confusion matrices (images/confusion_<config>.png)
 
@@ -302,20 +302,20 @@ def subset_rows(runs, subset):
 
 
 def local_model_table():
-    """v13: the local model (LM Studio) next to DeepSeek on the same subset (dataset/local_subset.json).
-    The local model ran on the v12 data, so it is compared with the v12 DeepSeek runs."""
-    if not all(os.path.isdir(os.path.join(ROOT, "results", t)) for t in ("v13_sum", "v13_llm")):
-        print("[!] results/v13_sum or v13_llm is missing - local_model.tex skipped")
+    """The local model (LM Studio, results/v14_local_<mode>) next to DeepSeek (the v14 runs of the main
+    evaluation) on the same subset (dataset/local_subset.json), with the same final Behavior Chains."""
+    if not all(os.path.isdir(os.path.join(ROOT, "results", t)) for t in ("v14_local_sum", "v14_local_llm")):
+        print("[!] results/v14_local_sum or v14_local_llm is missing - local_model.tex skipped")
         return
     subset = json.load(open(os.path.join(DS, "local_subset.json"), encoding="utf-8"))
-    runs = [("DeepSeek (API)", "v12_sum", "sum"), ("DeepSeek (API)", "v12_llm", "llm"),
-            ("gemma-4-26b-a4b (τοπικά)", "v13_sum", "sum"), ("gemma-4-26b-a4b (τοπικά)", "v13_llm", "llm")]
+    runs = [("DeepSeek (API)", f"{MAIN}_sum", "sum"), ("DeepSeek (API)", f"{MAIN}_llm", "llm"),
+            ("gemma-4-26b-a4b (τοπικά)", f"{MAIN}_local_sum", "sum"),
+            ("gemma-4-26b-a4b (τοπικά)", f"{MAIN}_local_llm", "llm")]
     rows = subset_rows(runs, subset)
     write("local_model.tex", table(
         f"Το τοπικό μοντέλο και το DeepSeek στο υποσύνολο αξιολόγησης του τοπικού μοντέλου "
         f"({num(len(subset['malware']))} κακόβουλα και {num(len(subset['benign']))} νόμιμα πακέτα), με το Πλήρες "
-        "σύστημα και χωρίς RAG, και με την αναπαράσταση των Behavior Chains χωρίς τα σταθερά ορίσματα για τα "
-        "δύο μοντέλα.", "tab:local_model", "|l|l|r|r|r|r|r|r|r|r|r|",
+        "σύστημα και χωρίς RAG, με τα ίδια Behavior Chains για τα δύο μοντέλα.", "tab:local_model", "|l|l|r|r|r|r|r|r|r|r|r|",
         "Μοντέλο & Διαμόρφωση & TP & FN & FP & TN & Recall & FPR & Prec. & F1 & Acc.",
         rows, size="\\footnotesize", sep="3.5pt"))
 

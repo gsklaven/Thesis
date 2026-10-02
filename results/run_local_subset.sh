@@ -19,7 +19,10 @@
 # Two passes. The first (default context) evaluates almost every chain with 4 parallel predictions; the
 # handful of prompts longer than the context fail and leave their packages INCOMPLETE. The second pass,
 # with a long context and fewer parallel predictions, evaluates only those packages:
-#   LM_CONTEXT=38912 MIN_CONTEXT=37000 bash results/run_local_subset.sh sum llm
+#   sudo sysctl iogpu.wired_limit_mb=21504
+#   LM_CONTEXT=33792 MIN_CONTEXT=29000 bash results/run_local_subset.sh sum llm
+# (the prompts that decide a package are <= ~27.5k tokens; the few longer ones belong to packages already
+#  judged MALICIOUS by other chains, so they are not re-run)
 #
 # Settings (environment): LOCAL_RESULTS_PREFIX (v14_local), LM_STUDIO_MODEL (google/gemma-4-26b-a4b),
 # LM_CONTEXT (22016), MIN_CONTEXT (21000).
