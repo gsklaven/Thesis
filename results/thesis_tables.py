@@ -6,6 +6,7 @@ Writes to results/analysis/latex/:
   dataset_sources.tex      malware samples per source: collected, excluded, train / test
   dataset_sets.tex         final sets (incl. the obfuscated copies): packages, with Behavior Chains, chains
   dataset_attack_types.tex attack-type tags of the selected malware samples
+  dataset_attack_types_test.tex  attack-type tags of the evaluation malware (rag_test)
   policy_sources.tex       entries of the security knowledge base per source (dataset/policy_rules.json)
   main_metrics.tex         metrics of the full system with 95% Wilson intervals
   ablations.tex            metrics of the four configurations (LLM stage + end-to-end)
@@ -223,11 +224,9 @@ def dataset_tables():
     by_name = {e["package_name"]: e for e in matched}
     osv = {re.sub(r"[-_.]+", "-", d).lower(): d for d in os.listdir(OSV_DIR)} if os.path.isdir(OSV_DIR) else {}
     popular = att.load_popular_packages()
-    dist = Counter()
-    for n in train | test:
+    def package_tags(n):
         if n in tags:
-            dist.update(tags[n]["attack_type_tags"])
-            continue
+            return tags[n]["attack_type_tags"] or ["unclassified"]
         e = by_name.get(n, {})
         desc = (e.get("description") or "").strip()
         key = re.sub(r"[-_.]+", "-", n).lower()
@@ -236,12 +235,20 @@ def dataset_tables():
         t = att.detect_keyword_tags(f"{e.get('summary', '')} {desc}")
         if att.detect_typosquat(n, popular):
             t.append("typosquatting")
-        dist.update(sorted(set(t)) or ["unclassified"])
-    rows = [f"\\texttt{{{k.replace('_', '\\_')}}} & {num(v)}" for k, v in sorted(dist.items(), key=lambda x: (-x[1], x[0]))]
+        return sorted(set(t)) or ["unclassified"]
+
+    # read-only: the tags come from attack_type_tags.json or from the tagger on the description
+    tag_rows = lambda d: [f"\\texttt{{{k.replace('_', '\\_')}}} & {num(v)}"
+                          for k, v in sorted(d.items(), key=lambda x: (-x[1], x[0]))]
     write("dataset_attack_types.tex", table(
         f"Ετικέτες τύπου επίθεσης των {num(len(train | test))} επιλεγμένων κακόβουλων πακέτων "
         "(ένα πακέτο μπορεί να φέρει περισσότερες από μία ετικέτες).", "tab:attack_types", "|l|r|",
-        "Ετικέτα & Πακέτα", rows))
+        "Ετικέτα & Πακέτα", tag_rows(Counter(t for n in train | test for t in package_tags(n)))))
+    # the same tags for the malware of the evaluation set only (what the system was tested on)
+    write("dataset_attack_types_test.tex", table(
+        f"Ετικέτες τύπου επίθεσης των {num(len(test))} κακόβουλων πακέτων του συνόλου αξιολόγησης "
+        "(ένα πακέτο μπορεί να φέρει περισσότερες από μία ετικέτες).", "tab:attack_types_test", "|l|r|",
+        "Ετικέτα & Πακέτα", tag_rows(Counter(t for n in test for t in package_tags(n)))))
 
 
 # Greek labels (with citations) of the knowledge-base sources, by the "source" field of policy_rules.json.
