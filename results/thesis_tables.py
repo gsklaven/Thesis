@@ -23,10 +23,9 @@ Writes to results/analysis/latex/:
   comparison.tex           comparison with the tools evaluated in IntelGuard (Table 1 of that paper)
   rag_literature.tex       accuracy / FPR without and with retrieval: IntelGuard RQ4 next to ours
   local_model.tex          the local model (LM Studio, v14_local_*) and DeepSeek (v14_*) on the same subset
-  confusion_sum.tex        figure: confusion matrix of the full system (images/confusion_sum.png)
-  confusion_grid.tex       figure: the four confusion matrices (images/confusion_<config>.png)
+  images/confusion_<config>.png  confusion matrices of the four configurations (figures of Chapter 5)
 
-Copy the .tex files to Thesis_text/chapters/generated/ (the chapters \\input them) and images/*.png to
+Copy the .tex files to Thesis_text/tables/ (the chapters \\input them) and images/*.png to
 Thesis_text/images/chapter5/ (the figures are PNG images drawn from TikZ with xelatex + PyMuPDF).
 The generated text (captions, headers, numbers with a decimal comma) is in Greek, the language of the
 thesis; everything else in this file is in English.
@@ -49,7 +48,6 @@ ROOT = ra.ROOT
 DS = os.path.join(ROOT, "dataset")
 OUT = os.path.join(ra.OUT, "latex")
 IMG = os.path.join(OUT, "images")   # the figures as PNG -> Thesis_text/images/chapter5/
-IMG_REF = "images/chapter5"          # their path in the thesis
 CONFIGS = ["sum", "samples", "policy", "llm"]
 MAIN = "v14"   # the evaluation of Chapter 5 (the local-model table keeps v12, the data that model ran on)
 TAGS = [f"{MAIN}_{c}" for c in CONFIGS]
@@ -681,26 +679,10 @@ def results_tables():
                 "\\node[font=\\scriptsize,rotate=90] at (-0.2,-1.485) {Benign};", "\\end{tikzpicture}"]
         return out
 
-    legend = ("Γραμμές: πραγματική κλάση· στήλες: απόφαση του συστήματος (MAL = \\texttt{MALICIOUS}, "
-              "BEN = \\texttt{BENIGN})· σε κάθε κελί το πλήθος πακέτων και το ποσοστό ανά πραγματική κλάση, "
-              "με την ένταση του χρώματος ανάλογη του ποσοστού.")
+    # the confusion matrices as PNG images (images/*.png); their figure environments are in the chapter text
     tikz_png("confusion_sum", panel(9, "sum", 2.6, 1.6, "\\normalsize"))
-    write("confusion_sum.tex", ["\\begin{figure}[H]", "\\centering", f"\\includegraphics{{{IMG_REF}/confusion_sum.png}}",
-                                f"\\caption{{Confusion matrix του πλήρους συστήματος στο στάδιο του LLM. {legend}}}",
-                                "\\label{fig:confusion_sum}", "\\end{figure}"])
-
-    # figure: the four confusion matrices
-    fig = ["\\begin{figure}[H]", "\\centering"]
     for k, c in enumerate(CONFIGS):
         tikz_png(f"confusion_{c}", panel(k, c))
-        fig += ["\\begin{subfigure}[b]{0.24\\textwidth}", "\\centering",
-                f"\\includegraphics[width=\\linewidth]{{{IMG_REF}/confusion_{c}.png}}",
-                f"\\caption{{{NAME[c]}}}", "\\end{subfigure}"]
-        if k < len(CONFIGS) - 1:
-            fig.append("\\hfill")
-    fig += [f"\\caption{{Confusion matrices των τεσσάρων διαμορφώσεων στο στάδιο του LLM. {legend}}}",
-            "\\label{fig:confusion_grid}", "\\end{figure}"]
-    write("confusion_grid.tex", fig)
     return res
 
 
