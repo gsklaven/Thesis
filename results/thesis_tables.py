@@ -83,6 +83,16 @@ INTELGUARD_TABLE1 = [
 # IntelGuard, RQ4 "Knowledge Contribution" (ge2026bridging): direct GPT-4o-mini analysis without retrieved
 # knowledge vs IntelGuard - (setting, accuracy without, FPR without, accuracy with, FPR with), in %.
 INTELGUARD_RQ4 = [("PyPI", 96.99, 2.11, 99.00, 0.50), ("συγκεκαλυμμένος κώδικας", 52.82, None, 96.50, None)]
+# PyPI results that the related LLM/RAG works report on their own evaluation sets, exactly as printed in each
+# paper (accuracy, precision, recall, F1 in %; None = not reported): PyGuard Table 5 (original dataset),
+# MalGuard Table III (PyPI column), RuleLLM Table VIII, Ibiyo et al. Table 2 + abstract (fine-tuned
+# LLaMA-3.1-8B, malicious class).
+OWN_DATASET_RESULTS = [
+    ("PyGuard~\\cite{guo2025cutting}", "99,50", "99,90", "99,08", "99,49"),
+    ("MalGuard (Cai et al.)~\\cite{cai2025malguard}", None, "78,4", "92,0", "84,7"),
+    ("RuleLLM~\\cite{zhang2025automatically}", "81,4", "85,2", "91,8", "88,4"),
+    ("Ibiyo et al.~\\cite{ibiyo2025detecting}", "97", "98", "95", "97"),
+]
 
 
 def num(x, digits=1):
@@ -617,18 +627,24 @@ def results_tables():
     extra_tables(reports, scored, lab, res)
 
     # comparison with the tools of IntelGuard Table 1 (their PyPI dataset) - our rows end-to-end
-    rows = [f"{t} & {num(a, 2)} & {num(pr, 2)} & {num(rc, 2)} & {num(f, 2)}" for t, a, pr, rc, f in INTELGUARD_TABLE1]
-    rows.append("\\hline")
+    rows = ["\\multicolumn{5}{|l|}{\\textit{Στο σύνολο αξιολόγησης του IntelGuard~\\cite{ge2026bridging}}}", "\\hline"]
+    rows += [f"{t} & {num(a, 2)} & {num(pr, 2)} & {num(rc, 2)} & {num(f, 2)}" for t, a, pr, rc, f in INTELGUARD_TABLE1]
+    rows += ["\\hline", "\\multicolumn{5}{|l|}{\\textit{Στο σύνολο αξιολόγησης κάθε εργασίας (PyPI)}}", "\\hline"]
+    rows += [" & ".join([t] + [v if v is not None else "--" for v in vals]) for t, *vals in OWN_DATASET_RESULTS]
+    rows += ["\\hline", "\\multicolumn{5}{|l|}{\\textit{Στο σύνολο αξιολόγησης της παρούσας εργασίας (end-to-end)}}",
+             "\\hline"]
     for c in ("sum", "llm"):
         x = e2e(c)
         rows.append(f"\\textbf{{Παρούσα εργασία}}: {NAME[c]} & {num(x['accuracy'], 2)} & "
                     f"{num(x['precision'], 2)} & {num(x['recall'], 2)} & {num(x['f1'], 2)}")
     write("comparison.tex", table(
-        "Αποτελέσματα της παρούσας εργασίας και δημοσιευμένες τιμές εργαλείων ανίχνευσης κακόβουλων πακέτων "
-        "PyPI. Οι τιμές των υπολοίπων εργαλείων είναι "
-        "αυτές που αναφέρει το IntelGuard~\\cite{ge2026bridging} στο δικό του σύνολο αξιολόγησης· οι τιμές "
-        "της παρούσας εργασίας αφορούν το σύνολο αξιολόγησης του Κεφαλαίου~\\ref{chapter:implementations}, "
-        "μετρημένες end-to-end.", "tab:comparison", "|l|r|r|r|r|",
+        "Αποτελέσματα της παρούσας εργασίας και δημοσιευμένες τιμές εργασιών ανίχνευσης κακόβουλων πακέτων "
+        "PyPI: οι τιμές των εργαλείων που αξιολογεί το IntelGuard~\\cite{ge2026bridging} στο δικό του σύνολο, "
+        "(τα MalGuard-* είναι οι παραλλαγές του MalGuard των Gao et al.~\\cite{gao2025malguard}), "
+        "οι τιμές που αναφέρουν σχετικές εργασίες με \\acs{LLM} στο δικό τους σύνολο (για το MalGuard των Cai et al. μόνο "
+        "precision, recall και F1· για τους Ibiyo et al. το LLaMA-3.1-8B με fine-tuning, για την κακόβουλη "
+        "κλάση), και οι τιμές της παρούσας εργασίας στο σύνολο αξιολόγησης του "
+        "Κεφαλαίου~\\ref{chapter:implementations}, μετρημένες end-to-end.", "tab:comparison", "|l|r|r|r|r|",
         "Εργαλείο & Accuracy (\\%) & Precision (\\%) & Recall (\\%) & F1 (\\%)", rows))
 
     # effect of retrieval: IntelGuard RQ4 (direct GPT-4o-mini vs IntelGuard) next to ours, end-to-end
